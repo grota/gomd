@@ -11,6 +11,7 @@ import (
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
+	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fsnotify/fsnotify"
@@ -18,6 +19,10 @@ import (
 	"github.com/grota/gomd/internal/config"
 	"github.com/grota/gomd/internal/parser"
 )
+
+// ─────────────────────────────────────────────
+// Themes
+// ─────────────────────────────────────────────
 
 // Theme holds color settings for the TUI.
 type Theme struct {
@@ -34,88 +39,42 @@ type Theme struct {
 	Highlight  lipgloss.Color
 	Code       lipgloss.Color
 	Search     lipgloss.Color
+	NodeSel    lipgloss.Color // selected node in interactive mode
 }
 
-// Built-in themes
 var themes = map[string]Theme{
 	"OceanDark": {
-		Name:       "OceanDark",
-		Border:     lipgloss.Color("#4a6fa5"),
-		Selected:   lipgloss.Color("#2d5986"),
-		Heading1:   lipgloss.Color("#6fb3d2"),
-		Heading2:   lipgloss.Color("#59c2a5"),
-		Heading3:   lipgloss.Color("#82aaff"),
-		HeadingN:   lipgloss.Color("#7f9fbf"),
-		Background: lipgloss.Color("#1a2332"),
-		Foreground: lipgloss.Color("#c5d4e8"),
-		StatusBar:  lipgloss.Color("#253545"),
-		Highlight:  lipgloss.Color("#ffd700"),
-		Code:       lipgloss.Color("#1e2a3a"),
-		Search:     lipgloss.Color("#ff6b6b"),
+		Name: "OceanDark", Border: "#4a6fa5", Selected: "#2d5986",
+		Heading1: "#6fb3d2", Heading2: "#59c2a5", Heading3: "#82aaff", HeadingN: "#7f9fbf",
+		Background: "#1a2332", Foreground: "#c5d4e8", StatusBar: "#253545",
+		Highlight: "#ffd700", Code: "#1e2a3a", Search: "#ff6b6b", NodeSel: "#ff9f43",
 	},
 	"Nord": {
-		Name:       "Nord",
-		Border:     lipgloss.Color("#4c566a"),
-		Selected:   lipgloss.Color("#3b4252"),
-		Heading1:   lipgloss.Color("#88c0d0"),
-		Heading2:   lipgloss.Color("#81a1c1"),
-		Heading3:   lipgloss.Color("#5e81ac"),
-		HeadingN:   lipgloss.Color("#616e88"),
-		Background: lipgloss.Color("#2e3440"),
-		Foreground: lipgloss.Color("#d8dee9"),
-		StatusBar:  lipgloss.Color("#3b4252"),
-		Highlight:  lipgloss.Color("#ebcb8b"),
-		Code:       lipgloss.Color("#272c36"),
-		Search:     lipgloss.Color("#bf616a"),
+		Name: "Nord", Border: "#4c566a", Selected: "#3b4252",
+		Heading1: "#88c0d0", Heading2: "#81a1c1", Heading3: "#5e81ac", HeadingN: "#616e88",
+		Background: "#2e3440", Foreground: "#d8dee9", StatusBar: "#3b4252",
+		Highlight: "#ebcb8b", Code: "#272c36", Search: "#bf616a", NodeSel: "#a3be8c",
 	},
 	"Dracula": {
-		Name:       "Dracula",
-		Border:     lipgloss.Color("#6272a4"),
-		Selected:   lipgloss.Color("#44475a"),
-		Heading1:   lipgloss.Color("#bd93f9"),
-		Heading2:   lipgloss.Color("#ff79c6"),
-		Heading3:   lipgloss.Color("#8be9fd"),
-		HeadingN:   lipgloss.Color("#6272a4"),
-		Background: lipgloss.Color("#282a36"),
-		Foreground: lipgloss.Color("#f8f8f2"),
-		StatusBar:  lipgloss.Color("#44475a"),
-		Highlight:  lipgloss.Color("#f1fa8c"),
-		Code:       lipgloss.Color("#21222c"),
-		Search:     lipgloss.Color("#ff5555"),
+		Name: "Dracula", Border: "#6272a4", Selected: "#44475a",
+		Heading1: "#bd93f9", Heading2: "#ff79c6", Heading3: "#8be9fd", HeadingN: "#6272a4",
+		Background: "#282a36", Foreground: "#f8f8f2", StatusBar: "#44475a",
+		Highlight: "#f1fa8c", Code: "#21222c", Search: "#ff5555", NodeSel: "#50fa7b",
 	},
 	"Gruvbox": {
-		Name:       "Gruvbox",
-		Border:     lipgloss.Color("#504945"),
-		Selected:   lipgloss.Color("#3c3836"),
-		Heading1:   lipgloss.Color("#fabd2f"),
-		Heading2:   lipgloss.Color("#b8bb26"),
-		Heading3:   lipgloss.Color("#83a598"),
-		HeadingN:   lipgloss.Color("#928374"),
-		Background: lipgloss.Color("#282828"),
-		Foreground: lipgloss.Color("#ebdbb2"),
-		StatusBar:  lipgloss.Color("#3c3836"),
-		Highlight:  lipgloss.Color("#fe8019"),
-		Code:       lipgloss.Color("#1d2021"),
-		Search:     lipgloss.Color("#fb4934"),
+		Name: "Gruvbox", Border: "#504945", Selected: "#3c3836",
+		Heading1: "#fabd2f", Heading2: "#b8bb26", Heading3: "#83a598", HeadingN: "#928374",
+		Background: "#282828", Foreground: "#ebdbb2", StatusBar: "#3c3836",
+		Highlight: "#fe8019", Code: "#1d2021", Search: "#fb4934", NodeSel: "#8ec07c",
 	},
 	"TokyoNight": {
-		Name:       "TokyoNight",
-		Border:     lipgloss.Color("#3b4261"),
-		Selected:   lipgloss.Color("#283457"),
-		Heading1:   lipgloss.Color("#7aa2f7"),
-		Heading2:   lipgloss.Color("#7dcfff"),
-		Heading3:   lipgloss.Color("#bb9af7"),
-		HeadingN:   lipgloss.Color("#565f89"),
-		Background: lipgloss.Color("#1a1b26"),
-		Foreground: lipgloss.Color("#c0caf5"),
-		StatusBar:  lipgloss.Color("#1f2335"),
-		Highlight:  lipgloss.Color("#e0af68"),
-		Code:       lipgloss.Color("#16161e"),
-		Search:     lipgloss.Color("#f7768e"),
+		Name: "TokyoNight", Border: "#3b4261", Selected: "#283457",
+		Heading1: "#7aa2f7", Heading2: "#7dcfff", Heading3: "#bb9af7", HeadingN: "#565f89",
+		Background: "#1a1b26", Foreground: "#c0caf5", StatusBar: "#1f2335",
+		Highlight: "#e0af68", Code: "#16161e", Search: "#f7768e", NodeSel: "#9ece6a",
 	},
 }
 
-// GetTheme returns a theme by name, defaulting to OceanDark.
 func GetTheme(name string) Theme {
 	if t, ok := themes[name]; ok {
 		return t
@@ -123,19 +82,44 @@ func GetTheme(name string) Theme {
 	return themes["OceanDark"]
 }
 
+// ─────────────────────────────────────────────
+// Focus & Mode
+// ─────────────────────────────────────────────
+
+// FocusPane tracks which pane is active.
+type FocusPane int
+
+const (
+	FocusSidebar FocusPane = iota
+	FocusContent
+)
+
 // AppMode represents the current application mode.
 type AppMode int
 
 const (
-	ModeNormal AppMode = iota
-	ModeSearch
-	ModeDocSearch
+	ModeNormal       AppMode = iota
+	ModeSearch                // sidebar heading search (/)
 	ModeHelp
 	ModeThemePicker
-	ModeFilePicker
+	ModeNodeSelect // interactive node selection in content pane
 )
 
-// App is the main TUI application state.
+// ─────────────────────────────────────────────
+// CodeNode — a selectable code block inside a section
+// ─────────────────────────────────────────────
+
+type codeNode struct {
+	lang      string
+	content   string  // raw code without fence lines
+	startLine int     // 0-based line index in sectionLines
+	endLine   int     // inclusive
+}
+
+// ─────────────────────────────────────────────
+// App state
+// ─────────────────────────────────────────────
+
 type App struct {
 	doc      *parser.Document
 	filename string
@@ -143,23 +127,29 @@ type App struct {
 	cfg      config.Config
 	theme    Theme
 
-	// Layout
 	width  int
 	height int
 
-	// Outline pane
-	outlineOffset int
-	selectedIdx   int
+	// Sidebar
+	sidebarHidden bool
+	focus         FocusPane
+	outlineOffset int // first visible heading index
+	selectedIdx   int // currently selected heading index
 
-	// Content pane
-	contentOffset int
-	contentLines  []string
+	// Content — shows only the section of the selected heading
+	sectionLines  []string // lines of the current section
+	contentOffset int      // scroll offset within sectionLines
 
-	// Search
-	mode       AppMode
-	searchQuery string
+	// Search (sidebar heading search)
+	mode          AppMode
+	searchQuery   string
 	searchMatches []int
-	searchIdx  int
+	searchIdx     int
+
+	// Interactive node selection
+	codeNodes    []codeNode // code blocks found in current section
+	nodeSelIdx   int        // which code node is highlighted
+	copyMsg      string     // transient "Copied!" feedback
 
 	// File watcher
 	watcher *fsnotify.Watcher
@@ -168,53 +158,147 @@ type App struct {
 	statusMsg string
 }
 
-// NewApp creates a new TUI application.
+// ─────────────────────────────────────────────
+// Construction
+// ─────────────────────────────────────────────
+
 func NewApp(doc *parser.Document, filename, filePath string, cfg config.Config) *App {
-	theme := GetTheme(cfg.UI.Theme)
-	app := &App{
+	a := &App{
 		doc:      doc,
 		filename: filename,
 		filepath: filePath,
 		cfg:      cfg,
-		theme:    theme,
+		theme:    GetTheme(cfg.UI.Theme),
+		focus:    FocusSidebar,
 	}
-	app.buildContentLines()
-	return app
+	a.rebuildSection()
+	return a
 }
 
-type fileReloadMsg struct {
-	doc *parser.Document
+// ─────────────────────────────────────────────
+// Section helpers
+// ─────────────────────────────────────────────
+
+// rebuildSection recomputes sectionLines and codeNodes for the selected heading.
+func (a *App) rebuildSection() {
+	a.contentOffset = 0
+	a.nodeSelIdx = 0
+	a.codeNodes = nil
+
+	if len(a.doc.Headings) == 0 {
+		a.sectionLines = strings.Split(a.doc.Content, "\n")
+		return
+	}
+
+	// Clamp
+	if a.selectedIdx < 0 {
+		a.selectedIdx = 0
+	}
+	if a.selectedIdx >= len(a.doc.Headings) {
+		a.selectedIdx = len(a.doc.Headings) - 1
+	}
+
+	h := a.doc.Headings[a.selectedIdx]
+
+	// Byte range for section
+	start := h.Offset
+	end := len(a.doc.Content)
+	for i := a.selectedIdx + 1; i < len(a.doc.Headings); i++ {
+		if a.doc.Headings[i].Level <= h.Level {
+			end = a.doc.Headings[i].Offset
+			break
+		}
+	}
+
+	section := a.doc.Content[start:end]
+	// Trim trailing blank lines
+	section = strings.TrimRight(section, "\n")
+	a.sectionLines = strings.Split(section, "\n")
+
+	// Extract code nodes from this section
+	a.codeNodes = extractCodeNodes(a.sectionLines)
 }
 
+// extractCodeNodes finds all fenced code blocks in lines and returns their metadata.
+func extractCodeNodes(lines []string) []codeNode {
+	var nodes []codeNode
+	inBlock := false
+	var fence, lang string
+	var bodyLines []string
+	var startLine int
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !inBlock {
+			if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+				inBlock = true
+				fence = trimmed[:3]
+				lang = strings.TrimSpace(trimmed[3:])
+				bodyLines = nil
+				startLine = i
+			}
+		} else {
+			if strings.HasPrefix(trimmed, fence) {
+				nodes = append(nodes, codeNode{
+					lang:      lang,
+					content:   strings.Join(bodyLines, "\n"),
+					startLine: startLine,
+					endLine:   i,
+				})
+				inBlock = false
+				fence = ""
+				lang = ""
+				bodyLines = nil
+			} else {
+				bodyLines = append(bodyLines, line)
+			}
+		}
+	}
+	return nodes
+}
+
+// ─────────────────────────────────────────────
+// Bubbletea lifecycle
+// ─────────────────────────────────────────────
+
+type fileReloadMsg struct{ doc *parser.Document }
 type watchErrMsg struct{ err error }
+type clearCopyMsgCmd struct{}
+
+func (clearCopyMsgCmd) ID() string { return "" }
+
+func waitForFileChange(watcher *fsnotify.Watcher, filePath string) tea.Cmd {
+	return func() tea.Msg {
+		for event := range watcher.Events {
+			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
+				data, err := os.ReadFile(filePath)
+				if err != nil {
+					continue
+				}
+				return fileReloadMsg{parser.ParseMarkdown(string(data))}
+			}
+		}
+		return nil
+	}
+}
 
 func (a *App) startWatcher() tea.Cmd {
 	if a.filepath == "" || a.filepath == "<stdin>" {
 		return nil
 	}
-	return func() tea.Msg {
-		watcher, err := fsnotify.NewWatcher()
-		if err != nil {
-			return watchErrMsg{err}
-		}
-		if err := watcher.Add(a.filepath); err != nil {
-			watcher.Close()
-			return watchErrMsg{err}
-		}
-		a.watcher = watcher
-
-		for event := range watcher.Events {
-			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
-				data, err := os.ReadFile(a.filepath)
-				if err != nil {
-					continue
-				}
-				doc := parser.ParseMarkdown(string(data))
-				return fileReloadMsg{doc}
-			}
-		}
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
 		return nil
 	}
+	if err := watcher.Add(a.filepath); err != nil {
+		watcher.Close()
+		return nil
+	}
+	if a.watcher != nil {
+		a.watcher.Close()
+	}
+	a.watcher = watcher
+	return waitForFileChange(watcher, a.filepath)
 }
 
 func (a *App) Init() tea.Cmd {
@@ -228,16 +312,29 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.height = msg.Height
 
 	case fileReloadMsg:
+		prevHeading := ""
+		if a.selectedIdx < len(a.doc.Headings) {
+			prevHeading = a.doc.Headings[a.selectedIdx].Text
+		}
 		a.doc = msg.doc
-		a.buildContentLines()
-		// Clamp selection
+		// Try to keep selection on same heading by text
+		if prevHeading != "" {
+			for i, h := range a.doc.Headings {
+				if h.Text == prevHeading {
+					a.selectedIdx = i
+					break
+				}
+			}
+		}
 		if a.selectedIdx >= len(a.doc.Headings) {
 			a.selectedIdx = len(a.doc.Headings) - 1
 		}
 		if a.selectedIdx < 0 {
 			a.selectedIdx = 0
 		}
-		a.statusMsg = "File reloaded"
+		a.rebuildSection()
+		a.scrollOutlineToSelected()
+		a.statusMsg = "Reloaded"
 		return a, a.startWatcher()
 
 	case tea.KeyMsg:
@@ -247,86 +344,276 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch a.mode {
-	case ModeSearch:
-		return a.handleSearchKey(msg)
-	case ModeHelp:
-		if msg.String() == "q" || msg.String() == "?" || msg.String() == "esc" {
-			a.mode = ModeNormal
-		}
-		return a, nil
-	case ModeThemePicker:
-		return a.handleThemeKey(msg)
-	}
+// ─────────────────────────────────────────────
+// Key handling — dispatched by mode then focus
+// ─────────────────────────────────────────────
 
-	// Normal mode
-	switch msg.String() {
-	case "q", "ctrl+c":
+func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	k := msg.String()
+
+	// Global keys that work in any mode
+	switch k {
+	case "ctrl+c":
 		if a.watcher != nil {
 			a.watcher.Close()
 		}
 		return a, tea.Quit
+	}
 
+	switch a.mode {
+	case ModeSearch:
+		return a.handleSearchKey(msg)
+	case ModeHelp:
+		a.mode = ModeNormal
+		return a, nil
+	case ModeThemePicker:
+		return a.handleThemeKey(msg)
+	case ModeNodeSelect:
+		return a.handleNodeSelectKey(msg)
+	}
+
+	// Normal mode — shared keys regardless of focus
+	switch k {
+	case "q":
+		if a.watcher != nil {
+			a.watcher.Close()
+		}
+		return a, tea.Quit
+	case "?":
+		a.mode = ModeHelp
+		return a, nil
+	case "T":
+		a.mode = ModeThemePicker
+		return a, nil
+	case "tab":
+		a.toggleFocus()
+		return a, nil
+	case "w":
+		a.sidebarHidden = !a.sidebarHidden
+		if a.sidebarHidden {
+			a.focus = FocusContent
+		}
+		return a, nil
+	case "r":
+		if a.filepath != "" && a.filepath != "<stdin>" {
+			data, err := os.ReadFile(a.filepath)
+			if err == nil {
+				a.doc = parser.ParseMarkdown(string(data))
+				a.rebuildSection()
+				a.scrollOutlineToSelected()
+				a.statusMsg = "Reloaded"
+			}
+		}
+		return a, nil
+	}
+
+	// Focus-specific keys
+	if a.focus == FocusSidebar && !a.sidebarHidden {
+		return a.handleSidebarKey(msg)
+	}
+	return a.handleContentKey(msg)
+}
+
+func (a *App) toggleFocus() {
+	if a.sidebarHidden {
+		return
+	}
+	if a.focus == FocusSidebar {
+		a.focus = FocusContent
+	} else {
+		a.focus = FocusSidebar
+	}
+}
+
+// ─────────────────────────────────────────────
+// Sidebar keys
+// ─────────────────────────────────────────────
+
+func (a *App) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
 	case "j", "down":
-		a.moveDown(1)
+		a.moveSidebarDown(1)
 	case "k", "up":
-		a.moveUp(1)
+		a.moveSidebarUp(1)
 	case "g":
 		a.selectedIdx = 0
-		a.outlineOffset = 0
-		a.contentOffset = 0
+		a.scrollOutlineToSelected()
+		a.rebuildSection()
 	case "G":
 		if len(a.doc.Headings) > 0 {
 			a.selectedIdx = len(a.doc.Headings) - 1
 		}
 		a.scrollOutlineToSelected()
-		a.scrollContentToHeading()
-	case "ctrl+d", "ctrl+f":
-		a.scrollContent(a.contentHeight() / 2)
-	case "ctrl+u", "ctrl+b":
-		a.scrollContent(-a.contentHeight() / 2)
-	case "J":
-		a.scrollContent(3)
-	case "K":
-		a.scrollContent(-3)
+		a.rebuildSection()
 	case "/":
 		a.mode = ModeSearch
 		a.searchQuery = ""
 		a.searchMatches = nil
 	case "n":
-		a.nextMatch()
+		a.nextSearchMatch()
 	case "N":
-		a.prevMatch()
-	case "?":
-		a.mode = ModeHelp
-	case "T":
-		a.mode = ModeThemePicker
-	case "enter", " ":
-		a.scrollContentToHeading()
-	case "r":
-		// Manual reload
-		if a.filepath != "" && a.filepath != "<stdin>" {
-			data, err := os.ReadFile(a.filepath)
-			if err == nil {
-				a.doc = parser.ParseMarkdown(string(data))
-				a.buildContentLines()
-				a.statusMsg = "Reloaded"
+		a.prevSearchMatch()
+	}
+	return a, nil
+}
+
+func (a *App) moveSidebarDown(n int) {
+	if len(a.doc.Headings) == 0 {
+		return
+	}
+	prev := a.selectedIdx
+	a.selectedIdx += n
+	if a.selectedIdx >= len(a.doc.Headings) {
+		a.selectedIdx = len(a.doc.Headings) - 1
+	}
+	if a.selectedIdx != prev {
+		a.scrollOutlineToSelected()
+		a.rebuildSection()
+	}
+}
+
+func (a *App) moveSidebarUp(n int) {
+	prev := a.selectedIdx
+	a.selectedIdx -= n
+	if a.selectedIdx < 0 {
+		a.selectedIdx = 0
+	}
+	if a.selectedIdx != prev {
+		a.scrollOutlineToSelected()
+		a.rebuildSection()
+	}
+}
+
+// scrollOutlineToSelected scrolls the outline viewport so the selected item is
+// always visible, but does NOT move the viewport unless the selection has left it.
+func (a *App) scrollOutlineToSelected() {
+	h := a.outlineHeight()
+	if h <= 0 {
+		return
+	}
+	if a.selectedIdx < a.outlineOffset {
+		a.outlineOffset = a.selectedIdx
+	}
+	if a.selectedIdx >= a.outlineOffset+h {
+		a.outlineOffset = a.selectedIdx - h + 1
+	}
+	if a.outlineOffset < 0 {
+		a.outlineOffset = 0
+	}
+}
+
+// ─────────────────────────────────────────────
+// Content keys
+// ─────────────────────────────────────────────
+
+func (a *App) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "j", "down":
+		a.scrollContent(1)
+	case "k", "up":
+		a.scrollContent(-1)
+	case "ctrl+d", "ctrl+f":
+		a.scrollContent(a.contentHeight() / 2)
+	case "ctrl+u", "ctrl+b":
+		a.scrollContent(-a.contentHeight() / 2)
+	case "g":
+		a.contentOffset = 0
+	case "G":
+		a.contentOffset = len(a.sectionLines)
+		a.clampContentOffset()
+	case "i":
+		// Enter node selection mode if there are code blocks
+		if len(a.codeNodes) > 0 {
+			a.mode = ModeNodeSelect
+			a.nodeSelIdx = 0
+			a.scrollContentToNode(a.nodeSelIdx)
+			a.statusMsg = ""
+		} else {
+			a.statusMsg = "No code blocks in this section"
+		}
+	}
+	return a, nil
+}
+
+func (a *App) scrollContent(delta int) {
+	a.contentOffset += delta
+	a.clampContentOffset()
+}
+
+func (a *App) clampContentOffset() {
+	if a.contentOffset < 0 {
+		a.contentOffset = 0
+	}
+	max := len(a.sectionLines) - a.contentHeight()
+	if max < 0 {
+		max = 0
+	}
+	if a.contentOffset > max {
+		a.contentOffset = max
+	}
+}
+
+// ─────────────────────────────────────────────
+// Node selection mode keys
+// ─────────────────────────────────────────────
+
+func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "q", "i":
+		a.mode = ModeNormal
+		a.copyMsg = ""
+	case "j", "down", "tab":
+		if len(a.codeNodes) > 0 {
+			a.nodeSelIdx = (a.nodeSelIdx + 1) % len(a.codeNodes)
+			a.scrollContentToNode(a.nodeSelIdx)
+		}
+	case "k", "up":
+		if len(a.codeNodes) > 0 {
+			a.nodeSelIdx = (a.nodeSelIdx - 1 + len(a.codeNodes)) % len(a.codeNodes)
+			a.scrollContentToNode(a.nodeSelIdx)
+		}
+	case "y":
+		if len(a.codeNodes) > 0 {
+			node := a.codeNodes[a.nodeSelIdx]
+			if err := clipboard.WriteAll(node.content); err != nil {
+				a.copyMsg = "Clipboard error: " + err.Error()
+			} else {
+				lang := node.lang
+				if lang == "" {
+					lang = "block"
+				}
+				a.copyMsg = fmt.Sprintf("Copied %s block (%d lines)", lang, strings.Count(node.content, "\n")+1)
 			}
 		}
 	}
-
 	return a, nil
 }
+
+// scrollContentToNode scrolls the content so the selected code node is visible.
+func (a *App) scrollContentToNode(nodeIdx int) {
+	if nodeIdx < 0 || nodeIdx >= len(a.codeNodes) {
+		return
+	}
+	node := a.codeNodes[nodeIdx]
+	// Show the opening fence at the top of the viewport if possible
+	target := node.startLine
+	if target < a.contentOffset || target >= a.contentOffset+a.contentHeight() {
+		a.contentOffset = target
+		a.clampContentOffset()
+	}
+}
+
+// ─────────────────────────────────────────────
+// Search mode
+// ─────────────────────────────────────────────
 
 func (a *App) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
-		// Execute search
 		a.searchMatches = nil
-		query := strings.ToLower(a.searchQuery)
+		q := strings.ToLower(a.searchQuery)
 		for i, h := range a.doc.Headings {
-			if strings.Contains(strings.ToLower(h.Text), query) {
+			if strings.Contains(strings.ToLower(h.Text), q) {
 				a.searchMatches = append(a.searchMatches, i)
 			}
 		}
@@ -334,7 +621,7 @@ func (a *App) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(a.searchMatches) > 0 {
 			a.selectedIdx = a.searchMatches[0]
 			a.scrollOutlineToSelected()
-			a.scrollContentToHeading()
+			a.rebuildSection()
 		}
 		a.mode = ModeNormal
 
@@ -343,9 +630,8 @@ func (a *App) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.searchQuery = ""
 
 	case "backspace", "ctrl+h":
-		if len(a.searchQuery) > 0 {
-			runes := []rune(a.searchQuery)
-			a.searchQuery = string(runes[:len(runes)-1])
+		if r := []rune(a.searchQuery); len(r) > 0 {
+			a.searchQuery = string(r[:len(r)-1])
 		}
 
 	default:
@@ -353,9 +639,32 @@ func (a *App) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.searchQuery += string(msg.Runes)
 		}
 	}
-
 	return a, nil
 }
+
+func (a *App) nextSearchMatch() {
+	if len(a.searchMatches) == 0 {
+		return
+	}
+	a.searchIdx = (a.searchIdx + 1) % len(a.searchMatches)
+	a.selectedIdx = a.searchMatches[a.searchIdx]
+	a.scrollOutlineToSelected()
+	a.rebuildSection()
+}
+
+func (a *App) prevSearchMatch() {
+	if len(a.searchMatches) == 0 {
+		return
+	}
+	a.searchIdx = (a.searchIdx - 1 + len(a.searchMatches)) % len(a.searchMatches)
+	a.selectedIdx = a.searchMatches[a.searchIdx]
+	a.scrollOutlineToSelected()
+	a.rebuildSection()
+}
+
+// ─────────────────────────────────────────────
+// Theme picker
+// ─────────────────────────────────────────────
 
 func (a *App) handleThemeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	themeNames := []string{"OceanDark", "Nord", "Dracula", "Gruvbox", "TokyoNight"}
@@ -376,323 +685,293 @@ func (a *App) handleThemeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-func (a *App) moveDown(n int) {
-	if len(a.doc.Headings) == 0 {
-		return
-	}
-	a.selectedIdx += n
-	if a.selectedIdx >= len(a.doc.Headings) {
-		a.selectedIdx = len(a.doc.Headings) - 1
-	}
-	a.scrollOutlineToSelected()
-	a.scrollContentToHeading()
-}
-
-func (a *App) moveUp(n int) {
-	a.selectedIdx -= n
-	if a.selectedIdx < 0 {
-		a.selectedIdx = 0
-	}
-	a.scrollOutlineToSelected()
-	a.scrollContentToHeading()
-}
-
-func (a *App) nextMatch() {
-	if len(a.searchMatches) == 0 {
-		return
-	}
-	a.searchIdx = (a.searchIdx + 1) % len(a.searchMatches)
-	a.selectedIdx = a.searchMatches[a.searchIdx]
-	a.scrollOutlineToSelected()
-	a.scrollContentToHeading()
-}
-
-func (a *App) prevMatch() {
-	if len(a.searchMatches) == 0 {
-		return
-	}
-	a.searchIdx = (a.searchIdx - 1 + len(a.searchMatches)) % len(a.searchMatches)
-	a.selectedIdx = a.searchMatches[a.searchIdx]
-	a.scrollOutlineToSelected()
-	a.scrollContentToHeading()
-}
-
-func (a *App) scrollContent(delta int) {
-	a.contentOffset += delta
-	if a.contentOffset < 0 {
-		a.contentOffset = 0
-	}
-	maxOffset := len(a.contentLines) - a.contentHeight()
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if a.contentOffset > maxOffset {
-		a.contentOffset = maxOffset
-	}
-}
-
-func (a *App) scrollContentToHeading() {
-	if a.selectedIdx < 0 || a.selectedIdx >= len(a.doc.Headings) {
-		return
-	}
-	h := a.doc.Headings[a.selectedIdx]
-	// Find the line in contentLines that corresponds to this heading
-	target := 0
-	for i, line := range a.contentLines {
-		// Each heading starts a section; find by content
-		prefix := strings.Repeat("#", h.Level) + " " + h.Text
-		if strings.Contains(line, prefix) {
-			target = i
-			break
-		}
-	}
-	a.contentOffset = target
-	maxOffset := len(a.contentLines) - a.contentHeight()
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if a.contentOffset > maxOffset {
-		a.contentOffset = maxOffset
-	}
-}
-
-func (a *App) scrollOutlineToSelected() {
-	outlineH := a.outlineHeight()
-	if a.selectedIdx < a.outlineOffset {
-		a.outlineOffset = a.selectedIdx
-	}
-	if a.selectedIdx >= a.outlineOffset+outlineH {
-		a.outlineOffset = a.selectedIdx - outlineH + 1
-	}
-	if a.outlineOffset < 0 {
-		a.outlineOffset = 0
-	}
-}
-
-// buildContentLines converts document content into displayable lines with syntax highlighting.
-func (a *App) buildContentLines() {
-	if a.doc == nil {
-		a.contentLines = nil
-		return
-	}
-	a.contentLines = strings.Split(a.doc.Content, "\n")
-}
-
+// ─────────────────────────────────────────────
 // Layout helpers
-func (a *App) outlineWidth() int {
-	if a.width < 40 {
+// ─────────────────────────────────────────────
+
+func (a *App) sidebarWidth() int {
+	if a.sidebarHidden {
+		return 0
+	}
+	if a.width < 60 {
 		return a.width / 3
 	}
 	return a.width / 4
 }
 
 func (a *App) contentWidth() int {
-	return a.width - a.outlineWidth() - 1
+	sw := a.sidebarWidth()
+	if sw == 0 {
+		return a.width
+	}
+	return a.width - sw - 1 // -1 for divider
 }
 
 func (a *App) outlineHeight() int {
-	return a.height - 3 // title + status
+	h := a.height - 3 // title row + status row + 1 padding
+	if h < 0 {
+		return 0
+	}
+	return h
 }
 
 func (a *App) contentHeight() int {
-	return a.height - 3
+	h := a.height - 3
+	if h < 0 {
+		return 0
+	}
+	return h
 }
+
+// ─────────────────────────────────────────────
+// View
+// ─────────────────────────────────────────────
 
 func (a *App) View() string {
 	if a.width == 0 {
 		return "Loading..."
 	}
 
-	outline := a.renderOutline()
-	content := a.renderContent()
-	status := a.renderStatus()
-
-	// Render title bar
-	title := a.renderTitle()
-
-	// Join panes side by side
-	divider := strings.Repeat("│\n", a.height-2)
-	dividerStyle := lipgloss.NewStyle().Foreground(a.theme.Border)
-
-	body := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		outline,
-		dividerStyle.Render(divider),
-		content,
-	)
-
 	switch a.mode {
-	case ModeSearch:
-		status = a.renderSearchBar()
 	case ModeHelp:
 		return a.renderHelp()
 	case ModeThemePicker:
 		return a.renderThemePicker()
 	}
 
+	title := a.renderTitle()
+	status := a.renderStatus()
+
+	var body string
+	if a.sidebarHidden {
+		body = a.renderContent()
+	} else {
+		sidebar := a.renderOutline()
+		content := a.renderContent()
+
+		// Divider: single column of │, height = contentHeight rows
+		divStyle := lipgloss.NewStyle().Foreground(a.theme.Border)
+		divLines := make([]string, a.outlineHeight())
+		for i := range divLines {
+			divLines[i] = "│"
+		}
+		divider := divStyle.Render(strings.Join(divLines, "\n"))
+
+		body = lipgloss.JoinHorizontal(lipgloss.Top, sidebar, divider, content)
+	}
+
 	return lipgloss.JoinVertical(lipgloss.Left, title, body, status)
 }
 
-func (a *App) renderTitle() string {
-	titleStyle := lipgloss.NewStyle().
-		Background(a.theme.Border).
-		Foreground(a.theme.Foreground).
-		Bold(true).
-		Width(a.width).
-		Padding(0, 1)
+// ─────────────────────────────────────────────
+// Individual pane renderers
+// ─────────────────────────────────────────────
 
+func (a *App) renderTitle() string {
 	name := filepath.Base(a.filename)
 	if name == "" || name == "." {
 		name = "gomd"
 	}
-	return titleStyle.Render("gomd — " + name)
+
+	focusIndicator := ""
+	if a.focus == FocusContent {
+		focusIndicator = " [content]"
+	}
+
+	return lipgloss.NewStyle().
+		Background(a.theme.Border).
+		Foreground(a.theme.Foreground).
+		Bold(true).
+		Width(a.width).
+		Padding(0, 1).
+		Render("gomd — " + name + focusIndicator)
 }
 
 func (a *App) renderOutline() string {
-	w := a.outlineWidth()
+	w := a.sidebarWidth()
 	h := a.outlineHeight()
 
-	var lines []string
 	headings := a.doc.Headings
 	end := a.outlineOffset + h
 	if end > len(headings) {
 		end = len(headings)
 	}
 
+	lines := make([]string, 0, h)
+
+	// Active sidebar border color depends on focus
+	selBg := a.theme.Selected
+	if a.focus == FocusSidebar {
+		selBg = a.theme.Highlight // brighter when focused
+	}
+
 	for i := a.outlineOffset; i < end; i++ {
-		heading := headings[i]
-		indent := strings.Repeat("  ", heading.Level-1)
-		prefix := strings.Repeat("#", heading.Level)
+		hd := headings[i]
+		indent := strings.Repeat("  ", hd.Level-1)
+		marker := strings.Repeat("#", hd.Level)
+		text := indent + marker + " " + hd.Text
 
-		var headingStyle lipgloss.Style
-		switch heading.Level {
-		case 1:
-			headingStyle = lipgloss.NewStyle().Foreground(a.theme.Heading1).Bold(true)
-		case 2:
-			headingStyle = lipgloss.NewStyle().Foreground(a.theme.Heading2)
-		case 3:
-			headingStyle = lipgloss.NewStyle().Foreground(a.theme.Heading3)
-		default:
-			headingStyle = lipgloss.NewStyle().Foreground(a.theme.HeadingN)
+		// Truncate
+		maxRunes := w - 2
+		if maxRunes < 1 {
+			maxRunes = 1
+		}
+		if len([]rune(text)) > maxRunes {
+			text = string([]rune(text)[:maxRunes-1]) + "…"
 		}
 
-		text := indent + prefix + " " + heading.Text
-		// Truncate if too wide
-		maxLen := w - 2
-		if len([]rune(text)) > maxLen {
-			text = string([]rune(text)[:maxLen-1]) + "…"
-		}
-
-		rendered := headingStyle.Render(text)
 		if i == a.selectedIdx {
-			rendered = lipgloss.NewStyle().
-				Background(a.theme.Selected).
-				Width(w - 1).
-				Render(text)
+			lines = append(lines, lipgloss.NewStyle().
+				Background(selBg).
+				Foreground(a.theme.Background).
+				Bold(true).
+				Width(w-1).
+				Render(text))
+		} else {
+			var fg lipgloss.Color
+			switch hd.Level {
+			case 1:
+				fg = a.theme.Heading1
+			case 2:
+				fg = a.theme.Heading2
+			case 3:
+				fg = a.theme.Heading3
+			default:
+				fg = a.theme.HeadingN
+			}
+			lines = append(lines, lipgloss.NewStyle().
+				Foreground(fg).
+				Width(w-1).
+				Render(text))
 		}
-
-		lines = append(lines, rendered)
 	}
 
-	// Pad to height
+	// Pad
 	for len(lines) < h {
-		lines = append(lines, strings.Repeat(" ", w))
+		lines = append(lines, strings.Repeat(" ", w-1))
 	}
 
-	style := lipgloss.NewStyle().Width(w).MaxWidth(w)
-	return style.Render(strings.Join(lines, "\n"))
+	return lipgloss.NewStyle().Width(w).MaxWidth(w).
+		Render(strings.Join(lines, "\n"))
 }
 
 func (a *App) renderContent() string {
 	w := a.contentWidth()
 	h := a.contentHeight()
+	if w <= 0 || h <= 0 {
+		return ""
+	}
 
-	lines := a.contentLines
+	lines := a.sectionLines
 	start := a.contentOffset
-	end := start + h
 	if start > len(lines) {
 		start = len(lines)
 	}
+	end := start + h
 	if end > len(lines) {
 		end = len(lines)
 	}
-
 	visible := lines[start:end]
 
-	// Apply syntax highlighting to code blocks and heading styling
-	var rendered []string
+	// Build set of line ranges that belong to the currently-selected node
+	// (only in ModeNodeSelect)
+	nodeHighlightLines := map[int]bool{}
+	if a.mode == ModeNodeSelect && a.nodeSelIdx < len(a.codeNodes) {
+		n := a.codeNodes[a.nodeSelIdx]
+		for li := n.startLine; li <= n.endLine; li++ {
+			nodeHighlightLines[li] = true
+		}
+	}
+
+	rendered := make([]string, 0, h)
 	inCode := false
-	var codeLang string
-	var codeLines []string
-	var codeStart int
+	var fence, codeLang string
+	var codeBody []string
+	var fenceDocLine int // absolute index in sectionLines
 
-	for i, line := range visible {
+	for relIdx, line := range visible {
+		docLine := start + relIdx // absolute index in sectionLines
 		trimmed := strings.TrimSpace(line)
-		if !inCode && (strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~")) {
-			inCode = true
-			codeLang = strings.TrimSpace(trimmed[3:])
-			codeLines = nil
-			codeStart = i
-			rendered = append(rendered, lipgloss.NewStyle().Foreground(a.theme.HeadingN).Render(line))
-			continue
-		}
-		if inCode {
+
+		// ── Code fence detection ──────────────────────────────────
+		if !inCode {
 			if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-				// Highlight accumulated code
-				highlighted := highlightCode(strings.Join(codeLines, "\n"), codeLang, w)
-				hLines := strings.Split(highlighted, "\n")
-				// Replace already-appended fence line with styled version
-				_ = codeStart
-				rendered = append(rendered, hLines...)
-				rendered = append(rendered, lipgloss.NewStyle().Foreground(a.theme.HeadingN).Render(line))
-				inCode = false
-				codeLines = nil
-			} else {
-				codeLines = append(codeLines, line)
+				inCode = true
+				fence = trimmed[:3]
+				codeLang = strings.TrimSpace(trimmed[3:])
+				codeBody = nil
+				fenceDocLine = docLine
+
+				fenceLine := lipgloss.NewStyle().Foreground(a.theme.HeadingN).Render(line)
+				if nodeHighlightLines[docLine] {
+					fenceLine = lipgloss.NewStyle().
+						Foreground(a.theme.NodeSel).Bold(true).Render(line)
+				}
+				rendered = append(rendered, fenceLine)
+				continue
 			}
-			continue
+		} else {
+			if strings.HasPrefix(trimmed, fence) {
+				// closing fence — flush the accumulated code
+				highlighted := highlightCode(strings.Join(codeBody, "\n"), codeLang)
+				hLines := strings.Split(highlighted, "\n")
+				// Re-check line numbers for the body lines
+				for bi, hl := range hLines {
+					bodyDocLine := fenceDocLine + 1 + bi
+					if nodeHighlightLines[bodyDocLine] {
+						hl = lipgloss.NewStyle().
+							Background(a.theme.Code).
+							Foreground(a.theme.Foreground).
+							Render(hl)
+					}
+					rendered = append(rendered, hl)
+				}
+				// closing fence
+				closeLine := lipgloss.NewStyle().Foreground(a.theme.HeadingN).Render(line)
+				if nodeHighlightLines[docLine] {
+					closeLine = lipgloss.NewStyle().
+						Foreground(a.theme.NodeSel).Bold(true).Render(line)
+				}
+				rendered = append(rendered, closeLine)
+				inCode = false
+				fence = ""
+				codeLang = ""
+				codeBody = nil
+				continue
+			}
+			// still inside block
+			codeBody = append(codeBody, line)
+			continue // will be flushed when closing fence is found
 		}
 
-		// Style headings
+		// ── Heading styling ───────────────────────────────────────
 		if strings.HasPrefix(line, "#") {
 			level := 0
 			for level < len(line) && line[level] == '#' {
 				level++
 			}
-			var s lipgloss.Style
+			var fg lipgloss.Color
 			switch level {
 			case 1:
-				s = lipgloss.NewStyle().Foreground(a.theme.Heading1).Bold(true)
+				fg = a.theme.Heading1
 			case 2:
-				s = lipgloss.NewStyle().Foreground(a.theme.Heading2).Bold(true)
+				fg = a.theme.Heading2
 			case 3:
-				s = lipgloss.NewStyle().Foreground(a.theme.Heading3)
+				fg = a.theme.Heading3
 			default:
-				s = lipgloss.NewStyle().Foreground(a.theme.HeadingN)
+				fg = a.theme.HeadingN
 			}
-			rendered = append(rendered, s.Render(line))
+			rendered = append(rendered, lipgloss.NewStyle().Foreground(fg).Bold(true).Render(line))
 			continue
 		}
 
-		// Highlight search query
-		if a.searchQuery != "" && len(a.searchMatches) > 0 {
-			low := strings.ToLower(line)
-			if idx := strings.Index(low, strings.ToLower(a.searchQuery)); idx >= 0 {
-				before := line[:idx]
-				match := line[idx : idx+len(a.searchQuery)]
-				after := line[idx+len(a.searchQuery):]
-				highlighted := before + lipgloss.NewStyle().Foreground(a.theme.Search).Bold(true).Render(match) + after
-				rendered = append(rendered, highlighted)
-				continue
-			}
-		}
-
+		// ── Plain line ────────────────────────────────────────────
 		rendered = append(rendered, line)
 	}
 
-	// Flush remaining code block
-	if inCode && len(codeLines) > 0 {
-		highlighted := highlightCode(strings.Join(codeLines, "\n"), codeLang, w)
+	// Flush unclosed code block (e.g. scrolled past closing fence)
+	if inCode && len(codeBody) > 0 {
+		highlighted := highlightCode(strings.Join(codeBody, "\n"), codeLang)
 		rendered = append(rendered, strings.Split(highlighted, "\n")...)
 	}
 
@@ -700,93 +979,124 @@ func (a *App) renderContent() string {
 	for len(rendered) < h {
 		rendered = append(rendered, "")
 	}
+	// Trim to height (highlighting can produce extra lines)
+	rendered = rendered[:h]
 
-	style := lipgloss.NewStyle().Width(w).MaxWidth(w)
-	return style.Render(strings.Join(rendered, "\n"))
+	return lipgloss.NewStyle().Width(w).MaxWidth(w).
+		Render(strings.Join(rendered, "\n"))
 }
 
 func (a *App) renderStatus() string {
-	style := lipgloss.NewStyle().
-		Background(a.theme.StatusBar).
-		Foreground(a.theme.Foreground).
-		Width(a.width).
-		Padding(0, 1)
-
-	var parts []string
-	if a.selectedIdx < len(a.doc.Headings) {
-		h := a.doc.Headings[a.selectedIdx]
-		parts = append(parts, fmt.Sprintf("[%d/%d]", a.selectedIdx+1, len(a.doc.Headings)))
-		parts = append(parts, strings.Repeat("#", h.Level)+" "+h.Text)
+	var left string
+	switch a.mode {
+	case ModeSearch:
+		left = lipgloss.NewStyle().Foreground(a.theme.Search).Bold(true).
+			Render("/ " + a.searchQuery + "█")
+	case ModeNodeSelect:
+		if a.copyMsg != "" {
+			left = lipgloss.NewStyle().Foreground(a.theme.NodeSel).Bold(true).Render("✓ " + a.copyMsg)
+		} else if len(a.codeNodes) > 0 {
+			n := a.codeNodes[a.nodeSelIdx]
+			lang := n.lang
+			if lang == "" {
+				lang = "code"
+			}
+			left = lipgloss.NewStyle().Foreground(a.theme.NodeSel).Bold(true).
+				Render(fmt.Sprintf("NODE [%d/%d] %s  y:copy  j/k:next/prev  Esc:exit",
+					a.nodeSelIdx+1, len(a.codeNodes), lang))
+		}
+	default:
+		if a.selectedIdx < len(a.doc.Headings) {
+			h := a.doc.Headings[a.selectedIdx]
+			pos := fmt.Sprintf("[%d/%d]", a.selectedIdx+1, len(a.doc.Headings))
+			heading := strings.Repeat("#", h.Level) + " " + h.Text
+			left = pos + " " + heading
+		}
+		if a.statusMsg != "" {
+			left += "  " + a.statusMsg
+		}
 	}
-	if a.statusMsg != "" {
-		parts = append(parts, " — "+a.statusMsg)
+
+	var right string
+	switch a.mode {
+	case ModeNodeSelect:
+		right = ""
+	default:
+		if a.sidebarHidden {
+			right = "w:sidebar  Tab:focus  i:nodes  /:search  T:theme  ?:help  q:quit"
+		} else {
+			right = "Tab:focus  w:hide sidebar  i:nodes  /:search  T:theme  ?:help  q:quit"
+		}
 	}
 
-	msg := strings.Join(parts, " ")
-	help := "q:quit j/k:nav /:search T:theme ?:help"
-
-	// Pad between message and help
-	pad := a.width - len(msg) - len(help) - 2
+	pad := a.width - len(left) - len(right) - 2
 	if pad < 1 {
 		pad = 1
 	}
 
-	return style.Render(msg + strings.Repeat(" ", pad) + help)
-}
-
-func (a *App) renderSearchBar() string {
-	style := lipgloss.NewStyle().
-		Background(a.theme.Search).
-		Foreground(lipgloss.Color("#ffffff")).
+	return lipgloss.NewStyle().
+		Background(a.theme.StatusBar).
+		Foreground(a.theme.Foreground).
 		Width(a.width).
-		Padding(0, 1)
-	return style.Render("Search: " + a.searchQuery + "█")
+		Padding(0, 1).
+		Render(left + strings.Repeat(" ", pad) + right)
 }
 
 func (a *App) renderHelp() string {
-	helpText := `
-  gomd — Keyboard Shortcuts
+	var focusState string
+	if a.sidebarHidden {
+		focusState = "sidebar hidden (w to restore)"
+	} else if a.focus == FocusSidebar {
+		focusState = "sidebar focused"
+	} else {
+		focusState = "content focused"
+	}
 
-  NAVIGATION
-    j / ↓        Move down in outline
-    k / ↑        Move up in outline
-    g            Jump to first heading
-    G            Jump to last heading
-    Enter / Space  Scroll content to selected heading
+	text := fmt.Sprintf(`  gomd — Keyboard Shortcuts   [%s]
 
-  CONTENT SCROLLING
-    J            Scroll content down
-    K            Scroll content up
-    Ctrl+D / Ctrl+F  Page down
-    Ctrl+U / Ctrl+B  Page up
-
-  SEARCH
-    /            Start search
-    n            Next match
-    N            Previous match
-    Esc          Cancel search
-
-  OTHER
+  GLOBAL
+    Tab          Toggle focus between sidebar ↔ content
+    w            Hide / show sidebar
     r            Reload file
     T            Open theme picker
     ?            Toggle this help
     q / Ctrl+C   Quit
-`
-	style := lipgloss.NewStyle().
+
+  SIDEBAR  (when focused)
+    j / ↓        Select next heading
+    k / ↑        Select previous heading
+    g / G        Jump to first / last heading
+    /            Search headings
+    n / N        Next / previous search match
+
+  CONTENT  (when focused)
+    j / ↓        Scroll down one line
+    k / ↑        Scroll up one line
+    Ctrl+D/F     Page down
+    Ctrl+U/B     Page up
+    g / G        Jump to top / bottom
+    i            Enter interactive node selection
+
+  NODE SELECTION  (press i from content)
+    j / ↓ / Tab  Next code block
+    k / ↑        Previous code block
+    y            Copy code block content to clipboard
+    Esc / q / i  Exit node selection
+`, focusState)
+
+	return lipgloss.NewStyle().
 		Background(a.theme.Background).
 		Foreground(a.theme.Foreground).
 		Width(a.width).
 		Height(a.height).
-		Padding(1, 2)
-
-	return style.Render(helpText)
+		Padding(1, 2).
+		Render(text)
 }
 
 func (a *App) renderThemePicker() string {
 	themeNames := []string{"OceanDark", "Nord", "Dracula", "Gruvbox", "TokyoNight"}
 	var lines []string
-	lines = append(lines, "  Select Theme (press number):")
-	lines = append(lines, "")
+	lines = append(lines, "  Select Theme (press number):", "")
 	for i, name := range themeNames {
 		marker := "  "
 		if name == a.cfg.UI.Theme {
@@ -794,55 +1104,56 @@ func (a *App) renderThemePicker() string {
 		}
 		lines = append(lines, fmt.Sprintf("  %s%d. %s", marker, i+1, name))
 	}
-	lines = append(lines, "")
-	lines = append(lines, "  Esc / q to cancel")
+	lines = append(lines, "", "  Esc / q / T to cancel")
 
-	style := lipgloss.NewStyle().
+	return lipgloss.NewStyle().
 		Background(a.theme.Background).
 		Foreground(a.theme.Foreground).
 		Width(a.width).
 		Height(a.height).
-		Padding(1, 2)
-
-	return style.Render(strings.Join(lines, "\n"))
+		Padding(1, 2).
+		Render(strings.Join(lines, "\n"))
 }
 
-// highlightCode applies syntax highlighting to code using chroma.
-func highlightCode(code, lang string, width int) string {
+// ─────────────────────────────────────────────
+// Syntax highlighting
+// ─────────────────────────────────────────────
+
+func highlightCode(code, lang string) string {
 	if lang == "" {
 		return code
 	}
-
-	lexer := lexers.Get(lang)
-	if lexer == nil {
-		lexer = lexers.Fallback
+	lx := lexers.Get(lang)
+	if lx == nil {
+		lx = lexers.Fallback
 	}
-	lexer = chroma.Coalesce(lexer)
+	lx = chroma.Coalesce(lx)
 
-	style := styles.Get("monokai")
-	if style == nil {
-		style = styles.Fallback
+	sty := styles.Get("monokai")
+	if sty == nil {
+		sty = styles.Fallback
 	}
 
-	formatter := formatters.Get("terminal256")
-	if formatter == nil {
+	fmtr := formatters.Get("terminal256")
+	if fmtr == nil {
 		return code
 	}
 
 	var sb strings.Builder
-	iterator, err := lexer.Tokenise(nil, code)
+	it, err := lx.Tokenise(nil, code)
 	if err != nil {
 		return code
 	}
-
-	if err := formatter.Format(&sb, style, iterator); err != nil {
+	if err := fmtr.Format(&sb, sty, it); err != nil {
 		return code
 	}
-
 	return sb.String()
 }
 
-// Run starts the TUI application.
+// ─────────────────────────────────────────────
+// Entry point
+// ─────────────────────────────────────────────
+
 func Run(doc *parser.Document, filename, filePath string, cfg config.Config) error {
 	app := NewApp(doc, filename, filePath, cfg)
 	p := tea.NewProgram(app, tea.WithAltScreen())
