@@ -1458,16 +1458,30 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 
 		result[ni] = loc
 		// Advance the search cursor so the next node cannot match the same
-		// rendered span.  We stay on loc.firstLine and bump the column cursor
+		// rendered span.  For fenced blocks, advance to loc.lastLine (the last
+		// rendered line of the block) so subsequent inline nodes start searching
+		// from there and won't match content inside the block.  Using lastLine
+		// (not lastLine+1) avoids skipping a heading that immediately follows
+		// the block on the very next rendered line.
+		// For inline spans, stay on loc.firstLine and bump the column cursor
 		// past this span so subsequent nodes can still match on the same or
 		// later rendered line.
 		if loc.firstLine >= 0 {
-			if loc.firstLine > searchFromLine {
-				searchFromLine = loc.firstLine
-				searchFromCol = -1
-			}
-			if loc.spanColEnd > 0 {
-				searchFromCol = loc.spanColEnd - 1
+			if !n.inline && loc.lastLine > loc.firstLine {
+				// Fenced block: advance to last rendered line of the block.
+				newLine := loc.lastLine
+				if newLine > searchFromLine {
+					searchFromLine = newLine
+					searchFromCol = -1
+				}
+			} else {
+				if loc.firstLine > searchFromLine {
+					searchFromLine = loc.firstLine
+					searchFromCol = -1
+				}
+				if loc.spanColEnd > 0 {
+					searchFromCol = loc.spanColEnd - 1
+				}
 			}
 		}
 	}
