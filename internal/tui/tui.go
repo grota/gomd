@@ -133,9 +133,13 @@ type codeNode struct {
 type nodeRenderLoc struct {
 	firstLine int // index into renderedLines; -1 = not found
 	lastLine  int // inclusive end line (== firstLine for inline)
-	// For inline nodes: display-column offsets within the stripped rendered line.
+	// For inline nodes: display-column offsets for highlighting (used by highlightSpanInLine).
 	spanCol    int // display column of span start (-1 if not found)
 	spanColEnd int // display column just past span end
+	// Byte offsets within the stripped line — used internally by mapNodesToRenderedLines
+	// for the searchFromCol cursor (strings.Index returns byte offsets).
+	spanColByte    int
+	spanColEndByte int
 }
 
 // ─────────────────────────────────────────────
@@ -1287,6 +1291,19 @@ func (a *App) renderContentGlamour(w, h int) string {
 // the first non-empty line of the block body, then extends to cover all body lines.
 // For inline nodes: finds the rendered line containing the span text, and records
 // the display-column range of that span within the stripped line.
+// byteColToDisplayCol converts a byte offset within a stripped (ANSI-free) string
+// to a display column count. Needed because strings.Index returns byte offsets
+// but ansi.Truncate / lipgloss.Width operate in display columns (Unicode-aware).
+func byteColToDisplayCol(s string, byteOff int) int {
+	if byteOff <= 0 {
+		return 0
+	}
+	if byteOff >= len(s) {
+		return lipgloss.Width(s)
+	}
+	return lipgloss.Width(s[:byteOff])
+}
+
 func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLoc {
 	result := make([]nodeRenderLoc, len(nodes))
 	// Pre-strip ANSI from all rendered lines once.
@@ -1349,14 +1366,16 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 					if col == -1 {
 						continue
 					}
-					// On searchFromLine, skip columns already consumed.
+					// On searchFromLine, skip columns already consumed (byte offsets).
 					if ri == searchFromLine && col <= searchFromCol {
 						continue
 					}
 					loc.firstLine = ri
 					loc.lastLine = ri
-					loc.spanCol = col
-					loc.spanColEnd = col + len([]rune(headingSearch))
+					loc.spanColByte = col
+					loc.spanColEndByte = col + len(headingSearch)
+					loc.spanCol = byteColToDisplayCol(s, col)
+					loc.spanColEnd = loc.spanCol + lipgloss.Width(headingSearch)
 					break
 				}
 			} else {
@@ -1384,14 +1403,14 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 						}
 						s = s[colOffset:]
 					}
-					bestCol := -1
-					bestColEnd := -1
+					bestCol := -1    // byte offset
+					bestColEnd := -1 // byte offset
 
 					// Check padded form
 					if paddedIdx := strings.Index(s, padded); paddedIdx != -1 {
 						col := colOffset + paddedIdx + 2
 						bestCol = col
-						bestColEnd = col + len([]rune(n.content))
+						bestColEnd = col + len(n.content)
 					}
 					// Check bare form on non-heading lines; prefer it if earlier
 					if !strings.Contains(stripped[ri], "##") {
@@ -1399,15 +1418,19 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 							col2 += colOffset
 							if bestCol < 0 || col2 < bestCol {
 								bestCol = col2
-								bestColEnd = col2 + len([]rune(needle))
+								bestColEnd = col2 + len(needle)
 							}
 						}
 					}
 					if bestCol >= 0 {
 						loc.firstLine = ri
 						loc.lastLine = ri
-						loc.spanCol = bestCol
-						loc.spanColEnd = bestColEnd
+						loc.spanColByte = bestCol
+						loc.spanColEndByte = bestColEnd
+						// Convert to display columns for highlightSpanInLine
+						fullLine := stripped[ri]
+						loc.spanCol = byteColToDisplayCol(fullLine, bestCol)
+						loc.spanColEnd = loc.spanCol + lipgloss.Width(fullLine[bestCol:bestColEnd])
 						break
 					}
 				}
@@ -1479,8 +1502,8 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 					searchFromLine = loc.firstLine
 					searchFromCol = -1
 				}
-				if loc.spanColEnd > 0 {
-					searchFromCol = loc.spanColEnd - 1
+				if loc.spanColEndByte > 0 {
+					searchFromCol = loc.spanColEndByte - 1
 				}
 			}
 		}
