@@ -111,9 +111,12 @@ const (
 
 type codeNode struct {
 	lang      string
-	content   string  // raw code without fence lines
+	content   string  // raw code without fence lines / backticks
 	startLine int     // 0-based line index in sectionLines
-	endLine   int     // inclusive
+	endLine   int     // inclusive (== startLine for inline)
+	inline    bool    // true for backtick inline code spans
+	colStart  int     // byte offset of opening backtick in the line (inline only)
+	colEnd    int     // byte offset just past closing backtick (inline only)
 }
 
 // ─────────────────────────────────────────────
@@ -219,7 +222,7 @@ func (a *App) rebuildSection() {
 	a.codeNodes = extractCodeNodes(a.sectionLines)
 }
 
-// extractCodeNodes finds all fenced code blocks in lines and returns their metadata.
+// extractCodeNodes finds all fenced code blocks and inline backtick spans in lines.
 func extractCodeNodes(lines []string) []codeNode {
 	var nodes []codeNode
 	inBlock := false
@@ -236,6 +239,9 @@ func extractCodeNodes(lines []string) []codeNode {
 				lang = strings.TrimSpace(trimmed[3:])
 				bodyLines = nil
 				startLine = i
+			} else {
+				// Scan for inline backtick spans on this line
+				nodes = append(nodes, extractInlineNodes(line, i)...)
 			}
 		} else {
 			if strings.HasPrefix(trimmed, fence) {
@@ -253,6 +259,65 @@ func extractCodeNodes(lines []string) []codeNode {
 				bodyLines = append(bodyLines, line)
 			}
 		}
+	}
+	return nodes
+}
+
+// extractInlineNodes finds all `code` spans in a single line and returns them as codeNodes.
+func extractInlineNodes(line string, lineIdx int) []codeNode {
+	var nodes []codeNode
+	i := 0
+	for i < len(line) {
+		if line[i] != '`' {
+			i++
+			continue
+		}
+		// Count opening backticks
+		j := i
+		for j < len(line) && line[j] == '`' {
+			j++
+		}
+		tick := line[i:j] // one or more backticks
+		// Find matching closing sequence
+		k := j
+		for k < len(line) {
+			closeStart := strings.Index(line[k:], tick)
+			if closeStart == -1 {
+				break
+			}
+			closeStart += k
+			// Make sure it's not longer than tick (e.g. `` inside ``` context)
+			// Check that the char before or after isn't another backtick
+			closeEnd := closeStart + len(tick)
+			// If surrounded by more backticks, skip
+			if closeStart > 0 && line[closeStart-1] == '`' {
+				k = closeStart + 1
+				continue
+			}
+			if closeEnd < len(line) && line[closeEnd] == '`' {
+				k = closeEnd
+				continue
+			}
+			// Found a valid span
+			inner := line[j:closeStart]
+			// Trim single leading/trailing space per CommonMark
+			if len(inner) > 2 && inner[0] == ' ' && inner[len(inner)-1] == ' ' {
+				inner = inner[1 : len(inner)-1]
+			}
+			nodes = append(nodes, codeNode{
+				lang:      "",
+				content:   inner,
+				startLine: lineIdx,
+				endLine:   lineIdx,
+				inline:    true,
+				colStart:  i,
+				colEnd:    closeEnd,
+			})
+			i = closeEnd
+			goto nextChar
+		}
+		i = j
+		nextChar:
 	}
 	return nodes
 }
@@ -708,7 +773,7 @@ func (a *App) contentWidth() int {
 }
 
 func (a *App) outlineHeight() int {
-	h := a.height - 3 // title row + status row + 1 padding
+	h := a.height - 2 // title row + status row
 	if h < 0 {
 		return 0
 	}
@@ -716,7 +781,7 @@ func (a *App) outlineHeight() int {
 }
 
 func (a *App) contentHeight() int {
-	h := a.height - 3
+	h := a.height - 2 // title row + status row
 	if h < 0 {
 		return 0
 	}
@@ -746,10 +811,6 @@ func (a *App) View() string {
 	if a.sidebarHidden {
 		body = a.renderContent()
 	} else {
-		sidebar := a.renderOutline()
-		content := a.renderContent()
-
-		// Divider: single column of │, height = contentHeight rows
 		divStyle := lipgloss.NewStyle().Foreground(a.theme.Border)
 		divLines := make([]string, a.outlineHeight())
 		for i := range divLines {
@@ -757,7 +818,13 @@ func (a *App) View() string {
 		}
 		divider := divStyle.Render(strings.Join(divLines, "\n"))
 
-		body = lipgloss.JoinHorizontal(lipgloss.Top, sidebar, divider, content)
+		if a.focus == FocusSidebar {
+			// Outline on the left, section content on the right
+			body = lipgloss.JoinHorizontal(lipgloss.Top, a.renderOutline(), divider, a.renderContent())
+		} else {
+			// Content focused: section content on the left, outline on the right
+			body = lipgloss.JoinHorizontal(lipgloss.Top, a.renderContentPane(), divider, a.renderOutline())
+		}
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, body, status)
@@ -788,7 +855,15 @@ func (a *App) renderTitle() string {
 }
 
 func (a *App) renderOutline() string {
-	w := a.sidebarWidth()
+	// Width depends on which side this pane is on.
+	// When sidebar-focused: outline is on the left (sidebarWidth).
+	// When content-focused: outline is on the right (contentWidth).
+	var w int
+	if a.focus == FocusSidebar {
+		w = a.sidebarWidth()
+	} else {
+		w = a.contentWidth()
+	}
 	h := a.outlineHeight()
 
 	headings := a.doc.Headings
@@ -855,8 +930,17 @@ func (a *App) renderOutline() string {
 		Render(strings.Join(lines, "\n"))
 }
 
+// renderContentPane renders the section content in the narrow (sidebar-width) left column,
+// used when content pane is focused and the layout is swapped.
+func (a *App) renderContentPane() string {
+	return a.renderContentWidth(a.sidebarWidth())
+}
+
 func (a *App) renderContent() string {
-	w := a.contentWidth()
+	return a.renderContentWidth(a.contentWidth())
+}
+
+func (a *App) renderContentWidth(w int) string {
 	h := a.contentHeight()
 	if w <= 0 || h <= 0 {
 		return ""
@@ -876,10 +960,15 @@ func (a *App) renderContent() string {
 	// Build set of line ranges that belong to the currently-selected node
 	// (only in ModeNodeSelect)
 	nodeHighlightLines := map[int]bool{}
+	var selectedInlineNode *codeNode // non-nil when selected node is inline
 	if a.mode == ModeNodeSelect && a.nodeSelIdx < len(a.codeNodes) {
 		n := a.codeNodes[a.nodeSelIdx]
-		for li := n.startLine; li <= n.endLine; li++ {
-			nodeHighlightLines[li] = true
+		if n.inline {
+			selectedInlineNode = &a.codeNodes[a.nodeSelIdx]
+		} else {
+			for li := n.startLine; li <= n.endLine; li++ {
+				nodeHighlightLines[li] = true
+			}
 		}
 	}
 
@@ -966,6 +1055,21 @@ func (a *App) renderContent() string {
 		}
 
 		// ── Plain line ────────────────────────────────────────────
+		// Check if this line contains the selected inline code span
+		if selectedInlineNode != nil && docLine == selectedInlineNode.startLine &&
+			selectedInlineNode.colEnd <= len(line) {
+			n := selectedInlineNode
+			before := line[:n.colStart]
+			span := line[n.colStart:n.colEnd]
+			after := line[n.colEnd:]
+			highlighted := lipgloss.NewStyle().
+				Background(a.theme.NodeSel).
+				Foreground(a.theme.Background).
+				Bold(true).
+				Render(span)
+			rendered = append(rendered, before+highlighted+after)
+			continue
+		}
 		rendered = append(rendered, line)
 	}
 
@@ -987,51 +1091,66 @@ func (a *App) renderContent() string {
 }
 
 func (a *App) renderStatus() string {
-	var left string
+	// Build plain (unstyled) left/right text first so we can measure widths correctly.
+	var leftPlain string
 	switch a.mode {
 	case ModeSearch:
-		left = lipgloss.NewStyle().Foreground(a.theme.Search).Bold(true).
-			Render("/ " + a.searchQuery + "█")
+		leftPlain = "/ " + a.searchQuery + "█"
 	case ModeNodeSelect:
 		if a.copyMsg != "" {
-			left = lipgloss.NewStyle().Foreground(a.theme.NodeSel).Bold(true).Render("✓ " + a.copyMsg)
+			leftPlain = "✓ " + a.copyMsg
 		} else if len(a.codeNodes) > 0 {
 			n := a.codeNodes[a.nodeSelIdx]
 			lang := n.lang
 			if lang == "" {
 				lang = "code"
 			}
-			left = lipgloss.NewStyle().Foreground(a.theme.NodeSel).Bold(true).
-				Render(fmt.Sprintf("NODE [%d/%d] %s  y:copy  j/k:next/prev  Esc:exit",
-					a.nodeSelIdx+1, len(a.codeNodes), lang))
+			leftPlain = fmt.Sprintf("NODE [%d/%d] %s  y:copy  j/k:next/prev  Esc:exit",
+				a.nodeSelIdx+1, len(a.codeNodes), lang)
 		}
 	default:
 		if a.selectedIdx < len(a.doc.Headings) {
 			h := a.doc.Headings[a.selectedIdx]
 			pos := fmt.Sprintf("[%d/%d]", a.selectedIdx+1, len(a.doc.Headings))
 			heading := strings.Repeat("#", h.Level) + " " + h.Text
-			left = pos + " " + heading
+			leftPlain = pos + " " + heading
 		}
 		if a.statusMsg != "" {
-			left += "  " + a.statusMsg
+			leftPlain += "  " + a.statusMsg
 		}
 	}
 
-	var right string
+	var rightPlain string
 	switch a.mode {
 	case ModeNodeSelect:
-		right = ""
+		rightPlain = ""
 	default:
 		if a.sidebarHidden {
-			right = "w:sidebar  Tab:focus  i:nodes  /:search  T:theme  ?:help  q:quit"
+			rightPlain = "w:sidebar  Tab:focus  i:nodes  /:search  T:theme  ?:help  q:quit"
 		} else {
-			right = "Tab:focus  w:hide sidebar  i:nodes  /:search  T:theme  ?:help  q:quit"
+			rightPlain = "Tab:focus  w:hide sidebar  i:nodes  /:search  T:theme  ?:help  q:quit"
 		}
 	}
 
-	pad := a.width - len(left) - len(right) - 2
+	// Use rune counts (no ANSI codes yet) for padding calculation.
+	// Subtract 2 for the 1-cell padding on each side added by lipgloss.
+	innerWidth := a.width - 2
+	usedWidth := len([]rune(leftPlain)) + len([]rune(rightPlain))
+	pad := innerWidth - usedWidth
 	if pad < 1 {
 		pad = 1
+	}
+
+	// Now apply colour styling.
+	var content string
+	switch a.mode {
+	case ModeSearch:
+		content = lipgloss.NewStyle().Foreground(a.theme.Search).Bold(true).Render(leftPlain) +
+			strings.Repeat(" ", pad) + rightPlain
+	case ModeNodeSelect:
+		content = lipgloss.NewStyle().Foreground(a.theme.NodeSel).Bold(true).Render(leftPlain)
+	default:
+		content = leftPlain + strings.Repeat(" ", pad) + rightPlain
 	}
 
 	return lipgloss.NewStyle().
@@ -1039,7 +1158,7 @@ func (a *App) renderStatus() string {
 		Foreground(a.theme.Foreground).
 		Width(a.width).
 		Padding(0, 1).
-		Render(left + strings.Repeat(" ", pad) + right)
+		Render(content)
 }
 
 func (a *App) renderHelp() string {
