@@ -1464,13 +1464,21 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 				}
 			}
 			if firstLine >= 0 {
-				bodyLineCount := len(strings.Split(strings.TrimRight(n.content, "\n"), "\n"))
-				lastLine := firstLine + bodyLineCount + 1
-				if lastLine >= len(rendered) {
-					lastLine = len(rendered) - 1
+				// Glamour renders fenced code blocks with 4-space indentation (vs
+				// 2-space for prose). Scan forward from firstLine while lines are
+				// either blank or start with at least 4 spaces to find the last
+				// line of the block.
+				lastLine := firstLine
+				for ri := firstLine + 1; ri < len(stripped); ri++ {
+					l := stripped[ri]
+					trimmed := strings.TrimSpace(l)
+					if trimmed == "" || strings.HasPrefix(l, "    ") {
+						lastLine = ri
+						continue
+					}
+					break
 				}
-				// Don't overshoot into the next section: stop at a blank line
-				// that follows the block body.
+				// Trim trailing blank lines.
 				for lastLine > firstLine && strings.TrimSpace(stripped[lastLine]) == "" {
 					lastLine--
 				}
@@ -1491,8 +1499,11 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 		// later rendered line.
 		if loc.firstLine >= 0 {
 			if !n.inline && loc.lastLine > loc.firstLine {
-				// Fenced block: advance to last rendered line of the block.
-				newLine := loc.lastLine
+				// Fenced block: advance to firstLine only (not lastLine) so
+				// that the next fenced block can still match within this block's
+				// rendered region (consecutive blocks may share rendered lines).
+				// Inline nodes will be unaffected because they match on spanCol.
+				newLine := loc.firstLine
 				if newLine > searchFromLine {
 					searchFromLine = newLine
 					searchFromCol = -1
