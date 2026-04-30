@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/alecthomas/chroma/v2"
@@ -44,6 +45,12 @@ type Theme struct {
 	Search     lipgloss.Color
 	NodeSel    lipgloss.Color // selected node in interactive mode
 }
+
+// backtickRe matches `code` in markdown heading text (glamour strips backticks).
+var backtickRe = regexp.MustCompile("`([^`]*)`")
+
+// mdLinkRe matches [text](url) in markdown heading text (glamour shows only text).
+var mdLinkRe = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
 
 var themes = map[string]Theme{
 	"OceanDark": {
@@ -848,11 +855,32 @@ func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+// ensureRenderedLines builds renderedLines and nodeRenderInfo if they are
+// stale or missing. Called eagerly before any operation that needs them
+// (e.g. scrollContentToNode) so that the data is ready before View().
+func (a *App) ensureRenderedLines() {
+	w := a.contentWidth() - 2
+	if w < 1 {
+		w = 1
+	}
+	if a.renderedLinesIdx == a.selectedIdx && a.renderedLinesWidth == w && a.renderedLines != nil {
+		return // already up to date
+	}
+	markdown := strings.Join(a.sectionLines, "\n")
+	a.renderedLines = a.renderGlamour(markdown, w)
+	a.renderedLinesIdx = a.selectedIdx
+	a.renderedLinesWidth = w
+	a.nodeRenderInfo = mapNodesToRenderedLines(a.codeNodes, a.renderedLines)
+	a.clampContentOffset()
+}
+
 // scrollContentToNode scrolls the content so the selected code node is visible.
 func (a *App) scrollContentToNode(nodeIdx int) {
 	if nodeIdx < 0 || nodeIdx >= len(a.codeNodes) {
 		return
 	}
+	// Ensure rendered lines and node mapping are built before consulting them.
+	a.ensureRenderedLines()
 	// Use the rendered-line position if available, fall back to source line.
 	target := a.codeNodes[nodeIdx].startLine
 	if a.nodeRenderInfo != nil && nodeIdx < len(a.nodeRenderInfo) && a.nodeRenderInfo[nodeIdx].firstLine >= 0 {
@@ -1267,59 +1295,125 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 		stripped[i] = ansi.Strip(l)
 	}
 
+	// Nodes are ordered by source line. Their rendered positions are also
+	// monotonically non-decreasing, so we scan forward from the previous
+	// node's rendered position to avoid matching an earlier duplicate.
+	//
+	// searchFromLine: the first rendered line to consider.
+	// searchFromCol:  on searchFromLine itself, skip any match whose column
+	//                 is <= this value (already consumed by a previous node
+	//                 on the same rendered line).
+	searchFromLine := 0
+	searchFromCol := -1
+
 	for ni, n := range nodes {
 		loc := nodeRenderLoc{firstLine: -1, lastLine: -1, spanCol: -1, spanColEnd: -1}
 
 		if n.inline {
 			if n.lang == "heading" {
-				// Find the rendered heading line: glamour renders it as "  ## Text  ..."
-				// Search for the heading text (content) in a line that also has "##".
-				for ri, s := range stripped {
+				// Glamour renders headings as "  ## Text  ..."
+				// Glamour renders inline code within headings with double-spaces, and
+				// strips markdown link syntax ([text](url) → text).
+				// Strategy: use the longest plain-text prefix before any backtick span
+				// or special char as the search key, since that prefix appears verbatim.
+				// When a heading starts with or contains backtick spans, glamour renders
+				// them with double-spaces (e.g. `foo` → "  foo  "), so we search using
+				// the padded form for backtick-starting headings.
+				headingSearch := n.content
+				startsWithBacktick := strings.HasPrefix(headingSearch, "`")
+				if !startsWithBacktick {
+					// Use plain-text prefix before the first backtick
+					if idx := strings.Index(headingSearch, "`"); idx > 0 {
+						headingSearch = strings.TrimRight(headingSearch[:idx], " ")
+					} else {
+						// No backtick: strip markdown links only
+						headingSearch = mdLinkRe.ReplaceAllString(headingSearch, "$1")
+					}
+				}
+				if startsWithBacktick || headingSearch == "" {
+					// Extract inner text of first backtick span and use padded form
+					if m := backtickRe.FindStringSubmatch(n.content); m != nil {
+						headingSearch = "  " + m[1] + "  "
+					} else {
+						headingSearch = backtickRe.ReplaceAllString(n.content, "$1")
+						headingSearch = mdLinkRe.ReplaceAllString(headingSearch, "$1")
+					}
+				}
+				// Find a line containing "#" and the search key, searching forward.
+				for ri := searchFromLine; ri < len(stripped); ri++ {
+					s := stripped[ri]
 					if !strings.Contains(s, "#") {
 						continue
 					}
-					col := strings.Index(s, n.content)
-					if col != -1 {
-						loc.firstLine = ri
-						loc.lastLine = ri
-						loc.spanCol = col
-						loc.spanColEnd = col + len([]rune(n.content))
-						break
+					col := strings.Index(s, headingSearch)
+					if col == -1 {
+						continue
 					}
+					// On searchFromLine, skip columns already consumed.
+					if ri == searchFromLine && col <= searchFromCol {
+						continue
+					}
+					loc.firstLine = ri
+					loc.lastLine = ri
+					loc.spanCol = col
+					loc.spanColEnd = col + len([]rune(headingSearch))
+					break
 				}
 			} else {
-				// Glamour renders inline code spans with a space on each side, e.g.
-				// `useCallback` → " useCallback " in the stripped rendered text.
-				// Searching for that padded form avoids false matches in heading lines
-				// where the same word appears without the padding.
-				padded := " " + n.content + " "
-				needle := n.content // fallback if padded form not found
-				for ri, s := range stripped {
-					col := strings.Index(s, padded)
-					if col != -1 {
-						// spanCol points at the content start (skip the leading space)
-						col++
+				// Glamour renders inline code spans with two spaces on each side
+				// when mid-sentence, e.g. `useCallback` → "  useCallback  ".
+				// When at end-of-sentence before punctuation only one trailing
+				// space may appear, e.g. `Object.is`. → "  Object.is .".
+				// Strategy: in a single forward pass from searchFromLine, on each
+				// rendered line find BOTH the padded form ("  content  ") and the
+				// bare form, then take the EARLIEST (minimum column) match.  This
+				// prevents a later padded occurrence from pre-empting an earlier bare
+				// occurrence on the same line.
+				//
+				// On searchFromLine, respect searchFromCol to handle multiple spans
+				// on the same rendered line (same source line).
+				padded := "  " + n.content + "  "
+				needle := n.content
+				for ri := searchFromLine; ri < len(stripped); ri++ {
+					s := stripped[ri]
+					colOffset := 0
+					if ri == searchFromLine && searchFromCol >= 0 {
+						colOffset = searchFromCol + 1
+						if colOffset > len(s) {
+							continue
+						}
+						s = s[colOffset:]
+					}
+					bestCol := -1
+					bestColEnd := -1
+
+					// Check padded form
+					if paddedIdx := strings.Index(s, padded); paddedIdx != -1 {
+						col := colOffset + paddedIdx + 2
+						bestCol = col
+						bestColEnd = col + len([]rune(n.content))
+					}
+					// Check bare form on non-heading lines; prefer it if earlier
+					if !strings.Contains(stripped[ri], "##") {
+						if col2 := strings.Index(s, needle); col2 != -1 {
+							col2 += colOffset
+							if bestCol < 0 || col2 < bestCol {
+								bestCol = col2
+								bestColEnd = col2 + len([]rune(needle))
+							}
+						}
+					}
+					if bestCol >= 0 {
 						loc.firstLine = ri
 						loc.lastLine = ri
-						loc.spanCol = col
-						loc.spanColEnd = col + len([]rune(n.content))
+						loc.spanCol = bestCol
+						loc.spanColEnd = bestColEnd
 						break
-					}
-					// Fallback: bare match (for cases where padding differs)
-					if loc.firstLine < 0 {
-						col2 := strings.Index(s, needle)
-						if col2 != -1 {
-							loc.firstLine = ri
-							loc.lastLine = ri
-							loc.spanCol = col2
-							loc.spanColEnd = col2 + len([]rune(needle))
-							// Don't break — keep looking for padded form
-						}
 					}
 				}
 			}
 		} else {
-			// Find the first non-empty body line as a search anchor.
+			// Fenced block: find the first non-empty body line as a search anchor.
 			needle := ""
 			for _, bodyLine := range strings.Split(n.content, "\n") {
 				t := strings.TrimSpace(bodyLine)
@@ -1330,8 +1424,8 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 			}
 			firstLine := -1
 			if needle != "" {
-				for ri, s := range stripped {
-					if strings.Contains(s, needle) {
+				for ri := searchFromLine; ri < len(stripped); ri++ {
+					if strings.Contains(stripped[ri], needle) {
 						firstLine = ri
 						break
 					}
@@ -1339,26 +1433,43 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 			}
 			if firstLine == -1 {
 				// Try fence marker as fallback
-				for ri, s := range stripped {
-					if strings.Contains(s, "```") || strings.Contains(s, "~~~") {
+				for ri := searchFromLine; ri < len(stripped); ri++ {
+					if strings.Contains(stripped[ri], "```") || strings.Contains(stripped[ri], "~~~") {
 						firstLine = ri
 						break
 					}
 				}
 			}
 			if firstLine >= 0 {
-				// Extend end: count rendered lines until we hit a line that looks
-				// like a closing fence or blank line after the last body content.
 				bodyLineCount := len(strings.Split(strings.TrimRight(n.content, "\n"), "\n"))
-				lastLine := firstLine + bodyLineCount + 1 // fence-open + body + fence-close
+				lastLine := firstLine + bodyLineCount + 1
 				if lastLine >= len(rendered) {
 					lastLine = len(rendered) - 1
+				}
+				// Don't overshoot into the next section: stop at a blank line
+				// that follows the block body.
+				for lastLine > firstLine && strings.TrimSpace(stripped[lastLine]) == "" {
+					lastLine--
 				}
 				loc.firstLine = firstLine
 				loc.lastLine = lastLine
 			}
 		}
+
 		result[ni] = loc
+		// Advance the search cursor so the next node cannot match the same
+		// rendered span.  We stay on loc.firstLine and bump the column cursor
+		// past this span so subsequent nodes can still match on the same or
+		// later rendered line.
+		if loc.firstLine >= 0 {
+			if loc.firstLine > searchFromLine {
+				searchFromLine = loc.firstLine
+				searchFromCol = -1
+			}
+			if loc.spanColEnd > 0 {
+				searchFromCol = loc.spanColEnd - 1
+			}
+		}
 	}
 	return result
 }
