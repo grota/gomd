@@ -4,6 +4,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -136,8 +137,8 @@ type App struct {
 	// Sidebar
 	sidebarHidden bool
 	focus         FocusPane
-	outlineOffset int // first visible heading index
-	selectedIdx   int // currently selected heading index
+	outlineOffset int // first visible entry index (0 = root "(Document)" entry)
+	selectedIdx   int // -1 = root/whole-document, 0..N-1 = heading index
 
 	// Content — shows only the section of the selected heading
 	sectionLines  []string // lines of the current section
@@ -167,12 +168,13 @@ type App struct {
 
 func NewApp(doc *parser.Document, filename, filePath string, cfg config.Config) *App {
 	a := &App{
-		doc:      doc,
-		filename: filename,
-		filepath: filePath,
-		cfg:      cfg,
-		theme:    GetTheme(cfg.UI.Theme),
-		focus:    FocusSidebar,
+		doc:         doc,
+		filename:    filename,
+		filepath:    filePath,
+		cfg:         cfg,
+		theme:       GetTheme(cfg.UI.Theme),
+		focus:       FocusSidebar,
+		selectedIdx: -1, // start on the root (Document) node
 	}
 	a.rebuildSection()
 	return a
@@ -188,15 +190,14 @@ func (a *App) rebuildSection() {
 	a.nodeSelIdx = 0
 	a.codeNodes = nil
 
-	if len(a.doc.Headings) == 0 {
-		a.sectionLines = strings.Split(a.doc.Content, "\n")
+	// selectedIdx == -1 means the root (Document) node: show entire file
+	if a.selectedIdx < 0 || len(a.doc.Headings) == 0 {
+		content := strings.TrimRight(a.doc.Content, "\n")
+		a.sectionLines = strings.Split(content, "\n")
+		a.codeNodes = extractCodeNodes(a.sectionLines)
 		return
 	}
 
-	// Clamp
-	if a.selectedIdx < 0 {
-		a.selectedIdx = 0
-	}
 	if a.selectedIdx >= len(a.doc.Headings) {
 		a.selectedIdx = len(a.doc.Headings) - 1
 	}
@@ -214,11 +215,8 @@ func (a *App) rebuildSection() {
 	}
 
 	section := a.doc.Content[start:end]
-	// Trim trailing blank lines
 	section = strings.TrimRight(section, "\n")
 	a.sectionLines = strings.Split(section, "\n")
-
-	// Extract code nodes from this section
 	a.codeNodes = extractCodeNodes(a.sectionLines)
 }
 
@@ -329,8 +327,21 @@ func extractInlineNodes(line string, lineIdx int) []codeNode {
 type fileReloadMsg struct{ doc *parser.Document }
 type watchErrMsg struct{ err error }
 type clearCopyMsgCmd struct{}
+type editorDoneMsg struct{}
 
 func (clearCopyMsgCmd) ID() string { return "" }
+
+// openEditorCmd suspends the TUI, opens $EDITOR on filePath, then signals done.
+func openEditorCmd(filePath string) tea.Cmd {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
+	c := exec.Command(editor, filePath)
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return editorDoneMsg{}
+	})
+}
 
 func waitForFileChange(watcher *fsnotify.Watcher, filePath string) tea.Cmd {
 	return func() tea.Msg {
@@ -377,29 +388,48 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.height = msg.Height
 
 	case fileReloadMsg:
+		prevIdx := a.selectedIdx
 		prevHeading := ""
-		if a.selectedIdx < len(a.doc.Headings) {
-			prevHeading = a.doc.Headings[a.selectedIdx].Text
+		if prevIdx >= 0 && prevIdx < len(a.doc.Headings) {
+			prevHeading = a.doc.Headings[prevIdx].Text
 		}
 		a.doc = msg.doc
-		// Try to keep selection on same heading by text
-		if prevHeading != "" {
+		if prevIdx < 0 {
+			// was on root, stay on root
+			a.selectedIdx = -1
+		} else if prevHeading != "" {
+			// try to restore by heading text
+			found := false
 			for i, h := range a.doc.Headings {
 				if h.Text == prevHeading {
 					a.selectedIdx = i
+					found = true
 					break
 				}
+			}
+			if !found {
+				a.selectedIdx = -1
 			}
 		}
 		if a.selectedIdx >= len(a.doc.Headings) {
 			a.selectedIdx = len(a.doc.Headings) - 1
 		}
-		if a.selectedIdx < 0 {
-			a.selectedIdx = 0
-		}
 		a.rebuildSection()
 		a.scrollOutlineToSelected()
 		a.statusMsg = "Reloaded"
+		return a, a.startWatcher()
+
+	case editorDoneMsg:
+		// Reload file after editor exits
+		if a.filepath != "" && a.filepath != "<stdin>" {
+			data, err := os.ReadFile(a.filepath)
+			if err == nil {
+				a.doc = parser.ParseMarkdown(string(data))
+				a.rebuildSection()
+				a.scrollOutlineToSelected()
+				a.statusMsg = "Reloaded after edit"
+			}
+		}
 		return a, a.startWatcher()
 
 	case tea.KeyMsg:
@@ -470,6 +500,12 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return a, nil
+	case "e":
+		if a.filepath != "" && a.filepath != "<stdin>" {
+			return a, openEditorCmd(a.filepath)
+		}
+		a.statusMsg = "No file to edit"
+		return a, nil
 	}
 
 	// Focus-specific keys
@@ -501,7 +537,7 @@ func (a *App) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		a.moveSidebarUp(1)
 	case "g":
-		a.selectedIdx = 0
+		a.selectedIdx = -1
 		a.scrollOutlineToSelected()
 		a.rebuildSection()
 	case "G":
@@ -523,9 +559,6 @@ func (a *App) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) moveSidebarDown(n int) {
-	if len(a.doc.Headings) == 0 {
-		return
-	}
 	prev := a.selectedIdx
 	a.selectedIdx += n
 	if a.selectedIdx >= len(a.doc.Headings) {
@@ -540,13 +573,24 @@ func (a *App) moveSidebarDown(n int) {
 func (a *App) moveSidebarUp(n int) {
 	prev := a.selectedIdx
 	a.selectedIdx -= n
-	if a.selectedIdx < 0 {
-		a.selectedIdx = 0
+	if a.selectedIdx < -1 {
+		a.selectedIdx = -1
 	}
 	if a.selectedIdx != prev {
 		a.scrollOutlineToSelected()
 		a.rebuildSection()
 	}
+}
+
+// displayIdx returns the sidebar display index for the current selection.
+// Root (selectedIdx==-1) → 0; heading i → i+1.
+func (a *App) displayIdx() int {
+	return a.selectedIdx + 1
+}
+
+// totalEntries returns the total number of sidebar entries (root + headings).
+func (a *App) totalEntries() int {
+	return len(a.doc.Headings) + 1
 }
 
 // scrollOutlineToSelected scrolls the outline viewport so the selected item is
@@ -556,11 +600,12 @@ func (a *App) scrollOutlineToSelected() {
 	if h <= 0 {
 		return
 	}
-	if a.selectedIdx < a.outlineOffset {
-		a.outlineOffset = a.selectedIdx
+	di := a.displayIdx()
+	if di < a.outlineOffset {
+		a.outlineOffset = di
 	}
-	if a.selectedIdx >= a.outlineOffset+h {
-		a.outlineOffset = a.selectedIdx - h + 1
+	if di >= a.outlineOffset+h {
+		a.outlineOffset = di - h + 1
 	}
 	if a.outlineOffset < 0 {
 		a.outlineOffset = 0
@@ -632,7 +677,7 @@ func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.nodeSelIdx = (a.nodeSelIdx + 1) % len(a.codeNodes)
 			a.scrollContentToNode(a.nodeSelIdx)
 		}
-	case "k", "up":
+	case "k", "up", "shift+tab":
 		if len(a.codeNodes) > 0 {
 			a.nodeSelIdx = (a.nodeSelIdx - 1 + len(a.codeNodes)) % len(a.codeNodes)
 			a.scrollContentToNode(a.nodeSelIdx)
@@ -649,6 +694,10 @@ func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 				a.copyMsg = fmt.Sprintf("Copied %s block (%d lines)", lang, strings.Count(node.content, "\n")+1)
 			}
+			// Exit interactive mode after copy, keep copy feedback in statusMsg
+			a.statusMsg = a.copyMsg
+			a.copyMsg = ""
+			a.mode = ModeNormal
 		}
 	}
 	return a, nil
@@ -906,18 +955,32 @@ func (a *App) renderBorderedOutline(outerW int, focused bool) string {
 	}
 	h := a.paneInnerHeight()
 
-	headings := a.doc.Headings
-	end := a.outlineOffset + h
-	if end > len(headings) {
-		end = len(headings)
+	// Total entries: root + headings. outlineOffset is a display index.
+	total := a.totalEntries()
+	endDisplay := a.outlineOffset + h
+	if endDisplay > total {
+		endDisplay = total
 	}
 
 	lines := make([]string, 0, h)
-	for i := a.outlineOffset; i < end; i++ {
-		hd := headings[i]
-		indent := strings.Repeat("  ", hd.Level-1)
-		marker := strings.Repeat("#", hd.Level)
-		text := indent + marker + " " + hd.Text
+	for di := a.outlineOffset; di < endDisplay; di++ {
+		// di==0 is root; di>0 maps to heading di-1
+		var text string
+		var isSelected bool
+		var headingLevel int
+
+		if di == 0 {
+			text = "(Document)"
+			isSelected = a.selectedIdx == -1
+			headingLevel = 0
+		} else {
+			hd := a.doc.Headings[di-1]
+			indent := strings.Repeat("  ", hd.Level)
+			marker := strings.Repeat("#", hd.Level)
+			text = indent + marker + " " + hd.Text
+			isSelected = a.selectedIdx == di-1
+			headingLevel = hd.Level
+		}
 
 		maxRunes := innerW
 		if maxRunes < 1 {
@@ -927,7 +990,7 @@ func (a *App) renderBorderedOutline(outerW int, focused bool) string {
 			text = string([]rune(text)[:maxRunes-1]) + "…"
 		}
 
-		if i == a.selectedIdx {
+		if isSelected {
 			lines = append(lines, lipgloss.NewStyle().
 				Background(a.theme.Selected).
 				Foreground(a.theme.Foreground).
@@ -936,7 +999,9 @@ func (a *App) renderBorderedOutline(outerW int, focused bool) string {
 				Render(text))
 		} else {
 			var fg lipgloss.Color
-			switch hd.Level {
+			switch headingLevel {
+			case 0:
+				fg = a.theme.Foreground
 			case 1:
 				fg = a.theme.Heading1
 			case 2:
@@ -1150,7 +1215,9 @@ func (a *App) renderStatus() string {
 				a.nodeSelIdx+1, len(a.codeNodes), lang)
 		}
 	default:
-		if a.selectedIdx < len(a.doc.Headings) {
+		if a.selectedIdx < 0 {
+			leftPlain = fmt.Sprintf("[0/%d] (Document)", len(a.doc.Headings))
+		} else if a.selectedIdx < len(a.doc.Headings) {
 			h := a.doc.Headings[a.selectedIdx]
 			pos := fmt.Sprintf("[%d/%d]", a.selectedIdx+1, len(a.doc.Headings))
 			heading := strings.Repeat("#", h.Level) + " " + h.Text
@@ -1167,9 +1234,9 @@ func (a *App) renderStatus() string {
 		rightPlain = ""
 	default:
 		if a.sidebarHidden {
-			rightPlain = "w:sidebar  Tab:focus  i:nodes  /:search  T:theme  ?:help  q:quit"
+			rightPlain = "w:sidebar  Tab:focus  e:edit  i:nodes  /:search  T:theme  ?:help  q:quit"
 		} else {
-			rightPlain = "Tab:focus  w:hide sidebar  i:nodes  /:search  T:theme  ?:help  q:quit"
+			rightPlain = "Tab:focus  w:hide sidebar  e:edit  i:nodes  /:search  T:theme  ?:help  q:quit"
 		}
 	}
 
@@ -1217,6 +1284,7 @@ func (a *App) renderHelp() string {
   GLOBAL
     Tab          Toggle focus between sidebar ↔ content
     w            Hide / show sidebar
+    e            Open file in $EDITOR
     r            Reload file
     T            Open theme picker
     ?            Toggle this help
@@ -1225,7 +1293,7 @@ func (a *App) renderHelp() string {
   SIDEBAR  (when focused)
     j / ↓        Select next heading
     k / ↑        Select previous heading
-    g / G        Jump to first / last heading
+    g / G        Jump to root / last heading
     /            Search headings
     n / N        Next / previous search match
 
@@ -1238,9 +1306,9 @@ func (a *App) renderHelp() string {
     i            Enter interactive node selection
 
   NODE SELECTION  (press i from content)
-    j / ↓ / Tab  Next code block
-    k / ↑        Previous code block
-    y            Copy code block content to clipboard
+    j / ↓ / Tab       Next code block
+    k / ↑ / Shift+Tab Previous code block
+    y            Copy to clipboard and exit
     Esc / q / i  Exit node selection
 `, focusState)
 
