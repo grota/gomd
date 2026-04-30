@@ -13,6 +13,7 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/atotto/clipboard"
+	"github.com/charmbracelet/glamour"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fsnotify/fsnotify"
@@ -141,8 +142,18 @@ type App struct {
 	selectedIdx   int // -1 = root/whole-document, 0..N-1 = heading index
 
 	// Content — shows only the section of the selected heading
-	sectionLines  []string // lines of the current section
-	contentOffset int      // scroll offset within sectionLines
+	sectionLines  []string // raw lines of the current section (used for node extraction)
+	renderedLines []string // glamour-rendered lines of the current section
+	contentOffset int      // scroll offset (into renderedLines in normal mode, sectionLines in node-select)
+
+	// glamour renderer — rebuilt when content width or theme changes
+	glamourRenderer   interface{ Render(string) (string, error) }
+	glamourWidth      int    // innerW for which renderer was built
+	glamourStyleName  string // gomd theme name for which renderer was built
+
+	// rendered lines cache — rebuilt when section or width changes
+	renderedLinesWidth int      // innerW for which renderedLines was built
+	renderedLinesIdx   int      // selectedIdx for which renderedLines was built
 
 	// Search (sidebar heading search)
 	mode          AppMode
@@ -185,6 +196,57 @@ func NewApp(doc *parser.Document, filename, filePath string, cfg config.Config) 
 // ─────────────────────────────────────────────
 
 // rebuildSection recomputes sectionLines and codeNodes for the selected heading.
+// glamourStyleFor maps a gomd theme name to a glamour standard style name.
+func glamourStyleFor(themeName string) string {
+	switch themeName {
+	case "Dracula":
+		return "dracula"
+	case "TokyoNight":
+		return "tokyo-night"
+	default:
+		return "dark"
+	}
+}
+
+// ensureGlamourRenderer returns a cached glamour renderer for the given inner width
+// and current theme, rebuilding it only when those change.
+func (a *App) ensureGlamourRenderer(innerW int) interface{ Render(string) (string, error) } {
+	styleName := glamourStyleFor(a.theme.Name)
+	if a.glamourRenderer != nil && a.glamourWidth == innerW && a.glamourStyleName == styleName {
+		return a.glamourRenderer
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle(styleName),
+		glamour.WithWordWrap(innerW),
+	)
+	if err != nil {
+		return nil
+	}
+	a.glamourRenderer = r
+	a.glamourWidth = innerW
+	a.glamourStyleName = styleName
+	return r
+}
+
+// renderGlamour renders a markdown string through glamour and returns the output
+// split into lines, with a trailing empty line stripped.
+func (a *App) renderGlamour(markdown string, innerW int) []string {
+	r := a.ensureGlamourRenderer(innerW)
+	if r == nil {
+		return strings.Split(markdown, "\n")
+	}
+	out, err := r.Render(markdown)
+	if err != nil {
+		return strings.Split(markdown, "\n")
+	}
+	// glamour always ends with a newline; split and drop the trailing empty entry
+	lines := strings.Split(out, "\n")
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
 func (a *App) rebuildSection() {
 	a.contentOffset = 0
 	a.nodeSelIdx = 0
@@ -536,6 +598,10 @@ func (a *App) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.moveSidebarDown(1)
 	case "k", "up":
 		a.moveSidebarUp(1)
+	case "pgdown":
+		a.moveSidebarDown(a.outlineHeight())
+	case "pgup":
+		a.moveSidebarUp(a.outlineHeight())
 	case "g":
 		a.selectedIdx = -1
 		a.scrollOutlineToSelected()
@@ -622,14 +688,14 @@ func (a *App) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.scrollContent(1)
 	case "k", "up":
 		a.scrollContent(-1)
-	case "ctrl+d", "ctrl+f":
+	case "ctrl+d", "ctrl+f", "pgdown":
 		a.scrollContent(a.contentHeight() / 2)
-	case "ctrl+u", "ctrl+b":
+	case "ctrl+u", "ctrl+b", "pgup":
 		a.scrollContent(-a.contentHeight() / 2)
 	case "g":
 		a.contentOffset = 0
 	case "G":
-		a.contentOffset = len(a.sectionLines)
+		a.contentOffset = len(a.activeLines())
 		a.clampContentOffset()
 	case "i":
 		// Enter node selection mode if there are code blocks
@@ -650,11 +716,18 @@ func (a *App) scrollContent(delta int) {
 	a.clampContentOffset()
 }
 
+func (a *App) activeLines() []string {
+	if a.mode == ModeNodeSelect || len(a.renderedLines) == 0 {
+		return a.sectionLines
+	}
+	return a.renderedLines
+}
+
 func (a *App) clampContentOffset() {
 	if a.contentOffset < 0 {
 		a.contentOffset = 0
 	}
-	max := len(a.sectionLines) - a.contentHeight()
+	max := len(a.activeLines()) - a.contentHeight()
 	if max < 0 {
 		max = 0
 	}
@@ -791,6 +864,9 @@ func (a *App) handleThemeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				a.theme = GetTheme(name)
 				a.cfg.UI.Theme = name
 				a.cfg.Save()
+				// Invalidate glamour renderer and rendered lines cache
+				a.glamourRenderer = nil
+				a.renderedLines = nil
 				a.mode = ModeNormal
 				return a, nil
 			}
@@ -1049,9 +1125,48 @@ func (a *App) renderContent() string {
 func (a *App) renderContentWidth(w int) string {
 	h := a.contentHeight()
 	if w <= 0 || h <= 0 {
-		return ""
+		return strings.Repeat("\n", h-1)
 	}
 
+	if a.mode == ModeNodeSelect {
+		return a.renderContentRaw(w, h)
+	}
+	return a.renderContentGlamour(w, h)
+}
+
+// renderContentGlamour renders the current section using glamour and returns a
+// newline-joined string of exactly h lines, each at most w columns wide.
+func (a *App) renderContentGlamour(w, h int) string {
+	// Rebuild rendered lines if section or width changed.
+	if a.renderedLinesIdx != a.selectedIdx || a.renderedLinesWidth != w {
+		markdown := strings.Join(a.sectionLines, "\n")
+		a.renderedLines = a.renderGlamour(markdown, w)
+		a.renderedLinesIdx = a.selectedIdx
+		a.renderedLinesWidth = w
+		// Re-clamp offset now that renderedLines is fresh.
+		a.clampContentOffset()
+	}
+
+	lines := a.renderedLines
+	start := a.contentOffset
+	if start > len(lines) {
+		start = len(lines)
+	}
+	end := start + h
+	if end > len(lines) {
+		end = len(lines)
+	}
+	visible := lines[start:end]
+
+	// Pad to exactly h lines
+	out := make([]string, h)
+	copy(out, visible)
+	return strings.Join(out, "\n")
+}
+
+// renderContentRaw is the original manual renderer, used in ModeNodeSelect so that
+// node highlight overlays work on the raw source lines.
+func (a *App) renderContentRaw(w, h int) string {
 	lines := a.sectionLines
 	start := a.contentOffset
 	if start > len(lines) {
@@ -1064,10 +1179,9 @@ func (a *App) renderContentWidth(w int) string {
 	visible := lines[start:end]
 
 	// Build set of line ranges that belong to the currently-selected node
-	// (only in ModeNodeSelect)
 	nodeHighlightLines := map[int]bool{}
-	var selectedInlineNode *codeNode // non-nil when selected node is inline
-	if a.mode == ModeNodeSelect && a.nodeSelIdx < len(a.codeNodes) {
+	var selectedInlineNode *codeNode
+	if a.nodeSelIdx < len(a.codeNodes) {
 		n := a.codeNodes[a.nodeSelIdx]
 		if n.inline {
 			selectedInlineNode = &a.codeNodes[a.nodeSelIdx]
@@ -1082,13 +1196,12 @@ func (a *App) renderContentWidth(w int) string {
 	inCode := false
 	var fence, codeLang string
 	var codeBody []string
-	var fenceDocLine int // absolute index in sectionLines
+	var fenceDocLine int
 
 	for relIdx, line := range visible {
-		docLine := start + relIdx // absolute index in sectionLines
+		docLine := start + relIdx
 		trimmed := strings.TrimSpace(line)
 
-		// ── Code fence detection ──────────────────────────────────
 		if !inCode {
 			if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
 				inCode = true
@@ -1099,33 +1212,25 @@ func (a *App) renderContentWidth(w int) string {
 
 				fenceLine := lipgloss.NewStyle().Foreground(a.theme.HeadingN).Render(line)
 				if nodeHighlightLines[docLine] {
-					fenceLine = lipgloss.NewStyle().
-						Foreground(a.theme.NodeSel).Bold(true).Render(line)
+					fenceLine = lipgloss.NewStyle().Foreground(a.theme.NodeSel).Bold(true).Render(line)
 				}
 				rendered = append(rendered, fenceLine)
 				continue
 			}
 		} else {
 			if strings.HasPrefix(trimmed, fence) {
-				// closing fence — flush the accumulated code
 				highlighted := highlightCode(strings.Join(codeBody, "\n"), codeLang)
-				hLines := strings.Split(highlighted, "\n")
-				// Re-check line numbers for the body lines
-				for bi, hl := range hLines {
+				for bi, hl := range strings.Split(highlighted, "\n") {
 					bodyDocLine := fenceDocLine + 1 + bi
 					if nodeHighlightLines[bodyDocLine] {
 						hl = lipgloss.NewStyle().
-							Background(a.theme.Code).
-							Foreground(a.theme.Foreground).
-							Render(hl)
+							Background(a.theme.Code).Foreground(a.theme.Foreground).Render(hl)
 					}
 					rendered = append(rendered, hl)
 				}
-				// closing fence
 				closeLine := lipgloss.NewStyle().Foreground(a.theme.HeadingN).Render(line)
 				if nodeHighlightLines[docLine] {
-					closeLine = lipgloss.NewStyle().
-						Foreground(a.theme.NodeSel).Bold(true).Render(line)
+					closeLine = lipgloss.NewStyle().Foreground(a.theme.NodeSel).Bold(true).Render(line)
 				}
 				rendered = append(rendered, closeLine)
 				inCode = false
@@ -1134,12 +1239,10 @@ func (a *App) renderContentWidth(w int) string {
 				codeBody = nil
 				continue
 			}
-			// still inside block
 			codeBody = append(codeBody, line)
-			continue // will be flushed when closing fence is found
+			continue
 		}
 
-		// ── Heading styling ───────────────────────────────────────
 		if strings.HasPrefix(line, "#") {
 			level := 0
 			for level < len(line) && line[level] == '#' {
@@ -1160,40 +1263,29 @@ func (a *App) renderContentWidth(w int) string {
 			continue
 		}
 
-		// ── Plain line ────────────────────────────────────────────
-		// Check if this line contains the selected inline code span
+		// Plain line — check for inline node highlight
 		if selectedInlineNode != nil && docLine == selectedInlineNode.startLine &&
 			selectedInlineNode.colEnd <= len(line) {
 			n := selectedInlineNode
-			before := line[:n.colStart]
 			span := line[n.colStart:n.colEnd]
-			after := line[n.colEnd:]
-			highlighted := lipgloss.NewStyle().
-				Background(a.theme.NodeSel).
-				Foreground(a.theme.Background).
-				Bold(true).
-				Render(span)
-			rendered = append(rendered, before+highlighted+after)
+			hilighted := lipgloss.NewStyle().
+				Background(a.theme.NodeSel).Foreground(a.theme.Background).Bold(true).Render(span)
+			rendered = append(rendered, line[:n.colStart]+hilighted+line[n.colEnd:])
 			continue
 		}
 		rendered = append(rendered, line)
 	}
 
-	// Flush unclosed code block (e.g. scrolled past closing fence)
 	if inCode && len(codeBody) > 0 {
 		highlighted := highlightCode(strings.Join(codeBody, "\n"), codeLang)
 		rendered = append(rendered, strings.Split(highlighted, "\n")...)
 	}
 
-	// Pad to height
 	for len(rendered) < h {
 		rendered = append(rendered, "")
 	}
-	// Trim to height (highlighting can produce extra lines)
 	rendered = rendered[:h]
-
-	return lipgloss.NewStyle().Width(w).MaxWidth(w).
-		Render(strings.Join(rendered, "\n"))
+	return strings.Join(rendered, "\n")
 }
 
 func (a *App) renderStatus() string {
