@@ -122,6 +122,15 @@ type codeNode struct {
 	colEnd    int     // byte offset just past closing backtick (inline only)
 }
 
+// nodeRenderLoc records where a codeNode appears in the glamour-rendered output.
+type nodeRenderLoc struct {
+	firstLine int // index into renderedLines; -1 = not found
+	lastLine  int // inclusive end line (== firstLine for inline)
+	// For inline nodes: display-column offsets within the stripped rendered line.
+	spanCol    int // display column of span start (-1 if not found)
+	spanColEnd int // display column just past span end
+}
+
 // ─────────────────────────────────────────────
 // App state
 // ─────────────────────────────────────────────
@@ -155,10 +164,9 @@ type App struct {
 	// rendered lines cache — rebuilt when section or width changes
 	renderedLinesWidth int   // innerW for which renderedLines was built
 	renderedLinesIdx   int   // selectedIdx for which renderedLines was built
-	// nodeRenderedLine[i] = first rendered-line index that belongs to codeNodes[i].
-	// -1 means the node wasn't found in the rendered output.
+	// nodeRenderInfo[i] describes where codeNodes[i] appears in renderedLines.
 	// Rebuilt whenever renderedLines is rebuilt.
-	nodeRenderedLine []int
+	nodeRenderInfo []nodeRenderLoc
 
 	// Search (sidebar heading search)
 	mode          AppMode
@@ -295,7 +303,7 @@ func (a *App) rebuildSection() {
 	a.contentOffset = 0
 	a.nodeSelIdx = 0
 	a.codeNodes = nil
-	a.nodeRenderedLine = nil
+	a.nodeRenderInfo = nil
 	a.renderedLines = nil
 
 	// selectedIdx == -1 means the root (Document) node: show entire file
@@ -829,8 +837,8 @@ func (a *App) scrollContentToNode(nodeIdx int) {
 	}
 	// Use the rendered-line position if available, fall back to source line.
 	target := a.codeNodes[nodeIdx].startLine
-	if a.nodeRenderedLine != nil && nodeIdx < len(a.nodeRenderedLine) && a.nodeRenderedLine[nodeIdx] >= 0 {
-		target = a.nodeRenderedLine[nodeIdx]
+	if a.nodeRenderInfo != nil && nodeIdx < len(a.nodeRenderInfo) && a.nodeRenderInfo[nodeIdx].firstLine >= 0 {
+		target = a.nodeRenderInfo[nodeIdx].firstLine
 	}
 	if target < a.contentOffset || target >= a.contentOffset+a.contentHeight() {
 		a.contentOffset = target
@@ -915,7 +923,7 @@ func (a *App) handleThemeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Invalidate glamour renderer and rendered lines cache
 				a.glamourRenderer = nil
 				a.renderedLines = nil
-				a.nodeRenderedLine = nil
+				a.nodeRenderInfo = nil
 				a.mode = ModeNormal
 				return a, nil
 			}
@@ -1198,7 +1206,7 @@ func (a *App) renderContentGlamour(w, h int) string {
 		a.renderedLines = a.renderGlamour(markdown, w)
 		a.renderedLinesIdx = a.selectedIdx
 		a.renderedLinesWidth = w
-		a.nodeRenderedLine = mapNodesToRenderedLines(a.codeNodes, a.renderedLines)
+		a.nodeRenderInfo = mapNodesToRenderedLines(a.codeNodes, a.renderedLines)
 		// Re-clamp offset now that renderedLines is fresh.
 		a.clampContentOffset()
 	}
@@ -1207,7 +1215,7 @@ func (a *App) renderContentGlamour(w, h int) string {
 
 	// In node-select mode, build a highlighted copy of the lines.
 	if a.mode == ModeNodeSelect && len(a.codeNodes) > 0 {
-		lines = applyNodeHighlights(lines, a.codeNodes, a.nodeSelIdx, a.nodeRenderedLine, a.theme, w)
+		lines = applyNodeHighlights(lines, a.codeNodes, a.nodeSelIdx, a.nodeRenderInfo, a.theme, w)
 	}
 
 	start := a.contentOffset
@@ -1226,16 +1234,15 @@ func (a *App) renderContentGlamour(w, h int) string {
 	return strings.Join(out, "\n")
 }
 
-// mapNodesToRenderedLines maps each codeNode to the first rendered-line index
-// that contains its content. Returns a slice parallel to nodes; -1 means not found.
+// mapNodesToRenderedLines maps each codeNode to its location in the glamour-rendered
+// output. Returns a slice of nodeRenderLoc parallel to nodes.
 //
-// Strategy:
-//   - For fenced blocks: search for the first rendered line whose stripped text
-//     contains the first non-empty line of the block body (or the fence marker).
-//   - For inline nodes: search for the first rendered line whose stripped text
-//     contains the backtick span text.
-func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []int {
-	result := make([]int, len(nodes))
+// For fenced blocks: finds the first rendered line whose stripped text contains
+// the first non-empty line of the block body, then extends to cover all body lines.
+// For inline nodes: finds the rendered line containing the span text, and records
+// the display-column range of that span within the stripped line.
+func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLoc {
+	result := make([]nodeRenderLoc, len(nodes))
 	// Pre-strip ANSI from all rendered lines once.
 	stripped := make([]string, len(rendered))
 	for i, l := range rendered {
@@ -1243,101 +1250,138 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []int {
 	}
 
 	for ni, n := range nodes {
-		result[ni] = -1
-		var needle string
+		loc := nodeRenderLoc{firstLine: -1, lastLine: -1, spanCol: -1, spanColEnd: -1}
+
 		if n.inline {
-			// The inline span text including backticks as rendered by glamour
-			// (glamour renders inline code as the bare text, no backticks).
-			needle = n.content
-		} else {
-			// For blocks, use the first non-empty body line.
-			needle = ""
-			for _, bodyLine := range strings.Split(n.content, "\n") {
-				trimmed := strings.TrimSpace(bodyLine)
-				if trimmed != "" {
-					needle = trimmed
+			needle := n.content
+			for ri, s := range stripped {
+				col := strings.Index(s, needle)
+				if col != -1 {
+					loc.firstLine = ri
+					loc.lastLine = ri
+					loc.spanCol = col
+					loc.spanColEnd = col + len([]rune(needle))
 					break
 				}
 			}
-			if needle == "" {
-				// Empty block — fall back to fence marker.
-				needle = "```"
+		} else {
+			// Find the first non-empty body line as a search anchor.
+			needle := ""
+			for _, bodyLine := range strings.Split(n.content, "\n") {
+				t := strings.TrimSpace(bodyLine)
+				if t != "" {
+					needle = t
+					break
+				}
+			}
+			firstLine := -1
+			if needle != "" {
+				for ri, s := range stripped {
+					if strings.Contains(s, needle) {
+						firstLine = ri
+						break
+					}
+				}
+			}
+			if firstLine == -1 {
+				// Try fence marker as fallback
+				for ri, s := range stripped {
+					if strings.Contains(s, "```") || strings.Contains(s, "~~~") {
+						firstLine = ri
+						break
+					}
+				}
+			}
+			if firstLine >= 0 {
+				// Extend end: count rendered lines until we hit a line that looks
+				// like a closing fence or blank line after the last body content.
+				bodyLineCount := len(strings.Split(strings.TrimRight(n.content, "\n"), "\n"))
+				lastLine := firstLine + bodyLineCount + 1 // fence-open + body + fence-close
+				if lastLine >= len(rendered) {
+					lastLine = len(rendered) - 1
+				}
+				loc.firstLine = firstLine
+				loc.lastLine = lastLine
 			}
 		}
-		for ri, s := range stripped {
-			if strings.Contains(s, needle) {
-				result[ni] = ri
-				break
-			}
-		}
+		result[ni] = loc
 	}
 	return result
 }
 
-// applyNodeHighlights returns a copy of rendered lines with background colours
-// applied for node-select mode:
-//   - All lines belonging to any selectable node get a dim "available" background.
-//   - All lines belonging to the currently selected node get a bright "selected" background.
-func applyNodeHighlights(lines []string, nodes []codeNode, selIdx int, nodeRenderedLine []int, theme Theme, w int) []string {
+// highlightSpanInLine applies a highlight style to the substring of a glamour-rendered
+// line at display columns [colStart, colEnd). The rest of the line retains its original
+// ANSI styling. Returns the modified line.
+func highlightSpanInLine(line string, colStart, colEnd int, style lipgloss.Style) string {
+	if colStart < 0 || colEnd <= colStart {
+		return line
+	}
+	// Split the rendered string at display column boundaries using ansi.Truncate.
+	// prefix = first colStart columns
+	// middle = next (colEnd-colStart) columns
+	// suffix = everything after colEnd
+	prefix := ansi.Truncate(line, colStart, "")
+	withMid := ansi.Truncate(line, colEnd, "")
+	// middle is withMid minus prefix — we can get it by stripping the prefix bytes
+	// from withMid. Since ansi.Truncate preserves ANSI codes, we use TruncateLeft.
+	middle := ansi.TruncateLeft(withMid, colStart, "")
+	suffix := ansi.TruncateLeft(line, colEnd, "")
+	// Re-render the middle span with the highlight style.
+	plainMiddle := ansi.Strip(middle)
+	return prefix + style.Render(plainMiddle) + suffix
+}
+
+// applyNodeHighlights returns a copy of rendered lines with highlights applied
+// for node-select mode:
+//   - All selectable inline/block nodes get a dim "available" background tint.
+//   - The currently selected node gets a bright "selected" background.
+//
+// For inline nodes the highlight is applied only to the span, preserving surrounding
+// glamour styling. For fenced blocks the whole-line background is applied (appropriate
+// since the block is the selectable unit).
+func applyNodeHighlights(lines []string, nodes []codeNode, selIdx int, info []nodeRenderLoc, theme Theme, w int) []string {
 	out := make([]string, len(lines))
 	copy(out, lines)
 
-	// Build a map: rendered line index -> highlight level (1=available, 2=selected)
-	type hlLevel int
-	const (
-		hlNone      hlLevel = 0
-		hlAvailable hlLevel = 1
-		hlSelected  hlLevel = 2
-	)
-	lineHL := make(map[int]hlLevel, len(lines))
+	dimStyle := lipgloss.NewStyle().Background(theme.Code)
+	selStyle := lipgloss.NewStyle().Background(theme.NodeSel).Foreground(theme.Background).Bold(true)
 
-	for ni, n := range nodes {
-		start := nodeRenderedLine[ni]
-		if start < 0 {
-			continue
-		}
-		level := hlAvailable
-		if ni == selIdx {
-			level = hlSelected
-		}
-		// For inline nodes, highlight just the one line.
-		// For blocks, estimate the rendered span by counting body lines + fence lines.
-		end := start
-		if !n.inline {
-			bodyLines := len(strings.Split(strings.TrimRight(n.content, "\n"), "\n"))
-			// rendered block = fence-open + body + fence-close + possible blank lines;
-			// be conservative: highlight from start to start+bodyLines+1
-			end = start + bodyLines + 1
-			if end >= len(lines) {
-				end = len(lines) - 1
+	// Apply available highlights first (lower priority), then selected (higher).
+	for pass := 0; pass < 2; pass++ {
+		for ni, n := range nodes {
+			isSelected := ni == selIdx
+			if pass == 0 && isSelected {
+				continue
 			}
-		}
-		for li := start; li <= end; li++ {
-			if existing := lineHL[li]; existing < level {
-				lineHL[li] = level
+			if pass == 1 && !isSelected {
+				continue
 			}
-		}
-	}
+			loc := info[ni]
+			if loc.firstLine < 0 {
+				continue
+			}
+			style := dimStyle
+			if isSelected {
+				style = selStyle
+			}
 
-	dimBg := theme.Code       // re-use the code-block bg as "available" tint
-	selBg := theme.NodeSel    // bright selected bg
-	selFg := theme.Background // contrast fg for selected
-
-	for li, level := range lineHL {
-		if li >= len(out) {
-			break
-		}
-		stripped := ansi.Strip(out[li])
-		// Pad to full width so the background colour fills the line.
-		visW := lipgloss.Width(stripped)
-		if visW < w {
-			stripped += strings.Repeat(" ", w-visW)
-		}
-		switch level {
-		case hlAvailable:
-			out[li] = lipgloss.NewStyle().Background(dimBg).Render(stripped)
-		case hlSelected:
-			out[li] = lipgloss.NewStyle().Background(selBg).Foreground(selFg).Bold(true).Render(stripped)
+			if n.inline {
+				// Surgical span highlight — only colour the backtick content.
+				li := loc.firstLine
+				if li < len(out) {
+					out[li] = highlightSpanInLine(out[li], loc.spanCol, loc.spanColEnd, style)
+				}
+			} else {
+				// Full-line background for all lines of the block.
+				for li := loc.firstLine; li <= loc.lastLine && li < len(out); li++ {
+					plain := ansi.Strip(out[li])
+					visW := lipgloss.Width(plain)
+					if visW < w {
+						plain += strings.Repeat(" ", w-visW)
+					}
+					out[li] = style.Render(plain)
+				}
+			}
 		}
 	}
 	return out
