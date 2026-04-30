@@ -353,6 +353,24 @@ func extractCodeNodes(lines []string) []codeNode {
 				lang = strings.TrimSpace(trimmed[3:])
 				bodyLines = nil
 				startLine = i
+			} else if strings.HasPrefix(trimmed, "#") {
+				// Extract heading text as a selectable node (copyable title)
+				level := 0
+				for level < len(trimmed) && trimmed[level] == '#' {
+					level++
+				}
+				headingText := strings.TrimSpace(trimmed[level:])
+				if headingText != "" {
+					nodes = append(nodes, codeNode{
+						lang:      "heading",
+						content:   headingText,
+						startLine: i,
+						endLine:   i,
+						inline:    true,
+						colStart:  level + 1, // after "## "
+						colEnd:    len(line),
+					})
+				}
 			} else {
 				// Scan for inline backtick spans on this line
 				nodes = append(nodes, extractInlineNodes(line, i)...)
@@ -1253,15 +1271,51 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 		loc := nodeRenderLoc{firstLine: -1, lastLine: -1, spanCol: -1, spanColEnd: -1}
 
 		if n.inline {
-			needle := n.content
-			for ri, s := range stripped {
-				col := strings.Index(s, needle)
-				if col != -1 {
-					loc.firstLine = ri
-					loc.lastLine = ri
-					loc.spanCol = col
-					loc.spanColEnd = col + len([]rune(needle))
-					break
+			if n.lang == "heading" {
+				// Find the rendered heading line: glamour renders it as "  ## Text  ..."
+				// Search for the heading text (content) in a line that also has "##".
+				for ri, s := range stripped {
+					if !strings.Contains(s, "#") {
+						continue
+					}
+					col := strings.Index(s, n.content)
+					if col != -1 {
+						loc.firstLine = ri
+						loc.lastLine = ri
+						loc.spanCol = col
+						loc.spanColEnd = col + len([]rune(n.content))
+						break
+					}
+				}
+			} else {
+				// Glamour renders inline code spans with a space on each side, e.g.
+				// `useCallback` → " useCallback " in the stripped rendered text.
+				// Searching for that padded form avoids false matches in heading lines
+				// where the same word appears without the padding.
+				padded := " " + n.content + " "
+				needle := n.content // fallback if padded form not found
+				for ri, s := range stripped {
+					col := strings.Index(s, padded)
+					if col != -1 {
+						// spanCol points at the content start (skip the leading space)
+						col++
+						loc.firstLine = ri
+						loc.lastLine = ri
+						loc.spanCol = col
+						loc.spanColEnd = col + len([]rune(n.content))
+						break
+					}
+					// Fallback: bare match (for cases where padding differs)
+					if loc.firstLine < 0 {
+						col2 := strings.Index(s, needle)
+						if col2 != -1 {
+							loc.firstLine = ri
+							loc.lastLine = ri
+							loc.spanCol = col2
+							loc.spanColEnd = col2 + len([]rune(needle))
+							// Don't break — keep looking for padded form
+						}
+					}
 				}
 			}
 		} else {
