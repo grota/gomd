@@ -153,8 +153,12 @@ type App struct {
 	glamourStyleName  string // gomd theme name for which renderer was built
 
 	// rendered lines cache — rebuilt when section or width changes
-	renderedLinesWidth int      // innerW for which renderedLines was built
-	renderedLinesIdx   int      // selectedIdx for which renderedLines was built
+	renderedLinesWidth int   // innerW for which renderedLines was built
+	renderedLinesIdx   int   // selectedIdx for which renderedLines was built
+	// nodeRenderedLine[i] = first rendered-line index that belongs to codeNodes[i].
+	// -1 means the node wasn't found in the rendered output.
+	// Rebuilt whenever renderedLines is rebuilt.
+	nodeRenderedLine []int
 
 	// Search (sidebar heading search)
 	mode          AppMode
@@ -291,6 +295,8 @@ func (a *App) rebuildSection() {
 	a.contentOffset = 0
 	a.nodeSelIdx = 0
 	a.codeNodes = nil
+	a.nodeRenderedLine = nil
+	a.renderedLines = nil
 
 	// selectedIdx == -1 means the root (Document) node: show entire file
 	if a.selectedIdx < 0 || len(a.doc.Headings) == 0 {
@@ -757,7 +763,7 @@ func (a *App) scrollContent(delta int) {
 }
 
 func (a *App) activeLines() []string {
-	if a.mode == ModeNodeSelect || len(a.renderedLines) == 0 {
+	if len(a.renderedLines) == 0 {
 		return a.sectionLines
 	}
 	return a.renderedLines
@@ -821,9 +827,11 @@ func (a *App) scrollContentToNode(nodeIdx int) {
 	if nodeIdx < 0 || nodeIdx >= len(a.codeNodes) {
 		return
 	}
-	node := a.codeNodes[nodeIdx]
-	// Show the opening fence at the top of the viewport if possible
-	target := node.startLine
+	// Use the rendered-line position if available, fall back to source line.
+	target := a.codeNodes[nodeIdx].startLine
+	if a.nodeRenderedLine != nil && nodeIdx < len(a.nodeRenderedLine) && a.nodeRenderedLine[nodeIdx] >= 0 {
+		target = a.nodeRenderedLine[nodeIdx]
+	}
 	if target < a.contentOffset || target >= a.contentOffset+a.contentHeight() {
 		a.contentOffset = target
 		a.clampContentOffset()
@@ -907,6 +915,7 @@ func (a *App) handleThemeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Invalidate glamour renderer and rendered lines cache
 				a.glamourRenderer = nil
 				a.renderedLines = nil
+				a.nodeRenderedLine = nil
 				a.mode = ModeNormal
 				return a, nil
 			}
@@ -1176,14 +1185,12 @@ func (a *App) renderContentWidth(w int) string {
 		return strings.Repeat("\n", h-1)
 	}
 
-	if a.mode == ModeNodeSelect {
-		return a.renderContentRaw(w, h)
-	}
 	return a.renderContentGlamour(w, h)
 }
 
 // renderContentGlamour renders the current section using glamour and returns a
 // newline-joined string of exactly h lines, each at most w columns wide.
+// In ModeNodeSelect it overlays background highlights on selectable nodes.
 func (a *App) renderContentGlamour(w, h int) string {
 	// Rebuild rendered lines if section or width changed.
 	if a.renderedLinesIdx != a.selectedIdx || a.renderedLinesWidth != w {
@@ -1191,11 +1198,18 @@ func (a *App) renderContentGlamour(w, h int) string {
 		a.renderedLines = a.renderGlamour(markdown, w)
 		a.renderedLinesIdx = a.selectedIdx
 		a.renderedLinesWidth = w
+		a.nodeRenderedLine = mapNodesToRenderedLines(a.codeNodes, a.renderedLines)
 		// Re-clamp offset now that renderedLines is fresh.
 		a.clampContentOffset()
 	}
 
 	lines := a.renderedLines
+
+	// In node-select mode, build a highlighted copy of the lines.
+	if a.mode == ModeNodeSelect && len(a.codeNodes) > 0 {
+		lines = applyNodeHighlights(lines, a.codeNodes, a.nodeSelIdx, a.nodeRenderedLine, a.theme, w)
+	}
+
 	start := a.contentOffset
 	if start > len(lines) {
 		start = len(lines)
@@ -1212,129 +1226,123 @@ func (a *App) renderContentGlamour(w, h int) string {
 	return strings.Join(out, "\n")
 }
 
-// renderContentRaw is the original manual renderer, used in ModeNodeSelect so that
-// node highlight overlays work on the raw source lines.
-func (a *App) renderContentRaw(w, h int) string {
-	lines := a.sectionLines
-	start := a.contentOffset
-	if start > len(lines) {
-		start = len(lines)
+// mapNodesToRenderedLines maps each codeNode to the first rendered-line index
+// that contains its content. Returns a slice parallel to nodes; -1 means not found.
+//
+// Strategy:
+//   - For fenced blocks: search for the first rendered line whose stripped text
+//     contains the first non-empty line of the block body (or the fence marker).
+//   - For inline nodes: search for the first rendered line whose stripped text
+//     contains the backtick span text.
+func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []int {
+	result := make([]int, len(nodes))
+	// Pre-strip ANSI from all rendered lines once.
+	stripped := make([]string, len(rendered))
+	for i, l := range rendered {
+		stripped[i] = ansi.Strip(l)
 	}
-	end := start + h
-	if end > len(lines) {
-		end = len(lines)
-	}
-	visible := lines[start:end]
 
-	// Build set of line ranges that belong to the currently-selected node
-	nodeHighlightLines := map[int]bool{}
-	var selectedInlineNode *codeNode
-	if a.nodeSelIdx < len(a.codeNodes) {
-		n := a.codeNodes[a.nodeSelIdx]
+	for ni, n := range nodes {
+		result[ni] = -1
+		var needle string
 		if n.inline {
-			selectedInlineNode = &a.codeNodes[a.nodeSelIdx]
+			// The inline span text including backticks as rendered by glamour
+			// (glamour renders inline code as the bare text, no backticks).
+			needle = n.content
 		} else {
-			for li := n.startLine; li <= n.endLine; li++ {
-				nodeHighlightLines[li] = true
-			}
-		}
-	}
-
-	rendered := make([]string, 0, h)
-	inCode := false
-	var fence, codeLang string
-	var codeBody []string
-	var fenceDocLine int
-
-	for relIdx, line := range visible {
-		docLine := start + relIdx
-		trimmed := strings.TrimSpace(line)
-
-		if !inCode {
-			if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-				inCode = true
-				fence = trimmed[:3]
-				codeLang = strings.TrimSpace(trimmed[3:])
-				codeBody = nil
-				fenceDocLine = docLine
-
-				fenceLine := lipgloss.NewStyle().Foreground(a.theme.HeadingN).Render(line)
-				if nodeHighlightLines[docLine] {
-					fenceLine = lipgloss.NewStyle().Foreground(a.theme.NodeSel).Bold(true).Render(line)
+			// For blocks, use the first non-empty body line.
+			needle = ""
+			for _, bodyLine := range strings.Split(n.content, "\n") {
+				trimmed := strings.TrimSpace(bodyLine)
+				if trimmed != "" {
+					needle = trimmed
+					break
 				}
-				rendered = append(rendered, fenceLine)
-				continue
 			}
-		} else {
-			if strings.HasPrefix(trimmed, fence) {
-				highlighted := highlightCode(strings.Join(codeBody, "\n"), codeLang)
-				for bi, hl := range strings.Split(highlighted, "\n") {
-					bodyDocLine := fenceDocLine + 1 + bi
-					if nodeHighlightLines[bodyDocLine] {
-						hl = lipgloss.NewStyle().
-							Background(a.theme.Code).Foreground(a.theme.Foreground).Render(hl)
-					}
-					rendered = append(rendered, hl)
-				}
-				closeLine := lipgloss.NewStyle().Foreground(a.theme.HeadingN).Render(line)
-				if nodeHighlightLines[docLine] {
-					closeLine = lipgloss.NewStyle().Foreground(a.theme.NodeSel).Bold(true).Render(line)
-				}
-				rendered = append(rendered, closeLine)
-				inCode = false
-				fence = ""
-				codeLang = ""
-				codeBody = nil
-				continue
+			if needle == "" {
+				// Empty block — fall back to fence marker.
+				needle = "```"
 			}
-			codeBody = append(codeBody, line)
-			continue
 		}
-
-		if strings.HasPrefix(line, "#") {
-			level := 0
-			for level < len(line) && line[level] == '#' {
-				level++
+		for ri, s := range stripped {
+			if strings.Contains(s, needle) {
+				result[ni] = ri
+				break
 			}
-			var fg lipgloss.Color
-			switch level {
-			case 1:
-				fg = a.theme.Heading1
-			case 2:
-				fg = a.theme.Heading2
-			case 3:
-				fg = a.theme.Heading3
-			default:
-				fg = a.theme.HeadingN
-			}
-			rendered = append(rendered, lipgloss.NewStyle().Foreground(fg).Bold(true).Render(line))
-			continue
 		}
-
-		// Plain line — check for inline node highlight
-		if selectedInlineNode != nil && docLine == selectedInlineNode.startLine &&
-			selectedInlineNode.colEnd <= len(line) {
-			n := selectedInlineNode
-			span := line[n.colStart:n.colEnd]
-			hilighted := lipgloss.NewStyle().
-				Background(a.theme.NodeSel).Foreground(a.theme.Background).Bold(true).Render(span)
-			rendered = append(rendered, line[:n.colStart]+hilighted+line[n.colEnd:])
-			continue
-		}
-		rendered = append(rendered, line)
 	}
-
-	if inCode && len(codeBody) > 0 {
-		highlighted := highlightCode(strings.Join(codeBody, "\n"), codeLang)
-		rendered = append(rendered, strings.Split(highlighted, "\n")...)
-	}
-
-	for len(rendered) < h {
-		rendered = append(rendered, "")
-	}
-	rendered = rendered[:h]
-	return strings.Join(rendered, "\n")
+	return result
 }
+
+// applyNodeHighlights returns a copy of rendered lines with background colours
+// applied for node-select mode:
+//   - All lines belonging to any selectable node get a dim "available" background.
+//   - All lines belonging to the currently selected node get a bright "selected" background.
+func applyNodeHighlights(lines []string, nodes []codeNode, selIdx int, nodeRenderedLine []int, theme Theme, w int) []string {
+	out := make([]string, len(lines))
+	copy(out, lines)
+
+	// Build a map: rendered line index -> highlight level (1=available, 2=selected)
+	type hlLevel int
+	const (
+		hlNone      hlLevel = 0
+		hlAvailable hlLevel = 1
+		hlSelected  hlLevel = 2
+	)
+	lineHL := make(map[int]hlLevel, len(lines))
+
+	for ni, n := range nodes {
+		start := nodeRenderedLine[ni]
+		if start < 0 {
+			continue
+		}
+		level := hlAvailable
+		if ni == selIdx {
+			level = hlSelected
+		}
+		// For inline nodes, highlight just the one line.
+		// For blocks, estimate the rendered span by counting body lines + fence lines.
+		end := start
+		if !n.inline {
+			bodyLines := len(strings.Split(strings.TrimRight(n.content, "\n"), "\n"))
+			// rendered block = fence-open + body + fence-close + possible blank lines;
+			// be conservative: highlight from start to start+bodyLines+1
+			end = start + bodyLines + 1
+			if end >= len(lines) {
+				end = len(lines) - 1
+			}
+		}
+		for li := start; li <= end; li++ {
+			if existing := lineHL[li]; existing < level {
+				lineHL[li] = level
+			}
+		}
+	}
+
+	dimBg := theme.Code       // re-use the code-block bg as "available" tint
+	selBg := theme.NodeSel    // bright selected bg
+	selFg := theme.Background // contrast fg for selected
+
+	for li, level := range lineHL {
+		if li >= len(out) {
+			break
+		}
+		stripped := ansi.Strip(out[li])
+		// Pad to full width so the background colour fills the line.
+		visW := lipgloss.Width(stripped)
+		if visW < w {
+			stripped += strings.Repeat(" ", w-visW)
+		}
+		switch level {
+		case hlAvailable:
+			out[li] = lipgloss.NewStyle().Background(dimBg).Render(stripped)
+		case hlSelected:
+			out[li] = lipgloss.NewStyle().Background(selBg).Foreground(selFg).Bold(true).Render(stripped)
+		}
+	}
+	return out
+}
+
 
 func (a *App) renderStatus() string {
 	// Build plain (unstyled) left/right text first so we can measure widths correctly.
