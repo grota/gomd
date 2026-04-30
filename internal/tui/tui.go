@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/grota/gomd/internal/config"
@@ -228,6 +229,40 @@ func (a *App) ensureGlamourRenderer(innerW int) interface{ Render(string) (strin
 	return r
 }
 
+// expandTabs replaces tab characters in s with spaces, advancing to the next
+// 8-column tab stop. ANSI escape sequences are skipped (zero-width) so column
+// counting stays accurate even in styled output.
+func expandTabs(s string) string {
+	if !strings.ContainsRune(s, '\t') {
+		return s
+	}
+	var buf strings.Builder
+	col := 0
+	inEsc := false
+	for _, r := range s {
+		switch {
+		case inEsc:
+			buf.WriteRune(r)
+			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+				inEsc = false
+			}
+		case r == '\x1b':
+			inEsc = true
+			buf.WriteRune(r)
+		case r == '\t':
+			spaces := 8 - (col % 8)
+			for i := 0; i < spaces; i++ {
+				buf.WriteByte(' ')
+			}
+			col += spaces
+		default:
+			buf.WriteRune(r)
+			col++
+		}
+	}
+	return buf.String()
+}
+
 // renderGlamour renders a markdown string through glamour and returns the output
 // split into lines, with a trailing empty line stripped.
 func (a *App) renderGlamour(markdown string, innerW int) []string {
@@ -243,6 +278,11 @@ func (a *App) renderGlamour(markdown string, innerW int) []string {
 	lines := strings.Split(out, "\n")
 	for len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
+	}
+	// Expand any tab characters left in the glamour output so that
+	// lipgloss.Width() and ansi.Truncate() measure the correct column widths.
+	for i, l := range lines {
+		lines[i] = expandTabs(l)
 	}
 	return lines
 }
@@ -1016,6 +1056,14 @@ func (a *App) drawBox(lines []string, outerW int, focused bool, title string) st
 	borderL := bc.Render("│")
 	borderR := bc.Render("│")
 	for _, line := range lines {
+		// Normalize line to exactly innerW display columns so the right
+		// border always appears in the correct column regardless of whether
+		// the line contains ANSI sequences (e.g. from glamour).
+		line = ansi.Truncate(line, innerW, "")
+		visW := lipgloss.Width(line)
+		if visW < innerW {
+			line += strings.Repeat(" ", innerW-visW)
+		}
 		sb.WriteString(borderL + line + borderR)
 		sb.WriteByte('\n')
 	}
