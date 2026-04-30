@@ -769,24 +769,23 @@ func (a *App) contentWidth() int {
 	if sw == 0 {
 		return a.width
 	}
-	return a.width - sw - 1 // -1 for divider
+	return a.width - sw
 }
 
-func (a *App) outlineHeight() int {
-	h := a.height - 2 // title row + status row
+// paneInnerHeight returns the number of content lines that fit inside a bordered pane.
+// Layout: title(1) + border-top(1) + inner(N) + border-bottom(1) + status(1) = height
+// So inner = height - 4.
+func (a *App) paneInnerHeight() int {
+	h := a.height - 4
 	if h < 0 {
 		return 0
 	}
 	return h
 }
 
-func (a *App) contentHeight() int {
-	h := a.height - 2 // title row + status row
-	if h < 0 {
-		return 0
-	}
-	return h
-}
+// outlineHeight is an alias kept for scrollOutlineToSelected.
+func (a *App) outlineHeight() int { return a.paneInnerHeight() }
+func (a *App) contentHeight() int { return a.paneInnerHeight() }
 
 // ─────────────────────────────────────────────
 // View
@@ -809,22 +808,14 @@ func (a *App) View() string {
 
 	var body string
 	if a.sidebarHidden {
-		body = a.renderContent()
+		// Single bordered content pane, full width
+		body = a.renderBorderedContent(a.width, a.focus == FocusContent)
 	} else {
-		divStyle := lipgloss.NewStyle().Foreground(a.theme.Border)
-		divLines := make([]string, a.outlineHeight())
-		for i := range divLines {
-			divLines[i] = "│"
-		}
-		divider := divStyle.Render(strings.Join(divLines, "\n"))
-
-		if a.focus == FocusSidebar {
-			// Outline on the left, section content on the right
-			body = lipgloss.JoinHorizontal(lipgloss.Top, a.renderOutline(), divider, a.renderContent())
-		} else {
-			// Content focused: section content on the left, outline on the right
-			body = lipgloss.JoinHorizontal(lipgloss.Top, a.renderContentPane(), divider, a.renderOutline())
-		}
+		sw := a.sidebarWidth()
+		cw := a.contentWidth()
+		outline := a.renderBorderedOutline(sw, a.focus == FocusSidebar)
+		content := a.renderBorderedContent(cw, a.focus == FocusContent)
+		body = lipgloss.JoinHorizontal(lipgloss.Top, outline, content)
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, body, status)
@@ -840,31 +831,80 @@ func (a *App) renderTitle() string {
 		name = "gomd"
 	}
 
-	focusIndicator := ""
-	if a.focus == FocusContent {
-		focusIndicator = " [content]"
-	}
-
 	return lipgloss.NewStyle().
 		Background(a.theme.Border).
 		Foreground(a.theme.Foreground).
 		Bold(true).
 		Width(a.width).
 		Padding(0, 1).
-		Render("gomd — " + name + focusIndicator)
+		Render("gomd — " + name)
 }
 
-func (a *App) renderOutline() string {
-	// Width depends on which side this pane is on.
-	// When sidebar-focused: outline is on the left (sidebarWidth).
-	// When content-focused: outline is on the right (contentWidth).
-	var w int
-	if a.focus == FocusSidebar {
-		w = a.sidebarWidth()
-	} else {
-		w = a.contentWidth()
+// drawBox draws a bordered box around content lines.
+// outerW is the full column width including border characters (2 cols).
+// lines must have exactly paneInnerHeight() entries.
+// focused controls border color.
+func (a *App) drawBox(lines []string, outerW int, focused bool, title string) string {
+	innerW := outerW - 2
+	if innerW < 1 {
+		innerW = 1
 	}
-	h := a.outlineHeight()
+
+	borderColor := a.theme.Border
+	if focused {
+		borderColor = a.theme.Highlight
+	}
+	bc := lipgloss.NewStyle().Foreground(borderColor)
+
+	// Top border: ┌─ title ──────┐
+	titleRunes := []rune(title)
+	topInner := innerW
+	if len(titleRunes)+4 > topInner {
+		topInner = len(titleRunes) + 4
+	}
+	var topMid string
+	if title != "" {
+		dashes := topInner - len(titleRunes) - 2 // 2 for spaces
+		if dashes < 0 {
+			dashes = 0
+		}
+		topMid = " " + title + " " + strings.Repeat("─", dashes)
+	} else {
+		topMid = strings.Repeat("─", topInner)
+	}
+	// Trim/pad topMid to innerW
+	topMidRunes := []rune(topMid)
+	if len(topMidRunes) > innerW {
+		topMidRunes = topMidRunes[:innerW]
+	}
+	for len(topMidRunes) < innerW {
+		topMidRunes = append(topMidRunes, '─')
+	}
+	topMid = string(topMidRunes)
+
+	top := bc.Render("┌" + topMid + "┐")
+	bottom := bc.Render("└" + strings.Repeat("─", innerW) + "┘")
+
+	var sb strings.Builder
+	sb.WriteString(top)
+	sb.WriteByte('\n')
+	borderL := bc.Render("│")
+	borderR := bc.Render("│")
+	for _, line := range lines {
+		sb.WriteString(borderL + line + borderR)
+		sb.WriteByte('\n')
+	}
+	sb.WriteString(bottom)
+	return sb.String()
+}
+
+// renderBorderedOutline renders the outline pane with a manually drawn border.
+func (a *App) renderBorderedOutline(outerW int, focused bool) string {
+	innerW := outerW - 2
+	if innerW < 1 {
+		innerW = 1
+	}
+	h := a.paneInnerHeight()
 
 	headings := a.doc.Headings
 	end := a.outlineOffset + h
@@ -873,21 +913,13 @@ func (a *App) renderOutline() string {
 	}
 
 	lines := make([]string, 0, h)
-
-	// Active sidebar border color depends on focus
-	selBg := a.theme.Selected
-	if a.focus == FocusSidebar {
-		selBg = a.theme.Highlight // brighter when focused
-	}
-
 	for i := a.outlineOffset; i < end; i++ {
 		hd := headings[i]
 		indent := strings.Repeat("  ", hd.Level-1)
 		marker := strings.Repeat("#", hd.Level)
 		text := indent + marker + " " + hd.Text
 
-		// Truncate
-		maxRunes := w - 2
+		maxRunes := innerW
 		if maxRunes < 1 {
 			maxRunes = 1
 		}
@@ -897,10 +929,10 @@ func (a *App) renderOutline() string {
 
 		if i == a.selectedIdx {
 			lines = append(lines, lipgloss.NewStyle().
-				Background(selBg).
-				Foreground(a.theme.Background).
+				Background(a.theme.Selected).
+				Foreground(a.theme.Foreground).
 				Bold(true).
-				Width(w-1).
+				Width(innerW).
 				Render(text))
 		} else {
 			var fg lipgloss.Color
@@ -916,28 +948,37 @@ func (a *App) renderOutline() string {
 			}
 			lines = append(lines, lipgloss.NewStyle().
 				Foreground(fg).
-				Width(w-1).
+				Width(innerW).
 				Render(text))
 		}
 	}
-
-	// Pad
 	for len(lines) < h {
-		lines = append(lines, strings.Repeat(" ", w-1))
+		lines = append(lines, lipgloss.NewStyle().Width(innerW).Render(""))
 	}
 
-	return lipgloss.NewStyle().Width(w).MaxWidth(w).
-		Render(strings.Join(lines, "\n"))
+	return a.drawBox(lines, outerW, focused, "Outline")
 }
 
-// renderContentPane renders the section content in the narrow (sidebar-width) left column,
-// used when content pane is focused and the layout is swapped.
-func (a *App) renderContentPane() string {
-	return a.renderContentWidth(a.sidebarWidth())
+// renderBorderedContent renders the section content pane with a manually drawn border.
+func (a *App) renderBorderedContent(outerW int, focused bool) string {
+	innerW := outerW - 2
+	if innerW < 1 {
+		innerW = 1
+	}
+	inner := a.renderContentWidth(innerW)
+	lines := strings.Split(inner, "\n")
+	h := a.paneInnerHeight()
+	// Ensure exactly h lines
+	for len(lines) < h {
+		lines = append(lines, "")
+	}
+	lines = lines[:h]
+
+	return a.drawBox(lines, outerW, focused, "")
 }
 
 func (a *App) renderContent() string {
-	return a.renderContentWidth(a.contentWidth())
+	return a.renderContentWidth(a.contentWidth() - 2)
 }
 
 func (a *App) renderContentWidth(w int) string {
