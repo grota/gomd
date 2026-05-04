@@ -547,6 +547,28 @@ func extractLinkNodes(line string, lineIdx int) []codeNode {
 			} else {
 				i++
 			}
+		} else if i+8 < len(line) && (line[i:i+8] == "https://" || line[i:i+7] == "http://") {
+			// Bare URL (not inside [] or <>)
+			j := i
+			for j < len(line) && line[j] != ' ' && line[j] != '\t' && line[j] != ')' && line[j] != '>' {
+				j++
+			}
+			// Trim trailing punctuation that's unlikely part of the URL
+			for j > i && (line[j-1] == '.' || line[j-1] == ',' || line[j-1] == ';' || line[j-1] == ':') {
+				j--
+			}
+			url := line[i:j]
+			nodes = append(nodes, codeNode{
+				kind:      nodeLink,
+				lang:      "link",
+				content:   url,
+				startLine: lineIdx,
+				endLine:   lineIdx,
+				inline:    true,
+				colStart:  i,
+				colEnd:    j,
+			})
+			i = j
 		} else {
 			i++
 		}
