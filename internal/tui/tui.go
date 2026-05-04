@@ -1365,11 +1365,19 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 						headingSearch = mdLinkRe.ReplaceAllString(headingSearch, "$1")
 					}
 				}
-			// Find a line containing "#" and the search key, searching forward.
+			// Find a line containing the heading search key. Glamour renders h2+
+			// with "## Text" but h1 headings are rendered without "#" (just the text).
+			// Strategy: prefer lines with "#", fall back to lines where the heading
+			// text appears at the start (after trimming leading spaces).
 			for ri := inlineSearchFromLine; ri < len(stripped); ri++ {
 					s := stripped[ri]
-					if !strings.Contains(s, "#") {
-						continue
+					hasHash := strings.Contains(s, "#")
+					if !hasHash {
+						// For h1: check if trimmed line equals the heading text
+						trimmed := strings.TrimSpace(s)
+						if trimmed != headingSearch {
+							continue
+						}
 					}
 					col := strings.Index(s, headingSearch)
 					if col == -1 {
@@ -1421,16 +1429,35 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 						bestCol = col
 						bestColEnd = col + len(n.content)
 					}
-					// Check bare form on non-heading lines; prefer it if earlier
-					if !strings.Contains(stripped[ri], "##") {
-						if col2 := strings.Index(s, needle); col2 != -1 {
-							col2 += colOffset
-							if bestCol < 0 || col2 < bestCol {
-								bestCol = col2
-								bestColEnd = col2 + len(needle)
-							}
-						}
+				// Check alternative forms for inline code spans that may not have
+				// full double-space padding (e.g., adjacent spans: `j`/`k` renders
+				// as "j / k" with single spaces). Require at least 1 space before
+				// AND 1 space after (or end of trimmed line) to confirm it's a span.
+				if bestCol < 0 && !strings.Contains(stripped[ri], "##") {
+					searchFrom := 0
+					if ri == inlineSearchFromLine && colOffset > 0 {
+						searchFrom = 0 // already sliced via colOffset
 					}
+					for pos := searchFrom; pos < len(s); pos++ {
+						idx := strings.Index(s[pos:], needle)
+						if idx == -1 {
+							break
+						}
+						absIdx := colOffset + pos + idx
+						endIdx := absIdx + len(needle)
+						fullLine := stripped[ri]
+						// Must have space before (or be at start after indent)
+						hasPre := absIdx > 0 && fullLine[absIdx-1] == ' '
+						// Must have space after (or be at end of trimmed content)
+						hasPost := endIdx >= len(strings.TrimRight(fullLine, " ")) || fullLine[endIdx] == ' '
+						if hasPre && hasPost {
+							bestCol = absIdx
+							bestColEnd = endIdx
+							break
+						}
+						pos += idx + len(needle)
+					}
+				}
 					if bestCol >= 0 {
 						loc.firstLine = ri
 						loc.lastLine = ri

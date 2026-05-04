@@ -23,19 +23,18 @@ The Go version in `go.mod` is `1.26.2` — use the matching toolchain to avoid t
 |------|---------|
 | Build | `go build ./cmd/gomd` |
 | Run all tests | `go test ./...` |
-| Run single test | `go test ./internal/query/ -run TestName` |
+| Run single test | `go test ./internal/parser/ -run TestName` |
 | Vet | `go vet ./...` |
 | Format | `gofmt -w .` |
 
-Only two packages have tests: `internal/parser` and `internal/query`.
+Only `internal/parser` has tests.
 
 ## Architecture Notes
 
 - Single entrypoint: `cmd/gomd/main.go` — all CLI flags, mode routing.
-- **Three execution modes** selected by flags:
+- **Two execution modes** selected by flags:
   1. TUI (default, no flags): `gomd file.md`
   2. CLI (`--list`, `--tree`, `--count`, `--section`): non-interactive output
-  3. Query (`-q`/`--query`): executes a `tql` expression
 - Subcommand: `gomd at-line <LINE> <file>` — finds heading at/before line number.
 - Input resolution: explicit arg → stdin → first `.md` in cwd → first `.md` in given dir.
 - Config file: `~/.config/gomd/config.toml` (TOML, keys: `[ui]`, `[terminal]`, `[images]`, `[content]`).
@@ -47,7 +46,6 @@ cmd/gomd/main.go         # Cobra entrypoint, all flag handling
 internal/config/         # TOML config loader
 internal/input/          # Stdin/file reading
 internal/parser/         # ParseMarkdown(), Heading/Document types, section extraction
-internal/query/          # tql lexer, parser, AST, evaluator, output formatting
 internal/tui/            # Bubbletea TUI (Run() entry)
 ```
 
@@ -72,7 +70,6 @@ Before adding or upgrading any dependency:
 ```bash
 go test ./...                                        # all tests
 go test ./internal/parser/ -run TestName             # single parser test
-go test ./internal/query/ -run TestName -v           # single query test
 ```
 
 No CI is configured. No integration test prerequisites.

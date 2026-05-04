@@ -1,6 +1,6 @@
 # gomd
 
-A terminal markdown viewer with an interactive dual-pane TUI, vim-style navigation, and a structural query language.
+A terminal markdown viewer with an interactive dual-pane TUI and vim-style navigation.
 
 ## Features
 
@@ -9,7 +9,6 @@ A terminal markdown viewer with an interactive dual-pane TUI, vim-style navigati
 - **Node selection** (`i`) — cycle through code blocks, inline code spans, and headings; copy with `y`
 - **Multiple themes** — `T` to cycle (OceanDark, Dracula, Nord, Solarized, …)
 - **CLI mode** — list, tree, count, extract sections non-interactively
-- **Query language** (`tql`) — structural queries over markdown headings and code blocks
 - **File watcher** — auto-reloads on change
 - **Editor integration** — `e` opens the source file in `$EDITOR`
 
@@ -77,20 +76,6 @@ gomd --count file.md             # count by level
 gomd -s "Installation" file.md   # extract section
 gomd at-line 42 file.md          # heading at line number
 ```
-
-### Query language (`tql`)
-
-```bash
-gomd -q '.h2' file.md                    # all h2 headings
-gomd -q '.h2 | text' file.md             # heading text only
-gomd -q '.code[lang=go]' file.md         # Go code blocks
-gomd -q '.h1 > .code' file.md            # code under h1
-gomd -q 'count(.h2)' file.md             # count h2s
-gomd -q '.h2[0]' file.md                 # first h2
-gomd --query-help                         # full query reference
-```
-
-Output formats: `--query-output json|text|markdown` (default: `text`).
 
 ## Configuration
 

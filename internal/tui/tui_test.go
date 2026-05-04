@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -351,5 +352,49 @@ func TestMapNodes_InlineNotInsideFencedBlock(t *testing.T) {
 	// The prose line should have 2-space indent (glamour prose), not 4-space (code block).
 	if strings.HasPrefix(proseLine, "    ") {
 		t.Errorf("inline SlowList mapped to a 4-space-indented line (inside block?): %q", proseLine)
+	}
+}
+
+// TestMapNodes_FullREADME verifies that all inline code spans in the project README
+// are correctly mapped to their rendered positions.
+func TestMapNodes_FullREADME(t *testing.T) {
+	content, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Skip("README.md not found")
+	}
+	src := string(content)
+	lines := strings.Split(src, "\n")
+	nodes := extractCodeNodes(lines)
+
+	rendered, stripped := renderStripped(t, src, 140)
+	locs := mapNodesToRenderedLines(nodes, rendered)
+
+	var failures int
+	for i, n := range nodes {
+		if !n.inline || n.lang == "heading" {
+			continue
+		}
+		loc := locs[i]
+		if loc.firstLine == -1 {
+			t.Errorf("node %d (content=%q, srcLine=%d) NOT MAPPED", i, n.content, n.startLine)
+			failures++
+			continue
+		}
+		line := stripped[loc.firstLine]
+		if loc.spanColEndByte > len(line) {
+			t.Errorf("node %d (content=%q, srcLine=%d) spanColEndByte %d > line len %d",
+				i, n.content, n.startLine, loc.spanColEndByte, len(line))
+			failures++
+			continue
+		}
+		actual := line[loc.spanColByte:loc.spanColEndByte]
+		if actual != n.content {
+			t.Errorf("node %d (content=%q, srcLine=%d) -> rendered line %d col %d-%d has %q",
+				i, n.content, n.startLine, loc.firstLine, loc.spanColByte, loc.spanColEndByte, actual)
+			failures++
+		}
+	}
+	if failures > 0 {
+		t.Logf("%d failures out of %d nodes", failures, len(nodes))
 	}
 }

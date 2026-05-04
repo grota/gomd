@@ -12,7 +12,6 @@ import (
 	"github.com/grota/gomd/internal/config"
 	"github.com/grota/gomd/internal/input"
 	"github.com/grota/gomd/internal/parser"
-	"github.com/grota/gomd/internal/query"
 	"github.com/grota/gomd/internal/tui"
 )
 
@@ -24,9 +23,6 @@ var (
 	flagOutput      string
 	flagSection     string
 	flagCount       bool
-	flagQuery       string
-	flagQueryHelp   bool
-	flagQueryOutput string
 	flagTheme       string
 	flagColorMode   string
 	flagNoImages    bool
@@ -48,7 +44,7 @@ Examples:
   gomd -l README.md           # List all headings
   gomd --tree README.md       # Show heading tree
   gomd -s Installation doc.md # Extract section
-  gomd -q '.h2' doc.md        # Query headings`,
+  gomd -s Installation doc.md # Extract section`,
 		RunE:                  runRoot,
 		Args:                  cobra.ArbitraryArgs,
 		DisableFlagParsing:    false,
@@ -63,9 +59,6 @@ Examples:
 	rootCmd.Flags().StringVarP(&flagOutput, "output", "o", "plain", "Output format: plain, json, tree")
 	rootCmd.Flags().StringVarP(&flagSection, "section", "s", "", "Extract specific section by heading name")
 	rootCmd.Flags().BoolVar(&flagCount, "count", false, "Count headings by level")
-	rootCmd.Flags().StringVarP(&flagQuery, "query", "q", "", "Execute a tql query expression")
-	rootCmd.Flags().BoolVar(&flagQueryHelp, "query-help", false, "Show query language documentation")
-	rootCmd.Flags().StringVar(&flagQueryOutput, "query-output", "plain", "Query output format: plain, json, jsonp, jsonl, md, tree")
 	rootCmd.Flags().StringVar(&flagTheme, "theme", "", "Override TUI theme")
 	rootCmd.Flags().StringVar(&flagColorMode, "color-mode", "auto", "Terminal color mode: auto, rgb, 256")
 	rootCmd.Flags().BoolVar(&flagNoImages, "no-images", false, "Disable image rendering")
@@ -86,12 +79,6 @@ Examples:
 }
 
 func runRoot(cmd *cobra.Command, args []string) error {
-	// --query-help doesn't require input
-	if flagQueryHelp {
-		printQueryHelp()
-		return nil
-	}
-
 	// Load input
 	inp, filePath, err := loadInput(args)
 	if err != nil {
@@ -100,11 +87,6 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	}
 
 	doc := parser.ParseMarkdown(inp.Content)
-
-	// Query mode
-	if flagQuery != "" {
-		return handleQueryMode(doc, flagQuery, flagQueryOutput)
-	}
 
 	// CLI mode if any non-TUI flags are set
 	if flagList || flagTree || flagCount || flagSection != "" {
@@ -282,140 +264,4 @@ func extractSection(doc *parser.Document, name string) {
 	fmt.Println(section)
 }
 
-func handleQueryMode(doc *parser.Document, queryStr, outputFormat string) error {
-	format, err := query.ParseOutputFormat(outputFormat)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
-		os.Exit(1)
-	}
 
-	results, err := query.Execute(doc, queryStr)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Query error:", err)
-		os.Exit(1)
-	}
-
-	if len(results) == 0 {
-		return nil
-	}
-
-	fmt.Println(query.FormatOutput(results, format))
-	return nil
-}
-
-func printQueryHelp() {
-	help := `
-gomd Query Language (tql)
-
-A jq-like query language for navigating and extracting markdown structure.
-
-ELEMENT SELECTORS
-    .h, .heading    All headings (any level)
-    .h1 - .h6       Headings by level
-    .code           All code blocks
-    .code[rust]     Code blocks by language
-    .link, .a       All links
-    .link[external] External links only
-    .img            All images
-    .table          All tables
-    .list           All lists
-
-FILTERS & INDEXING
-    .h2[Features]       Heading containing "Features" (fuzzy)
-    .h2["Installation"] Heading with exact text
-    .h2[0]              First h2
-    .h2[-1]             Last h2
-    .h2[1:3]            h2s at index 1 and 2
-    .h2[:3]             First 3 h2s
-
-HIERARCHY
-    .h1 > .h2           Direct child h2s under h1s
-    .h1 >> .code        Code blocks anywhere under h1s
-
-PIPES
-    .h2 | text          Get heading text (strips ##)
-    [.h2] | count       Count all h2s
-    .code | lang        Get code block languages
-    .link | url         Get link URLs
-
-COLLECTION FUNCTIONS
-    count, length       Count elements
-    first, last         First/last element
-    limit(n), take(n)   First n elements
-    skip(n), drop(n)    Skip first n elements
-    nth(n)              Get element at index
-    reverse             Reverse order
-    sort                Sort alphabetically
-    sort_by(key)        Sort by property
-    unique              Remove duplicates
-    flatten             Flatten nested arrays
-    group_by(key)       Group elements by key
-    min, max            Min/max value
-    add                 Sum numbers or concat strings
-
-STRING FUNCTIONS
-    text                Get text representation
-    upper, lower        Case conversion
-    trim                Strip whitespace
-    split(sep)          Split by separator
-    join(sep)           Join with separator
-    replace(a, b)       Replace substring
-    slugify             URL-friendly slug
-    lines, words, chars Count lines/words/chars
-
-FILTER FUNCTIONS
-    select(cond)        Keep if condition true (alias: where, filter)
-    contains(s)         Contains substring
-    startswith(s)       Starts with prefix
-    endswith(s)         Ends with suffix
-    matches(regex)      Matches regex pattern
-    any, all            Check if any/all truthy
-    not                 Negate boolean
-
-CONTENT FUNCTIONS
-    content             Section content (for headings)
-    md, raw             Raw markdown
-    url, href, src      Get URL/link/image source
-    lang                Code block language
-
-AGGREGATION FUNCTIONS
-    stats               Document statistics
-    levels              Heading count by level
-    langs               Code block count by language
-    types               Link types count
-
-EXAMPLES
-    # List all h2 headings
-    gomd -q '.h2' doc.md
-
-    # Get heading text only
-    gomd -q '.h2 | text' doc.md
-
-    # Count headings
-    gomd -q '[.h2] | count' doc.md
-
-    # Filter headings
-    gomd -q '.h | select(contains("API"))' doc.md
-
-    # All Rust code blocks
-    gomd -q '.code[rust]' doc.md
-
-    # External link URLs
-    gomd -q '.link[external] | url' doc.md
-
-    # h2s under "Features" section
-    gomd -q '.h1[Features] > .h2' doc.md
-
-    # JSON output
-    gomd -q '.h2' --query-output json doc.md
-
-OUTPUT FORMATS (--query-output)
-    plain       Human-readable text (default)
-    json        Compact JSON
-    jsonp       Pretty-printed JSON
-    jsonl       Line-delimited JSON
-    md          Raw markdown
-    tree        Tree structure
-`
-	fmt.Println(strings.TrimSpace(help))
-}
