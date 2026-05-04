@@ -126,17 +126,26 @@ const (
 )
 
 // ─────────────────────────────────────────────
-// CodeNode — a selectable code block inside a section
+// CodeNode — a selectable node inside a section
 // ─────────────────────────────────────────────
 
+type nodeKind int
+
+const (
+	nodeCodeBlock nodeKind = iota
+	nodeInlineCode
+	nodeLink
+)
+
 type codeNode struct {
+	kind      nodeKind
 	lang      string
-	content   string // raw code without fence lines / backticks
+	content   string // raw code without fence lines / backticks; for links: URL
 	startLine int    // 0-based line index in sectionLines
 	endLine   int    // inclusive (== startLine for inline)
-	inline    bool   // true for backtick inline code spans
-	colStart  int    // byte offset of opening backtick in the line (inline only)
-	colEnd    int    // byte offset just past closing backtick (inline only)
+	inline    bool   // true for backtick inline code spans and links
+	colStart  int    // byte offset of opening backtick/bracket in the line (inline only)
+	colEnd    int    // byte offset just past closing backtick/paren (inline only)
 }
 
 // nodeRenderLoc records where a codeNode appears in the glamour-rendered output.
@@ -201,9 +210,10 @@ type App struct {
 	contentSearchIdx     int            // current match index
 
 	// Interactive node selection
-	codeNodes  []codeNode // code blocks found in current section
-	nodeSelIdx int        // which code node is highlighted
-	copyMsg    string     // transient "Copied!" feedback
+	codeNodes    []codeNode // all selectable nodes in current section
+	nodeSelIdx   int        // which node is highlighted (within filtered list)
+	nodeSubMode  nodeKind   // current sub-mode filter
+	copyMsg      string     // transient "Copied!" feedback
 
 	// File watcher
 	watcher *fsnotify.Watcher
@@ -223,7 +233,7 @@ func NewApp(doc *parser.Document, filename, filePath string, cfg config.Config) 
 		filepath:    filePath,
 		cfg:         cfg,
 		theme:       GetTheme(cfg.UI.Theme),
-		focus:       FocusSidebar,
+		focus:       FocusContent,
 		selectedIdx: -1, // start on the root (Document) node
 	}
 	a.rebuildSection()
@@ -380,30 +390,18 @@ func extractCodeNodes(lines []string) []codeNode {
 				bodyLines = nil
 				startLine = i
 			} else if strings.HasPrefix(trimmed, "#") {
-				// Extract heading text as a selectable node (copyable title)
-				level := 0
-				for level < len(trimmed) && trimmed[level] == '#' {
-					level++
-				}
-				headingText := strings.TrimSpace(trimmed[level:])
-				if headingText != "" {
-					nodes = append(nodes, codeNode{
-						lang:      "heading",
-						content:   headingText,
-						startLine: i,
-						endLine:   i,
-						inline:    true,
-						colStart:  level + 1, // after "## "
-						colEnd:    len(line),
-					})
-				}
-			} else {
-				// Scan for inline backtick spans on this line
+				// Skip heading itself but still extract inline code and links from it
 				nodes = append(nodes, extractInlineNodes(line, i)...)
+				nodes = append(nodes, extractLinkNodes(line, i)...)
+			} else {
+				// Scan for inline backtick spans and links on this line
+				nodes = append(nodes, extractInlineNodes(line, i)...)
+				nodes = append(nodes, extractLinkNodes(line, i)...)
 			}
 		} else {
 			if strings.HasPrefix(trimmed, fence) {
 				nodes = append(nodes, codeNode{
+					kind:      nodeCodeBlock,
 					lang:      lang,
 					content:   strings.Join(bodyLines, "\n"),
 					startLine: startLine,
@@ -463,6 +461,7 @@ func extractInlineNodes(line string, lineIdx int) []codeNode {
 				inner = inner[1 : len(inner)-1]
 			}
 			nodes = append(nodes, codeNode{
+				kind:      nodeInlineCode,
 				lang:      "",
 				content:   inner,
 				startLine: lineIdx,
@@ -478,6 +477,90 @@ func extractInlineNodes(line string, lineIdx int) []codeNode {
 	nextChar:
 	}
 	return nodes
+}
+
+// extractLinkNodes finds markdown links [text](url) and autolinks <url> in a line.
+func extractLinkNodes(line string, lineIdx int) []codeNode {
+	var nodes []codeNode
+	i := 0
+	for i < len(line) {
+		// Check for [text](url)
+		if line[i] == '[' {
+			// Find closing ]
+			j := i + 1
+			depth := 1
+			for j < len(line) && depth > 0 {
+				if line[j] == '[' {
+					depth++
+				} else if line[j] == ']' {
+					depth--
+				}
+				j++
+			}
+			if depth == 0 && j < len(line) && line[j] == '(' {
+				// Find closing )
+				k := j + 1
+				for k < len(line) && line[k] != ')' {
+					k++
+				}
+				if k < len(line) {
+					url := line[j+1 : k]
+					nodes = append(nodes, codeNode{
+						kind:      nodeLink,
+						lang:      "link",
+						content:   url,
+						startLine: lineIdx,
+						endLine:   lineIdx,
+						inline:    true,
+						colStart:  i,
+						colEnd:    k + 1,
+					})
+					i = k + 1
+					continue
+				}
+			}
+			i = j
+		} else if line[i] == '<' && i+1 < len(line) {
+			// Check for autolink <url>
+			j := i + 1
+			for j < len(line) && line[j] != '>' && line[j] != ' ' {
+				j++
+			}
+			if j < len(line) && line[j] == '>' {
+				url := line[i+1 : j]
+				// Basic validation: contains :// or @ (link/email)
+				if strings.Contains(url, "://") || strings.Contains(url, "@") {
+					nodes = append(nodes, codeNode{
+						kind:      nodeLink,
+						lang:      "link",
+						content:   url,
+						startLine: lineIdx,
+						endLine:   lineIdx,
+						inline:    true,
+						colStart:  i,
+						colEnd:    j + 1,
+					})
+				}
+				i = j + 1
+			} else {
+				i++
+			}
+		} else {
+			i++
+		}
+	}
+	return nodes
+}
+
+// filteredNodes returns only the codeNodes matching the current sub-mode.
+func (a *App) filteredNodes() []codeNode {
+	var result []codeNode
+	for _, n := range a.codeNodes {
+		if n.kind == a.nodeSubMode {
+			result = append(result, n)
+		}
+	}
+	return result
 }
 
 // ─────────────────────────────────────────────
@@ -803,14 +886,46 @@ func (a *App) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.contentOffset = len(a.activeLines())
 		a.clampContentOffset()
 	case config.KeyMatches(k, km.NodeSelect):
-		// Enter node selection mode if there are code blocks
+		// Enter node selection mode
 		if len(a.codeNodes) > 0 {
 			a.mode = ModeNodeSelect
+			a.nodeSubMode = nodeCodeBlock
 			a.nodeSelIdx = 0
-			a.scrollContentToNode(a.nodeSelIdx)
-			a.statusMsg = ""
+			// Find first node of current sub-mode visible at scroll position
+			filtered := a.filteredNodes()
+			if len(filtered) == 0 {
+				// Try next sub-modes
+				for try := 1; try < 3; try++ {
+					a.nodeSubMode = (a.nodeSubMode + nodeKind(try)) % 3
+					filtered = a.filteredNodes()
+					if len(filtered) > 0 {
+						break
+					}
+				}
+			}
+			if len(filtered) == 0 {
+				a.mode = ModeNormal
+				a.statusMsg = "No selectable nodes in this section"
+			} else {
+				a.ensureRenderedLines()
+				for i, node := range filtered {
+					// Find this node's render info
+					for j, n := range a.codeNodes {
+						if n.startLine == node.startLine && n.colStart == node.colStart && n.kind == node.kind {
+							if a.nodeRenderInfo != nil && j < len(a.nodeRenderInfo) && a.nodeRenderInfo[j].firstLine >= a.contentOffset {
+								a.nodeSelIdx = i
+								goto foundNode
+							}
+							break
+						}
+					}
+				}
+			foundNode:
+				a.scrollContentToNodeByRef(filtered[a.nodeSelIdx])
+				a.statusMsg = ""
+			}
 		} else {
-			a.statusMsg = "No code blocks in this section"
+			a.statusMsg = "No selectable nodes in this section"
 		}
 	case config.KeyMatches(k, km.ContentSearch):
 		a.mode = ModeContentSearch
@@ -857,33 +972,45 @@ func (a *App) clampContentOffset() {
 func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 	km := a.cfg.Keys
+	filtered := a.filteredNodes()
 	switch {
 	case config.KeyMatches(k, km.NodeExit):
 		a.mode = ModeNormal
 		a.copyMsg = ""
+	case k == "m":
+		// Cycle sub-mode: code -> inline -> links -> code ...
+		a.nodeSubMode = (a.nodeSubMode + 1) % 3
+		a.nodeSelIdx = 0
+		filtered = a.filteredNodes()
+		if len(filtered) > 0 {
+			a.scrollContentToNodeByRef(filtered[0])
+		}
 	case config.KeyMatches(k, km.NodeNext):
-		if len(a.codeNodes) > 0 {
-			a.nodeSelIdx = (a.nodeSelIdx + 1) % len(a.codeNodes)
-			a.scrollContentToNode(a.nodeSelIdx)
+		if len(filtered) > 0 {
+			a.nodeSelIdx = (a.nodeSelIdx + 1) % len(filtered)
+			a.scrollContentToNodeByRef(filtered[a.nodeSelIdx])
 		}
 	case config.KeyMatches(k, km.NodePrev):
-		if len(a.codeNodes) > 0 {
-			a.nodeSelIdx = (a.nodeSelIdx - 1 + len(a.codeNodes)) % len(a.codeNodes)
-			a.scrollContentToNode(a.nodeSelIdx)
+		if len(filtered) > 0 {
+			a.nodeSelIdx = (a.nodeSelIdx - 1 + len(filtered)) % len(filtered)
+			a.scrollContentToNodeByRef(filtered[a.nodeSelIdx])
 		}
 	case config.KeyMatches(k, km.NodeCopy):
-		if len(a.codeNodes) > 0 {
-			node := a.codeNodes[a.nodeSelIdx]
+		if len(filtered) > 0 {
+			node := filtered[a.nodeSelIdx]
 			if err := clipboard.WriteAll(node.content); err != nil {
 				a.copyMsg = "Clipboard error: " + err.Error()
 			} else {
 				lang := node.lang
 				if lang == "" {
-					lang = "block"
+					lang = "span"
 				}
-				a.copyMsg = fmt.Sprintf("Copied %s block (%d lines)", lang, strings.Count(node.content, "\n")+1)
+				if node.kind == nodeLink {
+					a.copyMsg = fmt.Sprintf("Copied link: %s", node.content)
+				} else {
+					a.copyMsg = fmt.Sprintf("Copied %s block (%d lines)", lang, strings.Count(node.content, "\n")+1)
+				}
 			}
-			// Exit interactive mode after copy, keep copy feedback in statusMsg
 			a.statusMsg = a.copyMsg
 			a.copyMsg = ""
 			a.mode = ModeNormal
@@ -926,6 +1053,16 @@ func (a *App) scrollContentToNode(nodeIdx int) {
 	if target < a.contentOffset || target >= a.contentOffset+a.contentHeight() {
 		a.contentOffset = target
 		a.clampContentOffset()
+	}
+}
+
+// scrollContentToNodeByRef finds a node in codeNodes by value and scrolls to it.
+func (a *App) scrollContentToNodeByRef(node codeNode) {
+	for i, n := range a.codeNodes {
+		if n.startLine == node.startLine && n.colStart == node.colStart && n.kind == node.kind {
+			a.scrollContentToNode(i)
+			return
+		}
 	}
 }
 
@@ -1161,8 +1298,6 @@ func (a *App) View() string {
 	}
 
 	switch a.mode {
-	case ModeHelp:
-		return a.renderHelp()
 	case ModeThemePicker:
 		return a.renderThemePicker()
 	}
@@ -1182,7 +1317,13 @@ func (a *App) View() string {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, outline, content)
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, title, body, status)
+	view := lipgloss.JoinVertical(lipgloss.Left, title, body, status)
+
+	if a.mode == ModeHelp {
+		view = a.overlayHelp(view)
+	}
+
+	return view
 }
 
 // ─────────────────────────────────────────────
@@ -1395,9 +1536,24 @@ func (a *App) renderContentGlamour(w, h int) string {
 
 	lines := a.renderedLines
 
-	// In node-select mode, build a highlighted copy of the lines.
-	if a.mode == ModeNodeSelect && len(a.codeNodes) > 0 {
-		lines = applyNodeHighlights(lines, a.codeNodes, a.nodeSelIdx, a.nodeRenderInfo, a.theme, w)
+	// In node-select mode, highlight only the filtered nodes.
+	if a.mode == ModeNodeSelect {
+		filtered := a.filteredNodes()
+		if len(filtered) > 0 {
+			// Map filtered nodes back to indices in a.codeNodes for render info lookup
+			var filteredInfo []nodeRenderLoc
+			for _, fn := range filtered {
+				for j, n := range a.codeNodes {
+					if n.startLine == fn.startLine && n.colStart == fn.colStart && n.kind == fn.kind {
+						if j < len(a.nodeRenderInfo) {
+							filteredInfo = append(filteredInfo, a.nodeRenderInfo[j])
+						}
+						break
+					}
+				}
+			}
+			lines = applyNodeHighlights(lines, filtered, a.nodeSelIdx, filteredInfo, a.theme, w)
+		}
 	}
 
 	// Apply content search highlights
@@ -1833,14 +1989,21 @@ func (a *App) renderStatus() string {
 	case ModeNodeSelect:
 		if a.copyMsg != "" {
 			leftPlain = "✓ " + a.copyMsg
-		} else if len(a.codeNodes) > 0 {
-			n := a.codeNodes[a.nodeSelIdx]
-			lang := n.lang
-			if lang == "" {
-				lang = "code"
+		} else {
+			filtered := a.filteredNodes()
+			modeName := "CODE"
+			switch a.nodeSubMode {
+			case nodeInlineCode:
+				modeName = "INLINE"
+			case nodeLink:
+				modeName = "LINKS"
 			}
-			leftPlain = fmt.Sprintf("NODE [%d/%d] %s  y:copy  j/k:next/prev  Esc:exit",
-				a.nodeSelIdx+1, len(a.codeNodes), lang)
+			if len(filtered) > 0 {
+				leftPlain = fmt.Sprintf("%s [%d/%d]  m:mode  y:copy  j/k:nav  Esc:exit",
+					modeName, a.nodeSelIdx+1, len(filtered))
+			} else {
+				leftPlain = fmt.Sprintf("%s [0/0]  m:mode  Esc:exit", modeName)
+			}
 		}
 	default:
 		if a.selectedIdx < 0 {
@@ -1897,7 +2060,7 @@ func (a *App) renderStatus() string {
 		Render(content)
 }
 
-func (a *App) renderHelp() string {
+func (a *App) overlayHelp(background string) string {
 	var focusState string
 	if a.sidebarHidden {
 		focusState = "sidebar hidden (w to restore)"
@@ -1907,7 +2070,7 @@ func (a *App) renderHelp() string {
 		focusState = "content focused"
 	}
 
-	text := fmt.Sprintf(`  gomd — Keyboard Shortcuts   [%s]
+	text := fmt.Sprintf(`gomd — Keyboard Shortcuts   [%s]
 
   GLOBAL
     Tab          Toggle focus between sidebar ↔ content
@@ -1928,25 +2091,64 @@ func (a *App) renderHelp() string {
   CONTENT  (when focused)
     j / ↓        Scroll down one line
     k / ↑        Scroll up one line
-    Ctrl+D/F     Page down
+    Space/Ctrl+D Page down
     Ctrl+U/B     Page up
     g / G        Jump to top / bottom
+    /            Search content
     i            Enter interactive node selection
 
   NODE SELECTION  (press i from content)
-    j / ↓ / Tab       Next code block
-    k / ↑ / Shift+Tab Previous code block
+    j / ↓ / Tab       Next node
+    k / ↑ / Shift+Tab Previous node
+    m            Cycle sub-mode (code/inline/links)
     y            Copy to clipboard and exit
     Esc / q / i  Exit node selection
-`, focusState)
 
-	return lipgloss.NewStyle().
+  Press any key to dismiss`, focusState)
+
+	// Fixed modal width
+	modalW := 60
+	if modalW > a.width-4 {
+		modalW = a.width - 4
+	}
+
+	// Build bordered modal
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(a.theme.Border).
 		Background(a.theme.Background).
 		Foreground(a.theme.Foreground).
-		Width(a.width).
-		Height(a.height).
-		Padding(1, 2).
-		Render(text)
+		Width(modalW - 2). // inner width
+		Padding(0, 1)
+
+	modal := boxStyle.Render(text)
+	modalRenderedLines := strings.Split(modal, "\n")
+	modalH := len(modalRenderedLines)
+
+	// Calculate centering offsets
+	startRow := (a.height - modalH) / 2
+	if startRow < 0 {
+		startRow = 0
+	}
+	startCol := (a.width - modalW) / 2
+	if startCol < 0 {
+		startCol = 0
+	}
+
+	// ANSI-aware overlay of modal onto background
+	bgLines := strings.Split(background, "\n")
+	for i, mLine := range modalRenderedLines {
+		row := startRow + i
+		if row >= len(bgLines) {
+			break
+		}
+		mWidth := lipgloss.Width(mLine)
+		left := ansi.Truncate(bgLines[row], startCol, "")
+		right := ansi.TruncateLeft(bgLines[row], startCol+mWidth, "")
+		bgLines[row] = left + mLine + right
+	}
+
+	return strings.Join(bgLines, "\n")
 }
 
 func (a *App) renderThemePicker() string {
