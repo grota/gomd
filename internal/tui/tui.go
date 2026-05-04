@@ -14,8 +14,8 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/atotto/clipboard"
-	"github.com/charmbracelet/glamour"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/fsnotify/fsnotify"
@@ -107,9 +107,19 @@ const (
 // AppMode represents the current application mode.
 type AppMode int
 
+// contentMatch records the position of a search match in rendered content.
+type contentMatch struct {
+	line      int // rendered line index
+	colStart  int // display column start
+	colEnd    int // display column end
+	byteStart int // byte offset in stripped line
+	byteEnd   int // byte offset end
+}
+
 const (
-	ModeNormal       AppMode = iota
+	ModeNormal        AppMode = iota
 	ModeSearch                // sidebar heading search (/)
+	ModeContentSearch         // content pane text search (/)
 	ModeHelp
 	ModeThemePicker
 	ModeNodeSelect // interactive node selection in content pane
@@ -121,12 +131,12 @@ const (
 
 type codeNode struct {
 	lang      string
-	content   string  // raw code without fence lines / backticks
-	startLine int     // 0-based line index in sectionLines
-	endLine   int     // inclusive (== startLine for inline)
-	inline    bool    // true for backtick inline code spans
-	colStart  int     // byte offset of opening backtick in the line (inline only)
-	colEnd    int     // byte offset just past closing backtick (inline only)
+	content   string // raw code without fence lines / backticks
+	startLine int    // 0-based line index in sectionLines
+	endLine   int    // inclusive (== startLine for inline)
+	inline    bool   // true for backtick inline code spans
+	colStart  int    // byte offset of opening backtick in the line (inline only)
+	colEnd    int    // byte offset just past closing backtick (inline only)
 }
 
 // nodeRenderLoc records where a codeNode appears in the glamour-rendered output.
@@ -168,13 +178,13 @@ type App struct {
 	contentOffset int      // scroll offset (into renderedLines in normal mode, sectionLines in node-select)
 
 	// glamour renderer — rebuilt when content width or theme changes
-	glamourRenderer   interface{ Render(string) (string, error) }
-	glamourWidth      int    // innerW for which renderer was built
-	glamourStyleName  string // gomd theme name for which renderer was built
+	glamourRenderer  interface{ Render(string) (string, error) }
+	glamourWidth     int    // innerW for which renderer was built
+	glamourStyleName string // gomd theme name for which renderer was built
 
 	// rendered lines cache — rebuilt when section or width changes
-	renderedLinesWidth int   // innerW for which renderedLines was built
-	renderedLinesIdx   int   // selectedIdx for which renderedLines was built
+	renderedLinesWidth int // innerW for which renderedLines was built
+	renderedLinesIdx   int // selectedIdx for which renderedLines was built
 	// nodeRenderInfo[i] describes where codeNodes[i] appears in renderedLines.
 	// Rebuilt whenever renderedLines is rebuilt.
 	nodeRenderInfo []nodeRenderLoc
@@ -185,10 +195,15 @@ type App struct {
 	searchMatches []int
 	searchIdx     int
 
+	// Content search
+	contentSearchQuery   string
+	contentSearchMatches []contentMatch // all matches in rendered lines
+	contentSearchIdx     int            // current match index
+
 	// Interactive node selection
-	codeNodes    []codeNode // code blocks found in current section
-	nodeSelIdx   int        // which code node is highlighted
-	copyMsg      string     // transient "Copied!" feedback
+	codeNodes  []codeNode // code blocks found in current section
+	nodeSelIdx int        // which code node is highlighted
+	copyMsg    string     // transient "Copied!" feedback
 
 	// File watcher
 	watcher *fsnotify.Watcher
@@ -460,7 +475,7 @@ func extractInlineNodes(line string, lineIdx int) []codeNode {
 			goto nextChar
 		}
 		i = j
-		nextChar:
+	nextChar:
 	}
 	return nodes
 }
@@ -603,6 +618,8 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch a.mode {
 	case ModeSearch:
 		return a.handleSearchKey(msg)
+	case ModeContentSearch:
+		return a.handleContentSearchKey(msg)
 	case ModeHelp:
 		a.mode = ModeNormal
 		return a, nil
@@ -790,6 +807,15 @@ func (a *App) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			a.statusMsg = "No code blocks in this section"
 		}
+	case "/":
+		a.mode = ModeContentSearch
+		a.contentSearchQuery = ""
+		a.contentSearchMatches = nil
+		a.contentSearchIdx = 0
+	case "n":
+		a.nextContentSearchMatch()
+	case "N":
+		a.prevContentSearchMatch()
 	}
 	return a, nil
 }
@@ -953,6 +979,105 @@ func (a *App) prevSearchMatch() {
 	a.selectedIdx = a.searchMatches[a.searchIdx]
 	a.scrollOutlineToSelected()
 	a.rebuildSection()
+}
+
+// ─────────────────────────────────────────────
+// Content search
+// ─────────────────────────────────────────────
+
+func (a *App) handleContentSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		a.mode = ModeNormal
+		if len(a.contentSearchMatches) > 0 {
+			a.scrollToContentMatch(a.contentSearchIdx)
+		}
+	case "esc":
+		a.mode = ModeNormal
+		a.contentSearchQuery = ""
+		a.contentSearchMatches = nil
+	case "backspace", "ctrl+h":
+		if r := []rune(a.contentSearchQuery); len(r) > 0 {
+			a.contentSearchQuery = string(r[:len(r)-1])
+		}
+		a.updateContentSearchMatches()
+	default:
+		if len(msg.Runes) > 0 {
+			a.contentSearchQuery += string(msg.Runes)
+		}
+		a.updateContentSearchMatches()
+	}
+	return a, nil
+}
+
+func (a *App) updateContentSearchMatches() {
+	a.contentSearchMatches = nil
+	a.contentSearchIdx = 0
+	q := strings.ToLower(a.contentSearchQuery)
+	if q == "" {
+		return
+	}
+	stripped := make([]string, len(a.renderedLines))
+	for i, l := range a.renderedLines {
+		stripped[i] = ansi.Strip(l)
+	}
+	for i, s := range stripped {
+		lower := strings.ToLower(s)
+		offset := 0
+		for {
+			idx := strings.Index(lower[offset:], q)
+			if idx == -1 {
+				break
+			}
+			byteStart := offset + idx
+			byteEnd := byteStart + len(q)
+			colStart := byteColToDisplayCol(s, byteStart)
+			colEnd := byteColToDisplayCol(s, byteEnd)
+			a.contentSearchMatches = append(a.contentSearchMatches, contentMatch{
+				line:      i,
+				colStart:  colStart,
+				colEnd:    colEnd,
+				byteStart: byteStart,
+				byteEnd:   byteEnd,
+			})
+			offset = byteStart + len(q)
+		}
+	}
+	// Scroll to first match if any
+	if len(a.contentSearchMatches) > 0 {
+		a.scrollToContentMatch(0)
+	}
+}
+
+func (a *App) scrollToContentMatch(idx int) {
+	if idx < 0 || idx >= len(a.contentSearchMatches) {
+		return
+	}
+	m := a.contentSearchMatches[idx]
+	h := a.contentHeight()
+	// Ensure the match line is visible
+	if m.line < a.contentOffset {
+		a.contentOffset = m.line
+	} else if m.line >= a.contentOffset+h {
+		a.contentOffset = m.line - h/2
+	}
+	a.clampContentOffset()
+}
+
+func (a *App) nextContentSearchMatch() {
+	if len(a.contentSearchMatches) == 0 {
+		return
+	}
+	a.contentSearchIdx = (a.contentSearchIdx + 1) % len(a.contentSearchMatches)
+	a.scrollToContentMatch(a.contentSearchIdx)
+}
+
+func (a *App) prevContentSearchMatch() {
+	if len(a.contentSearchMatches) == 0 {
+		return
+	}
+	a.contentSearchIdx = (a.contentSearchIdx - 1 + len(a.contentSearchMatches)) % len(a.contentSearchMatches)
+	a.scrollToContentMatch(a.contentSearchIdx)
 }
 
 // ─────────────────────────────────────────────
@@ -1268,6 +1393,11 @@ func (a *App) renderContentGlamour(w, h int) string {
 		lines = applyNodeHighlights(lines, a.codeNodes, a.nodeSelIdx, a.nodeRenderInfo, a.theme, w)
 	}
 
+	// Apply content search highlights
+	if len(a.contentSearchMatches) > 0 && a.contentSearchQuery != "" {
+		lines = a.applyContentSearchHighlights(lines)
+	}
+
 	start := a.contentOffset
 	if start > len(lines) {
 		start = len(lines)
@@ -1365,11 +1495,11 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 						headingSearch = mdLinkRe.ReplaceAllString(headingSearch, "$1")
 					}
 				}
-			// Find a line containing the heading search key. Glamour renders h2+
-			// with "## Text" but h1 headings are rendered without "#" (just the text).
-			// Strategy: prefer lines with "#", fall back to lines where the heading
-			// text appears at the start (after trimming leading spaces).
-			for ri := inlineSearchFromLine; ri < len(stripped); ri++ {
+				// Find a line containing the heading search key. Glamour renders h2+
+				// with "## Text" but h1 headings are rendered without "#" (just the text).
+				// Strategy: prefer lines with "#", fall back to lines where the heading
+				// text appears at the start (after trimming leading spaces).
+				for ri := inlineSearchFromLine; ri < len(stripped); ri++ {
 					s := stripped[ri]
 					hasHash := strings.Contains(s, "#")
 					if !hasHash {
@@ -1406,20 +1536,20 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 				// prevents a later padded occurrence from pre-empting an earlier bare
 				// occurrence on the same line.
 				//
-			// On inlineSearchFromLine, respect inlineSearchFromCol to handle multiple spans
-			// on the same rendered line (same source line).
-			padded := "  " + n.content + "  "
-			needle := n.content
-			for ri := inlineSearchFromLine; ri < len(stripped); ri++ {
-				s := stripped[ri]
-				colOffset := 0
-				if ri == inlineSearchFromLine && inlineSearchFromCol >= 0 {
-					colOffset = inlineSearchFromCol + 1
-					if colOffset > len(s) {
-						continue
+				// On inlineSearchFromLine, respect inlineSearchFromCol to handle multiple spans
+				// on the same rendered line (same source line).
+				padded := "  " + n.content + "  "
+				needle := n.content
+				for ri := inlineSearchFromLine; ri < len(stripped); ri++ {
+					s := stripped[ri]
+					colOffset := 0
+					if ri == inlineSearchFromLine && inlineSearchFromCol >= 0 {
+						colOffset = inlineSearchFromCol + 1
+						if colOffset > len(s) {
+							continue
+						}
+						s = s[colOffset:]
 					}
-					s = s[colOffset:]
-				}
 					bestCol := -1    // byte offset
 					bestColEnd := -1 // byte offset
 
@@ -1429,35 +1559,35 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 						bestCol = col
 						bestColEnd = col + len(n.content)
 					}
-				// Check alternative forms for inline code spans that may not have
-				// full double-space padding (e.g., adjacent spans: `j`/`k` renders
-				// as "j / k" with single spaces). Require at least 1 space before
-				// AND 1 space after (or end of trimmed line) to confirm it's a span.
-				if bestCol < 0 && !strings.Contains(stripped[ri], "##") {
-					searchFrom := 0
-					if ri == inlineSearchFromLine && colOffset > 0 {
-						searchFrom = 0 // already sliced via colOffset
-					}
-					for pos := searchFrom; pos < len(s); pos++ {
-						idx := strings.Index(s[pos:], needle)
-						if idx == -1 {
-							break
+					// Check alternative forms for inline code spans that may not have
+					// full double-space padding (e.g., adjacent spans: `j`/`k` renders
+					// as "j / k" with single spaces). Require at least 1 space before
+					// AND 1 space after (or end of trimmed line) to confirm it's a span.
+					if bestCol < 0 && !strings.Contains(stripped[ri], "##") {
+						searchFrom := 0
+						if ri == inlineSearchFromLine && colOffset > 0 {
+							searchFrom = 0 // already sliced via colOffset
 						}
-						absIdx := colOffset + pos + idx
-						endIdx := absIdx + len(needle)
-						fullLine := stripped[ri]
-						// Must have space before (or be at start after indent)
-						hasPre := absIdx > 0 && fullLine[absIdx-1] == ' '
-						// Must have space after (or be at end of trimmed content)
-						hasPost := endIdx >= len(strings.TrimRight(fullLine, " ")) || fullLine[endIdx] == ' '
-						if hasPre && hasPost {
-							bestCol = absIdx
-							bestColEnd = endIdx
-							break
+						for pos := searchFrom; pos < len(s); pos++ {
+							idx := strings.Index(s[pos:], needle)
+							if idx == -1 {
+								break
+							}
+							absIdx := colOffset + pos + idx
+							endIdx := absIdx + len(needle)
+							fullLine := stripped[ri]
+							// Must have space before (or be at start after indent)
+							hasPre := absIdx > 0 && fullLine[absIdx-1] == ' '
+							// Must have space after (or be at end of trimmed content)
+							hasPost := endIdx >= len(strings.TrimRight(fullLine, " ")) || fullLine[endIdx] == ' '
+							if hasPre && hasPost {
+								bestCol = absIdx
+								bestColEnd = endIdx
+								break
+							}
+							pos += idx + len(needle)
 						}
-						pos += idx + len(needle)
 					}
-				}
 					if bestCol >= 0 {
 						loc.firstLine = ri
 						loc.lastLine = ri
@@ -1481,24 +1611,24 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 					break
 				}
 			}
-		firstLine := -1
-		if needle != "" {
-			for ri := blockSearchFromLine; ri < len(stripped); ri++ {
-				if strings.Contains(stripped[ri], needle) {
-					firstLine = ri
-					break
+			firstLine := -1
+			if needle != "" {
+				for ri := blockSearchFromLine; ri < len(stripped); ri++ {
+					if strings.Contains(stripped[ri], needle) {
+						firstLine = ri
+						break
+					}
 				}
 			}
-		}
-		if firstLine == -1 {
-			// Try fence marker as fallback
-			for ri := blockSearchFromLine; ri < len(stripped); ri++ {
-				if strings.Contains(stripped[ri], "```") || strings.Contains(stripped[ri], "~~~") {
-					firstLine = ri
-					break
+			if firstLine == -1 {
+				// Try fence marker as fallback
+				for ri := blockSearchFromLine; ri < len(stripped); ri++ {
+					if strings.Contains(stripped[ri], "```") || strings.Contains(stripped[ri], "~~~") {
+						firstLine = ri
+						break
+					}
 				}
 			}
-		}
 			if firstLine >= 0 {
 				// Glamour renders fenced code blocks with 4-space indentation (vs
 				// 2-space for prose). Scan forward from firstLine while lines are
@@ -1587,6 +1717,42 @@ func highlightSpanInLine(line string, colStart, colEnd int, style lipgloss.Style
 	return prefix + style.Render(plainMiddle) + suffix
 }
 
+// applyContentSearchHighlights highlights all content search matches in the rendered lines.
+func (a *App) applyContentSearchHighlights(lines []string) []string {
+	if len(a.contentSearchMatches) == 0 {
+		return lines
+	}
+	out := make([]string, len(lines))
+	copy(out, lines)
+
+	matchStyle := lipgloss.NewStyle().Background(lipgloss.Color("#5f5f00")).Foreground(lipgloss.Color("#ffffff"))
+	currentStyle := lipgloss.NewStyle().Background(lipgloss.Color("#af8700")).Foreground(lipgloss.Color("#000000")).Bold(true)
+
+	// Group matches by line for efficient processing
+	// Apply from right to left to preserve column positions
+	lineMatches := make(map[int][]int) // line -> list of match indices
+	for i, m := range a.contentSearchMatches {
+		lineMatches[m.line] = append(lineMatches[m.line], i)
+	}
+
+	for lineIdx, matchIdxs := range lineMatches {
+		if lineIdx >= len(out) {
+			continue
+		}
+		// Apply in reverse order (right to left) to preserve positions
+		for i := len(matchIdxs) - 1; i >= 0; i-- {
+			mi := matchIdxs[i]
+			m := a.contentSearchMatches[mi]
+			style := matchStyle
+			if mi == a.contentSearchIdx {
+				style = currentStyle
+			}
+			out[lineIdx] = highlightSpanInLine(out[lineIdx], m.colStart, m.colEnd, style)
+		}
+	}
+	return out
+}
+
 // applyNodeHighlights returns a copy of rendered lines with highlights applied
 // for node-select mode:
 //   - All selectable inline/block nodes get a dim "available" background tint.
@@ -1643,13 +1809,20 @@ func applyNodeHighlights(lines []string, nodes []codeNode, selIdx int, info []no
 	return out
 }
 
-
 func (a *App) renderStatus() string {
 	// Build plain (unstyled) left/right text first so we can measure widths correctly.
 	var leftPlain string
 	switch a.mode {
 	case ModeSearch:
 		leftPlain = "/ " + a.searchQuery + "█"
+	case ModeContentSearch:
+		matchInfo := ""
+		if len(a.contentSearchMatches) > 0 {
+			matchInfo = fmt.Sprintf(" [%d/%d]", a.contentSearchIdx+1, len(a.contentSearchMatches))
+		} else if a.contentSearchQuery != "" {
+			matchInfo = " [0/0]"
+		}
+		leftPlain = "/ " + a.contentSearchQuery + "█" + matchInfo
 	case ModeNodeSelect:
 		if a.copyMsg != "" {
 			leftPlain = "✓ " + a.copyMsg

@@ -74,12 +74,12 @@ type List struct {
 }
 
 var (
-	reLinkInline  = regexp.MustCompile(`\[([^\]]*)\]\(([^)]*)\)`)
-	reWikiLink    = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
-	reImage       = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]*?)(?:\s+"([^"]*)")?\)`)
-	reTableRow    = regexp.MustCompile(`^\|(.+)\|$`)
-	reTableSep    = regexp.MustCompile(`^\|[-| :]+\|$`)
-	reCheckbox    = regexp.MustCompile(`^\[([xX ])\]\s+`)
+	reLinkInline = regexp.MustCompile(`\[([^\]]*)\]\(([^)]*)\)`)
+	reWikiLink   = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
+	reImage      = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]*?)(?:\s+"([^"]*)")?\)`)
+	reTableRow   = regexp.MustCompile(`^\|(.+)\|$`)
+	reTableSep   = regexp.MustCompile(`^\|[-| :]+\|$`)
+	reCheckbox   = regexp.MustCompile(`^\[([xX ])\]\s+`)
 )
 
 // ExtractLinks extracts all links from markdown content.

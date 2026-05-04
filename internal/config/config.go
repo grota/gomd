@@ -24,8 +24,8 @@ type UIConfig struct {
 
 // TerminalConfig holds terminal-related settings.
 type TerminalConfig struct {
-	ColorMode           string `toml:"color_mode"`
-	WarnedTerminalApp   bool   `toml:"warned_terminal_app"`
+	ColorMode         string `toml:"color_mode"`
+	WarnedTerminalApp bool   `toml:"warned_terminal_app"`
 }
 
 // ImageConfig holds image rendering settings.

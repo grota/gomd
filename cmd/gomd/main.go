@@ -16,17 +16,17 @@ import (
 )
 
 var (
-	flagList        bool
-	flagTree        bool
-	flagFilter      string
-	flagLevel       int
-	flagOutput      string
-	flagSection     string
-	flagCount       bool
-	flagTheme       string
-	flagColorMode   string
-	flagNoImages    bool
-	flagImages      bool
+	flagList      bool
+	flagTree      bool
+	flagFilter    string
+	flagLevel     int
+	flagOutput    string
+	flagSection   string
+	flagCount     bool
+	flagTheme     string
+	flagColorMode string
+	flagNoImages  bool
+	flagImages    bool
 )
 
 func main() {
@@ -45,10 +45,10 @@ Examples:
   gomd --tree README.md       # Show heading tree
   gomd -s Installation doc.md # Extract section
   gomd -s Installation doc.md # Extract section`,
-		RunE:                  runRoot,
-		Args:                  cobra.ArbitraryArgs,
-		DisableFlagParsing:    false,
-		TraverseChildren:      true,
+		RunE:               runRoot,
+		Args:               cobra.ArbitraryArgs,
+		DisableFlagParsing: false,
+		TraverseChildren:   true,
 	}
 
 	// Flags
@@ -263,5 +263,3 @@ func extractSection(doc *parser.Document, name string) {
 	}
 	fmt.Println(section)
 }
-
-

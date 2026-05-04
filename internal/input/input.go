@@ -10,15 +10,15 @@ import (
 )
 
 const (
-	maxInputBytes    = 100 * 1024 * 1024 // 100 MB
-	maxLineBytes     = 10 * 1024 * 1024  // 10 MB per line
+	maxInputBytes = 100 * 1024 * 1024 // 100 MB
+	maxLineBytes  = 10 * 1024 * 1024  // 10 MB per line
 )
 
 // Source describes an input source.
 type Source int
 
 const (
-	SourceFile  Source = iota
+	SourceFile Source = iota
 	SourceStdin
 )
 
