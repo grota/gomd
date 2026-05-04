@@ -290,3 +290,66 @@ func TestMapNodes_InlineSpanDisplayCols(t *testing.T) {
 			loc.spanColByte, loc.spanCol)
 	}
 }
+
+// TestMapNodes_InlineNotInsideFencedBlock is a regression test for the bug where an
+// inline node whose text also appears inside a preceding fenced block was mapped to
+// the in-block occurrence instead of the later prose occurrence.
+//
+// Setup: a fenced block that contains "SlowList", followed by prose that also
+// contains `SlowList` as an inline code span. The inline node must map to the
+// prose line, not to the line inside the block.
+func TestMapNodes_InlineNotInsideFencedBlock(t *testing.T) {
+	src := "## Title\n\nPreamble.\n\n" +
+		"```jsx\n" +
+		"function App() {\n" +
+		"  return <SlowList />;\n" +
+		"}\n" +
+		"```\n\n" +
+		"Use `SlowList` carefully.\n"
+
+	lines := strings.Split(strings.TrimRight(src, "\n"), "\n")
+	nodes := extractCodeNodes(lines)
+	_, stripped := renderStripped(t, src, 80)
+	info := mapNodesToRenderedLines(nodes, stripped)
+
+	// Find fenced block and SlowList inline node indices.
+	fencedIdx, inlineIdx := -1, -1
+	for i, n := range nodes {
+		if !n.inline && n.lang == "jsx" {
+			fencedIdx = i
+		}
+		if n.inline && n.content == "SlowList" {
+			inlineIdx = i
+		}
+	}
+	if fencedIdx < 0 || inlineIdx < 0 {
+		t.Fatalf("could not find expected nodes: fencedIdx=%d inlineIdx=%d", fencedIdx, inlineIdx)
+	}
+
+	fencedLoc := info[fencedIdx]
+	inlineLoc := info[inlineIdx]
+
+	if fencedLoc.firstLine < 0 {
+		t.Fatal("fenced block not found in rendered output")
+	}
+	if inlineLoc.firstLine < 0 {
+		t.Fatal("inline SlowList node not found in rendered output")
+	}
+
+	// The inline node must be outside the fenced block's line range.
+	if inlineLoc.firstLine >= fencedLoc.firstLine && inlineLoc.firstLine <= fencedLoc.lastLine {
+		t.Errorf("inline SlowList mapped to line %d which is inside fenced block [%d..%d]",
+			inlineLoc.firstLine, fencedLoc.firstLine, fencedLoc.lastLine)
+	}
+
+	// The prose line must contain "SlowList" as a plain word (not inside the block).
+	proseLine := stripped[inlineLoc.firstLine]
+	if !strings.Contains(proseLine, "SlowList") {
+		t.Errorf("inline SlowList mapped to line %d which does not contain 'SlowList': %q",
+			inlineLoc.firstLine, proseLine)
+	}
+	// The prose line should have 2-space indent (glamour prose), not 4-space (code block).
+	if strings.HasPrefix(proseLine, "    ") {
+		t.Errorf("inline SlowList mapped to a 4-space-indented line (inside block?): %q", proseLine)
+	}
+}

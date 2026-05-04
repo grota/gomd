@@ -1316,12 +1316,21 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 	// monotonically non-decreasing, so we scan forward from the previous
 	// node's rendered position to avoid matching an earlier duplicate.
 	//
-	// searchFromLine: the first rendered line to consider.
-	// searchFromCol:  on searchFromLine itself, skip any match whose column
-	//                 is <= this value (already consumed by a previous node
-	//                 on the same rendered line).
-	searchFromLine := 0
-	searchFromCol := -1
+	// Two separate forward cursors are maintained:
+	//
+	//   inlineSearchFromLine / inlineSearchFromCol
+	//     Used by inline nodes (headings, backtick spans).
+	//     After a fenced block this advances to lastLine+1 so that inline
+	//     nodes cannot accidentally match text inside a rendered code block.
+	//
+	//   blockSearchFromLine
+	//     Used by fenced block nodes only.
+	//     Advances to firstLine (not lastLine) of the previous block so that
+	//     consecutive source blocks whose rendered output overlaps (glamour
+	//     can merge adjacent blocks) can each be located.
+	inlineSearchFromLine := 0
+	inlineSearchFromCol := -1
+	blockSearchFromLine := 0
 
 	for ni, n := range nodes {
 		loc := nodeRenderLoc{firstLine: -1, lastLine: -1, spanCol: -1, spanColEnd: -1}
@@ -1356,8 +1365,8 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 						headingSearch = mdLinkRe.ReplaceAllString(headingSearch, "$1")
 					}
 				}
-				// Find a line containing "#" and the search key, searching forward.
-				for ri := searchFromLine; ri < len(stripped); ri++ {
+			// Find a line containing "#" and the search key, searching forward.
+			for ri := inlineSearchFromLine; ri < len(stripped); ri++ {
 					s := stripped[ri]
 					if !strings.Contains(s, "#") {
 						continue
@@ -1366,8 +1375,8 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 					if col == -1 {
 						continue
 					}
-					// On searchFromLine, skip columns already consumed (byte offsets).
-					if ri == searchFromLine && col <= searchFromCol {
+					// On inlineSearchFromLine, skip columns already consumed (byte offsets).
+					if ri == inlineSearchFromLine && col <= inlineSearchFromCol {
 						continue
 					}
 					loc.firstLine = ri
@@ -1389,20 +1398,20 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 				// prevents a later padded occurrence from pre-empting an earlier bare
 				// occurrence on the same line.
 				//
-				// On searchFromLine, respect searchFromCol to handle multiple spans
-				// on the same rendered line (same source line).
-				padded := "  " + n.content + "  "
-				needle := n.content
-				for ri := searchFromLine; ri < len(stripped); ri++ {
-					s := stripped[ri]
-					colOffset := 0
-					if ri == searchFromLine && searchFromCol >= 0 {
-						colOffset = searchFromCol + 1
-						if colOffset > len(s) {
-							continue
-						}
-						s = s[colOffset:]
+			// On inlineSearchFromLine, respect inlineSearchFromCol to handle multiple spans
+			// on the same rendered line (same source line).
+			padded := "  " + n.content + "  "
+			needle := n.content
+			for ri := inlineSearchFromLine; ri < len(stripped); ri++ {
+				s := stripped[ri]
+				colOffset := 0
+				if ri == inlineSearchFromLine && inlineSearchFromCol >= 0 {
+					colOffset = inlineSearchFromCol + 1
+					if colOffset > len(s) {
+						continue
 					}
+					s = s[colOffset:]
+				}
 					bestCol := -1    // byte offset
 					bestColEnd := -1 // byte offset
 
@@ -1445,24 +1454,24 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 					break
 				}
 			}
-			firstLine := -1
-			if needle != "" {
-				for ri := searchFromLine; ri < len(stripped); ri++ {
-					if strings.Contains(stripped[ri], needle) {
-						firstLine = ri
-						break
-					}
+		firstLine := -1
+		if needle != "" {
+			for ri := blockSearchFromLine; ri < len(stripped); ri++ {
+				if strings.Contains(stripped[ri], needle) {
+					firstLine = ri
+					break
 				}
 			}
-			if firstLine == -1 {
-				// Try fence marker as fallback
-				for ri := searchFromLine; ri < len(stripped); ri++ {
-					if strings.Contains(stripped[ri], "```") || strings.Contains(stripped[ri], "~~~") {
-						firstLine = ri
-						break
-					}
+		}
+		if firstLine == -1 {
+			// Try fence marker as fallback
+			for ri := blockSearchFromLine; ri < len(stripped); ri++ {
+				if strings.Contains(stripped[ri], "```") || strings.Contains(stripped[ri], "~~~") {
+					firstLine = ri
+					break
 				}
 			}
+		}
 			if firstLine >= 0 {
 				// Glamour renders fenced code blocks with 4-space indentation (vs
 				// 2-space for prose). Scan forward from firstLine while lines are
@@ -1488,33 +1497,40 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 		}
 
 		result[ni] = loc
-		// Advance the search cursor so the next node cannot match the same
-		// rendered span.  For fenced blocks, advance to loc.lastLine (the last
-		// rendered line of the block) so subsequent inline nodes start searching
-		// from there and won't match content inside the block.  Using lastLine
-		// (not lastLine+1) avoids skipping a heading that immediately follows
-		// the block on the very next rendered line.
-		// For inline spans, stay on loc.firstLine and bump the column cursor
-		// past this span so subsequent nodes can still match on the same or
-		// later rendered line.
+		// Advance search cursors.
+		//
+		// inlineSearchFromLine / inlineSearchFromCol: used by inline nodes.
+		//   After a fenced block advances to lastLine+1 so inline nodes cannot
+		//   match text that appears inside the rendered code block.
+		//   After an inline node stays on loc.firstLine with col bumped past
+		//   the span, allowing subsequent nodes on the same rendered line.
+		//
+		// blockSearchFromLine: used by fenced block nodes.
+		//   Advances to firstLine only (not lastLine) so that consecutive
+		//   source blocks whose rendered output overlaps can each be located.
 		if loc.firstLine >= 0 {
 			if !n.inline && loc.lastLine > loc.firstLine {
-				// Fenced block: advance to firstLine only (not lastLine) so
-				// that the next fenced block can still match within this block's
-				// rendered region (consecutive blocks may share rendered lines).
-				// Inline nodes will be unaffected because they match on spanCol.
-				newLine := loc.firstLine
-				if newLine > searchFromLine {
-					searchFromLine = newLine
-					searchFromCol = -1
+				// Fenced block: inline cursor jumps past the block.
+				newInline := loc.lastLine + 1
+				if newInline > inlineSearchFromLine {
+					inlineSearchFromLine = newInline
+					inlineSearchFromCol = -1
+				}
+				// Block cursor: only advance to firstLine.
+				if loc.firstLine > blockSearchFromLine {
+					blockSearchFromLine = loc.firstLine
 				}
 			} else {
-				if loc.firstLine > searchFromLine {
-					searchFromLine = loc.firstLine
-					searchFromCol = -1
+				// Inline node: bump both inline and block cursors.
+				if loc.firstLine > inlineSearchFromLine {
+					inlineSearchFromLine = loc.firstLine
+					inlineSearchFromCol = -1
 				}
 				if loc.spanColEndByte > 0 {
-					searchFromCol = loc.spanColEndByte - 1
+					inlineSearchFromCol = loc.spanColEndByte - 1
+				}
+				if loc.firstLine > blockSearchFromLine {
+					blockSearchFromLine = loc.firstLine
 				}
 			}
 		}
