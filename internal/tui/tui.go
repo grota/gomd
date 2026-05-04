@@ -125,6 +125,12 @@ const (
 	ModeNodeSelect // interactive node selection in content pane
 )
 
+const (
+	nodeKindCount  = 3  // number of node sub-modes (code, inline, link)
+	helpModalWidth = 60 // fixed width for the help modal overlay
+	tabStopWidth   = 8  // tab expansion width
+)
+
 // ─────────────────────────────────────────────
 // CodeNode — a selectable node inside a section
 // ─────────────────────────────────────────────
@@ -298,7 +304,7 @@ func expandTabs(s string) string {
 			inEsc = true
 			buf.WriteRune(r)
 		case r == '\t':
-			spaces := 8 - (col % 8)
+			spaces := tabStopWidth - (col % tabStopWidth)
 			for i := 0; i < spaces; i++ {
 				buf.WriteByte(' ')
 			}
@@ -389,12 +395,8 @@ func extractCodeNodes(lines []string) []codeNode {
 				lang = strings.TrimSpace(trimmed[3:])
 				bodyLines = nil
 				startLine = i
-			} else if strings.HasPrefix(trimmed, "#") {
-				// Skip heading itself but still extract inline code and links from it
-				nodes = append(nodes, extractInlineNodes(line, i)...)
-				nodes = append(nodes, extractLinkNodes(line, i)...)
 			} else {
-				// Scan for inline backtick spans and links on this line
+				// Scan for inline backtick spans and links (including on heading lines)
 				nodes = append(nodes, extractInlineNodes(line, i)...)
 				nodes = append(nodes, extractLinkNodes(line, i)...)
 			}
@@ -552,13 +554,24 @@ func extractLinkNodes(line string, lineIdx int) []codeNode {
 	return nodes
 }
 
+// filteredNodeIndices returns the indices into a.codeNodes for each node
+// matching the current sub-mode filter.
+func (a *App) filteredNodeIndices() []int {
+	var indices []int
+	for i, n := range a.codeNodes {
+		if n.kind == a.nodeSubMode {
+			indices = append(indices, i)
+		}
+	}
+	return indices
+}
+
 // filteredNodes returns only the codeNodes matching the current sub-mode.
 func (a *App) filteredNodes() []codeNode {
-	var result []codeNode
-	for _, n := range a.codeNodes {
-		if n.kind == a.nodeSubMode {
-			result = append(result, n)
-		}
+	indices := a.filteredNodeIndices()
+	result := make([]codeNode, len(indices))
+	for i, idx := range indices {
+		result[i] = a.codeNodes[idx]
 	}
 	return result
 }
@@ -886,47 +899,7 @@ func (a *App) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.contentOffset = len(a.activeLines())
 		a.clampContentOffset()
 	case config.KeyMatches(k, km.NodeSelect):
-		// Enter node selection mode
-		if len(a.codeNodes) > 0 {
-			a.mode = ModeNodeSelect
-			a.nodeSubMode = nodeCodeBlock
-			a.nodeSelIdx = 0
-			// Find first node of current sub-mode visible at scroll position
-			filtered := a.filteredNodes()
-			if len(filtered) == 0 {
-				// Try next sub-modes
-				for try := 1; try < 3; try++ {
-					a.nodeSubMode = (a.nodeSubMode + nodeKind(try)) % 3
-					filtered = a.filteredNodes()
-					if len(filtered) > 0 {
-						break
-					}
-				}
-			}
-			if len(filtered) == 0 {
-				a.mode = ModeNormal
-				a.statusMsg = "No selectable nodes in this section"
-			} else {
-				a.ensureRenderedLines()
-				for i, node := range filtered {
-					// Find this node's render info
-					for j, n := range a.codeNodes {
-						if n.startLine == node.startLine && n.colStart == node.colStart && n.kind == node.kind {
-							if a.nodeRenderInfo != nil && j < len(a.nodeRenderInfo) && a.nodeRenderInfo[j].firstLine >= a.contentOffset {
-								a.nodeSelIdx = i
-								goto foundNode
-							}
-							break
-						}
-					}
-				}
-			foundNode:
-				a.scrollContentToNodeByRef(filtered[a.nodeSelIdx])
-				a.statusMsg = ""
-			}
-		} else {
-			a.statusMsg = "No selectable nodes in this section"
-		}
+		a.enterNodeSelectMode()
 	case config.KeyMatches(k, km.ContentSearch):
 		a.mode = ModeContentSearch
 		a.contentSearchQuery = ""
@@ -966,6 +939,52 @@ func (a *App) clampContentOffset() {
 }
 
 // ─────────────────────────────────────────────
+// Node selection mode
+// ─────────────────────────────────────────────
+
+// enterNodeSelectMode transitions to ModeNodeSelect, picking the first sub-mode
+// that has nodes and scrolling to the first visible node at the current offset.
+func (a *App) enterNodeSelectMode() {
+	if len(a.codeNodes) == 0 {
+		a.statusMsg = "No selectable nodes in this section"
+		return
+	}
+
+	a.mode = ModeNodeSelect
+	a.nodeSubMode = nodeCodeBlock
+	a.nodeSelIdx = 0
+
+	// Find the first sub-mode that has nodes
+	if len(a.filteredNodeIndices()) == 0 {
+		for _, mode := range []nodeKind{nodeInlineCode, nodeLink} {
+			a.nodeSubMode = mode
+			if len(a.filteredNodeIndices()) > 0 {
+				break
+			}
+		}
+	}
+
+	indices := a.filteredNodeIndices()
+	if len(indices) == 0 {
+		a.mode = ModeNormal
+		a.statusMsg = "No selectable nodes in this section"
+		return
+	}
+
+	// Find the first filtered node visible at the current scroll position
+	a.ensureRenderedLines()
+	for i, idx := range indices {
+		if a.nodeRenderInfo != nil && idx < len(a.nodeRenderInfo) && a.nodeRenderInfo[idx].firstLine >= a.contentOffset {
+			a.nodeSelIdx = i
+			break
+		}
+	}
+
+	a.scrollToFilteredNode(a.nodeSelIdx)
+	a.statusMsg = ""
+}
+
+// ─────────────────────────────────────────────
 // Node selection mode keys
 // ─────────────────────────────────────────────
 
@@ -979,21 +998,18 @@ func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.copyMsg = ""
 	case k == "m":
 		// Cycle sub-mode: code -> inline -> links -> code ...
-		a.nodeSubMode = (a.nodeSubMode + 1) % 3
+		a.nodeSubMode = (a.nodeSubMode + 1) % nodeKindCount
 		a.nodeSelIdx = 0
-		filtered = a.filteredNodes()
-		if len(filtered) > 0 {
-			a.scrollContentToNodeByRef(filtered[0])
-		}
+		a.scrollToFilteredNode(0)
 	case config.KeyMatches(k, km.NodeNext):
 		if len(filtered) > 0 {
 			a.nodeSelIdx = (a.nodeSelIdx + 1) % len(filtered)
-			a.scrollContentToNodeByRef(filtered[a.nodeSelIdx])
+			a.scrollToFilteredNode(a.nodeSelIdx)
 		}
 	case config.KeyMatches(k, km.NodePrev):
 		if len(filtered) > 0 {
 			a.nodeSelIdx = (a.nodeSelIdx - 1 + len(filtered)) % len(filtered)
-			a.scrollContentToNodeByRef(filtered[a.nodeSelIdx])
+			a.scrollToFilteredNode(a.nodeSelIdx)
 		}
 	case config.KeyMatches(k, km.NodeCopy):
 		if len(filtered) > 0 {
@@ -1056,13 +1072,11 @@ func (a *App) scrollContentToNode(nodeIdx int) {
 	}
 }
 
-// scrollContentToNodeByRef finds a node in codeNodes by value and scrolls to it.
-func (a *App) scrollContentToNodeByRef(node codeNode) {
-	for i, n := range a.codeNodes {
-		if n.startLine == node.startLine && n.colStart == node.colStart && n.kind == node.kind {
-			a.scrollContentToNode(i)
-			return
-		}
+// scrollToFilteredNode scrolls to the node at filteredIdx within the current sub-mode.
+func (a *App) scrollToFilteredNode(filteredIdx int) {
+	indices := a.filteredNodeIndices()
+	if filteredIdx >= 0 && filteredIdx < len(indices) {
+		a.scrollContentToNode(indices[filteredIdx])
 	}
 }
 
@@ -1523,33 +1537,20 @@ func (a *App) renderContentWidth(w int) string {
 // newline-joined string of exactly h lines, each at most w columns wide.
 // In ModeNodeSelect it overlays background highlights on selectable nodes.
 func (a *App) renderContentGlamour(w, h int) string {
-	// Rebuild rendered lines if section or width changed.
-	if a.renderedLinesIdx != a.selectedIdx || a.renderedLinesWidth != w {
-		markdown := strings.Join(a.sectionLines, "\n")
-		a.renderedLines = a.renderGlamour(markdown, w)
-		a.renderedLinesIdx = a.selectedIdx
-		a.renderedLinesWidth = w
-		a.nodeRenderInfo = mapNodesToRenderedLines(a.codeNodes, a.renderedLines)
-		// Re-clamp offset now that renderedLines is fresh.
-		a.clampContentOffset()
-	}
+	a.ensureRenderedLines()
 
 	lines := a.renderedLines
 
 	// In node-select mode, highlight only the filtered nodes.
 	if a.mode == ModeNodeSelect {
-		filtered := a.filteredNodes()
-		if len(filtered) > 0 {
-			// Map filtered nodes back to indices in a.codeNodes for render info lookup
-			var filteredInfo []nodeRenderLoc
-			for _, fn := range filtered {
-				for j, n := range a.codeNodes {
-					if n.startLine == fn.startLine && n.colStart == fn.colStart && n.kind == fn.kind {
-						if j < len(a.nodeRenderInfo) {
-							filteredInfo = append(filteredInfo, a.nodeRenderInfo[j])
-						}
-						break
-					}
+		indices := a.filteredNodeIndices()
+		if len(indices) > 0 {
+			filtered := make([]codeNode, len(indices))
+			filteredInfo := make([]nodeRenderLoc, len(indices))
+			for i, idx := range indices {
+				filtered[i] = a.codeNodes[idx]
+				if idx < len(a.nodeRenderInfo) {
+					filteredInfo[i] = a.nodeRenderInfo[idx]
 				}
 			}
 			lines = applyNodeHighlights(lines, filtered, a.nodeSelIdx, filteredInfo, a.theme, w)
@@ -2107,7 +2108,7 @@ func (a *App) overlayHelp(background string) string {
   Press any key to dismiss`, focusState)
 
 	// Fixed modal width
-	modalW := 60
+	modalW := helpModalWidth
 	if modalW > a.width-4 {
 		modalW = a.width - 4
 	}

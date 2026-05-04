@@ -27,7 +27,7 @@ The Go version in `go.mod` is `1.26.2` — use the matching toolchain to avoid t
 | Vet | `go vet ./...` |
 | Format | `gofmt -w .` |
 
-Only `internal/parser` has tests.
+Only `internal/parser` and `internal/tui` have tests.
 
 ## Architecture Notes
 
@@ -35,9 +35,9 @@ Only `internal/parser` has tests.
 - **Two execution modes** selected by flags:
   1. TUI (default, no flags): `gomd file.md`
   2. CLI (`--list`, `--tree`, `--count`, `--section`): non-interactive output
-- Subcommand: `gomd at-line <LINE> <file>` — finds heading at/before line number.
-- Input resolution: explicit arg → stdin → first `.md` in cwd → first `.md` in given dir.
-- Config file: `~/.config/gomd/config.toml` (TOML, keys: `[ui]`, `[terminal]`, `[images]`, `[content]`).
+- Subcommand: none (at-line was removed).
+- Input resolution: explicit arg → stdin → help and exit.
+- Config file: `~/.config/gomd/config.toml` (TOML, keys: `[ui]`, `[terminal]`, `[images]`, `[content]`, `[keys]`).
 
 ## Package Boundaries
 

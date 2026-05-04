@@ -64,15 +64,6 @@ Examples:
 	rootCmd.Flags().BoolVar(&flagNoImages, "no-images", false, "Disable image rendering")
 	rootCmd.Flags().BoolVar(&flagImages, "images", false, "Enable image rendering (override config)")
 
-	// at-line subcommand
-	atLineCmd := &cobra.Command{
-		Use:   "at-line <LINE>",
-		Short: "Find heading at or before a specific line number",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runAtLine,
-	}
-	rootCmd.AddCommand(atLineCmd)
-
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
@@ -82,6 +73,9 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	// Load input
 	inp, filePath, err := loadInput(args)
 	if err != nil {
+		if len(args) == 0 && !input.IsStdinPiped() {
+			return cmd.Help()
+		}
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
@@ -108,30 +102,6 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	return tui.Run(doc, filename, filePath, cfg)
 }
 
-func runAtLine(cmd *cobra.Command, args []string) error {
-	var line int
-	if _, err := fmt.Sscanf(args[0], "%d", &line); err != nil {
-		return fmt.Errorf("invalid line number: %q", args[0])
-	}
-
-	// Get file from parent flags
-	parentArgs := cmd.Parent().Flags().Args()
-	inp, _, err := loadInput(parentArgs)
-	if err != nil {
-		return err
-	}
-
-	doc := parser.ParseMarkdown(inp.Content)
-	h := doc.HeadingAtLine(line)
-	if h == nil {
-		fmt.Println("No heading found at or before line", line)
-		return nil
-	}
-
-	fmt.Printf("%s %s (line %d)\n", strings.Repeat("#", h.Level), h.Text, h.Line)
-	return nil
-}
-
 func loadInput(args []string) (*input.Input, string, error) {
 	switch len(args) {
 	case 0:
@@ -139,25 +109,8 @@ func loadInput(args []string) (*input.Input, string, error) {
 			inp, err := input.ReadStdin()
 			return inp, "", err
 		}
-		// No args, no stdin: look for markdown files in cwd
-		entries, _ := os.ReadDir(".")
-		var mdFiles []string
-		for _, e := range entries {
-			if !e.IsDir() {
-				name := e.Name()
-				if strings.HasSuffix(name, ".md") || strings.HasSuffix(name, ".markdown") {
-					mdFiles = append(mdFiles, name)
-				}
-			}
-		}
-		if len(mdFiles) == 0 {
-			fmt.Fprintln(os.Stderr, "No markdown files found.")
-			fmt.Fprintln(os.Stderr, "Usage: gomd [OPTIONS] <FILE>")
-			os.Exit(0)
-		}
-		// Use first found file
-		inp, err := input.ReadFile(mdFiles[0])
-		return inp, mdFiles[0], err
+		// No args, no stdin: print help and exit
+		return nil, "", fmt.Errorf("no file specified")
 	case 1:
 		path := args[0]
 		if path == "-" {

@@ -34,9 +34,9 @@ Requires Go 1.22+.
 
 ```
 gomd file.md          # open a file
-gomd                  # open first .md in current directory
 gomd some/dir/        # open first .md in directory
 cat file.md | gomd    # read from stdin
+gomd                  # print help
 ```
 
 #### Key bindings
@@ -74,7 +74,6 @@ gomd -L 2 file.md                # only h2 headings
 gomd --filter "install" file.md  # filter by text
 gomd --count file.md             # count by level
 gomd -s "Installation" file.md   # extract section
-gomd at-line 42 file.md          # heading at line number
 ```
 
 ## Configuration
@@ -139,11 +138,7 @@ Key bindings use comma-separated values for multiple keys mapped to the same act
 
 ## Input resolution
 
-When no file argument is given, `gomd` tries in order:
-
-1. stdin (if not a TTY)
-2. First `.md` file in the current directory
-3. First `.md` file in a given directory argument
+When no file argument is given, `gomd` reads from stdin if piped, otherwise prints help and exits.
 
 ## License
 
