@@ -630,28 +630,29 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Normal mode — shared keys regardless of focus
-	switch k {
-	case "q":
+	km := a.cfg.Keys
+	switch {
+	case config.KeyMatches(k, km.Quit):
 		if a.watcher != nil {
 			a.watcher.Close()
 		}
 		return a, tea.Quit
-	case "?":
+	case config.KeyMatches(k, km.Help):
 		a.mode = ModeHelp
 		return a, nil
-	case "T":
+	case config.KeyMatches(k, km.ThemePicker):
 		a.mode = ModeThemePicker
 		return a, nil
-	case "tab":
+	case config.KeyMatches(k, km.ToggleFocus):
 		a.toggleFocus()
 		return a, nil
-	case "w":
+	case config.KeyMatches(k, km.ToggleSidebar):
 		a.sidebarHidden = !a.sidebarHidden
 		if a.sidebarHidden {
 			a.focus = FocusContent
 		}
 		return a, nil
-	case "r":
+	case config.KeyMatches(k, km.Reload):
 		if a.filepath != "" && a.filepath != "<stdin>" {
 			data, err := os.ReadFile(a.filepath)
 			if err == nil {
@@ -662,7 +663,7 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return a, nil
-	case "e":
+	case config.KeyMatches(k, km.Edit):
 		if a.filepath != "" && a.filepath != "<stdin>" {
 			return a, openEditorCmd(a.filepath)
 		}
@@ -693,32 +694,34 @@ func (a *App) toggleFocus() {
 // ─────────────────────────────────────────────
 
 func (a *App) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "j", "down":
+	k := msg.String()
+	km := a.cfg.Keys
+	switch {
+	case config.KeyMatches(k, km.SidebarDown):
 		a.moveSidebarDown(1)
-	case "k", "up":
+	case config.KeyMatches(k, km.SidebarUp):
 		a.moveSidebarUp(1)
-	case "pgdown":
+	case k == "pgdown":
 		a.moveSidebarDown(a.outlineHeight())
-	case "pgup":
+	case k == "pgup":
 		a.moveSidebarUp(a.outlineHeight())
-	case "g":
+	case config.KeyMatches(k, km.SidebarTop):
 		a.selectedIdx = -1
 		a.scrollOutlineToSelected()
 		a.rebuildSection()
-	case "G":
+	case config.KeyMatches(k, km.SidebarBottom):
 		if len(a.doc.Headings) > 0 {
 			a.selectedIdx = len(a.doc.Headings) - 1
 		}
 		a.scrollOutlineToSelected()
 		a.rebuildSection()
-	case "/":
+	case config.KeyMatches(k, km.SidebarSearch):
 		a.mode = ModeSearch
 		a.searchQuery = ""
 		a.searchMatches = nil
-	case "n":
+	case config.KeyMatches(k, km.NextMatch):
 		a.nextSearchMatch()
-	case "N":
+	case config.KeyMatches(k, km.PrevMatch):
 		a.prevSearchMatch()
 	}
 	return a, nil
@@ -783,21 +786,23 @@ func (a *App) scrollOutlineToSelected() {
 // ─────────────────────────────────────────────
 
 func (a *App) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "j", "down":
+	k := msg.String()
+	km := a.cfg.Keys
+	switch {
+	case config.KeyMatches(k, km.ScrollDown):
 		a.scrollContent(1)
-	case "k", "up":
+	case config.KeyMatches(k, km.ScrollUp):
 		a.scrollContent(-1)
-	case "ctrl+d", "ctrl+f", "pgdown":
+	case config.KeyMatches(k, km.ScrollHalfDown):
 		a.scrollContent(a.contentHeight() / 2)
-	case "ctrl+u", "ctrl+b", "pgup":
+	case config.KeyMatches(k, km.ScrollHalfUp):
 		a.scrollContent(-a.contentHeight() / 2)
-	case "g":
+	case config.KeyMatches(k, km.ContentTop):
 		a.contentOffset = 0
-	case "G":
+	case config.KeyMatches(k, km.ContentBottom):
 		a.contentOffset = len(a.activeLines())
 		a.clampContentOffset()
-	case "i":
+	case config.KeyMatches(k, km.NodeSelect):
 		// Enter node selection mode if there are code blocks
 		if len(a.codeNodes) > 0 {
 			a.mode = ModeNodeSelect
@@ -807,14 +812,14 @@ func (a *App) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			a.statusMsg = "No code blocks in this section"
 		}
-	case "/":
+	case config.KeyMatches(k, km.ContentSearch):
 		a.mode = ModeContentSearch
 		a.contentSearchQuery = ""
 		a.contentSearchMatches = nil
 		a.contentSearchIdx = 0
-	case "n":
+	case config.KeyMatches(k, km.ContentNextMatch):
 		a.nextContentSearchMatch()
-	case "N":
+	case config.KeyMatches(k, km.ContentPrevMatch):
 		a.prevContentSearchMatch()
 	}
 	return a, nil
@@ -850,21 +855,23 @@ func (a *App) clampContentOffset() {
 // ─────────────────────────────────────────────
 
 func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc", "q", "i":
+	k := msg.String()
+	km := a.cfg.Keys
+	switch {
+	case config.KeyMatches(k, km.NodeExit):
 		a.mode = ModeNormal
 		a.copyMsg = ""
-	case "j", "down", "tab":
+	case config.KeyMatches(k, km.NodeNext):
 		if len(a.codeNodes) > 0 {
 			a.nodeSelIdx = (a.nodeSelIdx + 1) % len(a.codeNodes)
 			a.scrollContentToNode(a.nodeSelIdx)
 		}
-	case "k", "up", "shift+tab":
+	case config.KeyMatches(k, km.NodePrev):
 		if len(a.codeNodes) > 0 {
 			a.nodeSelIdx = (a.nodeSelIdx - 1 + len(a.codeNodes)) % len(a.codeNodes)
 			a.scrollContentToNode(a.nodeSelIdx)
 		}
-	case "y":
+	case config.KeyMatches(k, km.NodeCopy):
 		if len(a.codeNodes) > 0 {
 			node := a.codeNodes[a.nodeSelIdx]
 			if err := clipboard.WriteAll(node.content); err != nil {
