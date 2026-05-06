@@ -224,7 +224,7 @@ func TestResponsiveSidebarWidth(t *testing.T) {
 }
 
 func TestJumpLabelGeneration(t *testing.T) {
-	// Should generate unique labels
+	// Should generate unique single-char labels
 	labels := generateLabels(5)
 	if len(labels) != 5 {
 		t.Fatalf("expected 5 labels, got %d", len(labels))
@@ -234,18 +234,16 @@ func TestJumpLabelGeneration(t *testing.T) {
 		if seen[l] {
 			t.Errorf("duplicate label: %q", l)
 		}
+		if len(l) != 1 {
+			t.Errorf("expected single char label, got %q", l)
+		}
 		seen[l] = true
 	}
 
-	// More than 24 items should use two-char labels
+	// Requesting more than 24 should cap at 24
 	labels = generateLabels(30)
-	if len(labels) != 30 {
-		t.Fatalf("expected 30 labels, got %d", len(labels))
-	}
-	for _, l := range labels[24:] {
-		if len(l) != 2 {
-			t.Errorf("expected 2-char label after first 24, got %q (len=%d)", l, len(l))
-		}
+	if len(labels) != 24 {
+		t.Fatalf("expected 24 labels (capped), got %d", len(labels))
 	}
 }
 

@@ -1131,7 +1131,7 @@ func (a *App) enterNodeSelectMode() {
 	a.statusMsg = ""
 }
 
-// enterJumpMode activates EasyMotion-style jump labels for all selectable nodes.
+// enterJumpMode activates EasyMotion-style jump labels for visible selectable nodes.
 func (a *App) enterJumpMode() {
 	if len(a.codeNodes) == 0 {
 		a.statusMsg = "No selectable nodes in this section"
@@ -1139,30 +1139,43 @@ func (a *App) enterJumpMode() {
 	}
 	a.ensureRenderedLines()
 
-	// Generate unique labels for all nodes
-	labels := generateLabels(len(a.codeNodes))
-	a.jumpLabels = make(map[string]int, len(a.codeNodes))
+	// Find nodes visible on screen
+	visibleStart := a.contentOffset
+	visibleEnd := a.contentOffset + a.contentHeight()
+
+	var visibleNodes []int
+	for i, info := range a.nodeRenderInfo {
+		if info.firstLine >= visibleStart && info.firstLine < visibleEnd {
+			visibleNodes = append(visibleNodes, i)
+		}
+	}
+
+	if len(visibleNodes) == 0 {
+		a.statusMsg = "No selectable nodes visible"
+		return
+	}
+
+	// Generate single-char labels only for visible nodes (max 24)
+	labels := generateLabels(len(visibleNodes))
+	a.jumpLabels = make(map[string]int, len(labels))
 	for i, lbl := range labels {
-		a.jumpLabels[lbl] = i
+		a.jumpLabels[lbl] = visibleNodes[i]
 	}
 	a.jumpInput = ""
 	a.mode = ModeJump
 }
 
-// generateLabels produces unique short labels (a-z, then aa-zz) for n items.
+// generateLabels produces unique single-character labels (a-z, skipping f and q).
 func generateLabels(n int) []string {
-	// Use single chars first (a-z), then two-char combos
-	chars := "abcdeghijklmnoprstuvwxyz" // skip f,q which are used as keys
-	labels := make([]string, 0, n)
-	for i := 0; i < len(chars) && len(labels) < n; i++ {
-		labels = append(labels, string(chars[i]))
+	chars := "abcdeghijklmnoprstuvwxyz" // 24 chars, skip f and q
+	if n > len(chars) {
+		n = len(chars)
 	}
-	for i := 0; i < len(chars) && len(labels) < n; i++ {
-		for j := 0; j < len(chars) && len(labels) < n; j++ {
-			labels = append(labels, string(chars[i])+string(chars[j]))
-		}
+	labels := make([]string, n)
+	for i := 0; i < n; i++ {
+		labels[i] = string(chars[i])
 	}
-	return labels[:n]
+	return labels
 }
 
 // handleJumpKey processes input during jump mode.
