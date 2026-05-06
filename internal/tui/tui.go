@@ -1053,6 +1053,19 @@ func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.copyMsg = ""
 			a.mode = ModeNormal
 		}
+	case k == "enter" && a.nodeSubMode == nodeLink:
+		if len(filtered) > 0 {
+			node := filtered[a.nodeSelIdx]
+			url := node.content
+			if url != "" {
+				cmd := exec.Command("xdg-open", url)
+				cmd.Stdout = nil
+				cmd.Stderr = nil
+				_ = cmd.Start()
+				a.statusMsg = fmt.Sprintf("Opened: %s", url)
+				a.mode = ModeNormal
+			}
+		}
 	}
 	return a, nil
 }

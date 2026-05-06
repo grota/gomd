@@ -37,7 +37,9 @@ Only `internal/parser` and `internal/tui` have tests.
   2. CLI (`--list`, `--tree`, `--count`, `--section`): non-interactive output
 - Subcommand: none (at-line was removed).
 - Input resolution: explicit arg → stdin → help and exit.
-- Config file: `~/.config/gomd/config.toml` (TOML, keys: `[ui]`, `[terminal]`, `[images]`, `[content]`, `[keys]`).
+- Config file: `~/.config/gomd/config.toml` (TOML, sections: `[ui]`, `[terminal]`, `[images]`, `[content]`, `[keys]`).
+- Config structure is defined in `internal/config/config.go` (struct fields + defaults in `DefaultConfig()`).
+- When adding, changing, or removing a config field or keybinding: update the struct, its default, and the help overlay in the TUI.
 
 ## Package Boundaries
 
