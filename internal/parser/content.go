@@ -1,9 +1,13 @@
 package parser
 
 import (
-	"bufio"
-	"regexp"
 	"strings"
+
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	east "github.com/yuin/goldmark/extension/ast"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/text"
 )
 
 // CodeBlock represents a fenced code block in a markdown document.
@@ -73,50 +77,82 @@ type List struct {
 	Items   []ListItem
 }
 
-var (
-	reLinkInline = regexp.MustCompile(`\[([^\]]*)\]\(([^)]*)\)`)
-	reWikiLink   = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
-	reImage      = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]*?)(?:\s+"([^"]*)")?\)`)
-	reTableRow   = regexp.MustCompile(`^\|(.+)\|$`)
-	reTableSep   = regexp.MustCompile(`^\|[-| :]+\|$`)
-	reCheckbox   = regexp.MustCompile(`^\[([xX ])\]\s+`)
-)
+// newGoldmarkParser creates a goldmark instance with table extension.
+func newGoldmarkParser() goldmark.Markdown {
+	return goldmark.New(
+		goldmark.WithExtensions(extension.Table),
+	)
+}
 
 // ExtractLinks extracts all links from markdown content.
 func ExtractLinks(content string) []Link {
+	source := []byte(content)
+	md := newGoldmarkParser()
+	reader := text.NewReader(source)
+	doc := md.Parser().Parse(reader)
+
 	var links []Link
-
-	// Inline links [text](url)
-	for _, m := range reLinkInline.FindAllStringSubmatchIndex(content, -1) {
-		text := content[m[2]:m[3]]
-		url := content[m[4]:m[5]]
-
-		lt := classifyURL(url)
-		links = append(links, Link{
-			Text:   text,
-			URL:    url,
-			Type:   lt,
-			Offset: m[0],
-		})
-	}
-
-	// WikiLinks [[target]] or [[target|alias]]
-	for _, m := range reWikiLink.FindAllStringSubmatchIndex(content, -1) {
-		inner := content[m[2]:m[3]]
-		parts := strings.SplitN(inner, "|", 2)
-		target := parts[0]
-		text := target
-		if len(parts) == 2 {
-			text = parts[1]
+	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		links = append(links, Link{
-			Text:   text,
-			URL:    target,
-			Type:   LinkTypeWikiLink,
-			Offset: m[0],
-		})
-	}
+		if link, ok := n.(*ast.Link); ok {
+			url := string(link.Destination)
+			linkText := extractPlainText(link, source)
+			offset := 0
+			// Find the offset of the link in source by looking at first child
+			if link.FirstChild() != nil {
+				if t, ok := link.FirstChild().(*ast.Text); ok {
+					// The `[` is one byte before the text segment start
+					offset = t.Segment.Start - 1
+				}
+			}
+			links = append(links, Link{
+				Text:   linkText,
+				URL:    url,
+				Type:   classifyURL(url),
+				Offset: offset,
+			})
+		}
+		return ast.WalkContinue, nil
+	})
 
+	// WikiLinks are not supported natively by goldmark, use regex fallback
+	links = append(links, extractWikiLinks(content)...)
+
+	return links
+}
+
+// extractWikiLinks extracts [[target]] or [[target|alias]] links.
+func extractWikiLinks(content string) []Link {
+	var links []Link
+	i := 0
+	for i < len(content)-3 {
+		if content[i] == '[' && content[i+1] == '[' {
+			// Find closing ]]
+			end := strings.Index(content[i+2:], "]]")
+			if end < 0 {
+				i++
+				continue
+			}
+			inner := content[i+2 : i+2+end]
+			parts := strings.SplitN(inner, "|", 2)
+			target := parts[0]
+			linkText := target
+			if len(parts) == 2 {
+				linkText = parts[1]
+			}
+			links = append(links, Link{
+				Text:   linkText,
+				URL:    target,
+				Type:   LinkTypeWikiLink,
+				Offset: i,
+			})
+			i = i + 2 + end + 2
+		} else {
+			i++
+		}
+	}
 	return links
 }
 
@@ -131,89 +167,136 @@ func classifyURL(url string) LinkType {
 	return LinkTypeRelative
 }
 
+// extractPlainText extracts plain text from an inline node.
+func extractPlainText(n ast.Node, source []byte) string {
+	var sb strings.Builder
+	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+		if t, ok := child.(*ast.Text); ok {
+			sb.Write(t.Segment.Value(source))
+		} else {
+			sb.WriteString(extractPlainText(child, source))
+		}
+	}
+	return sb.String()
+}
+
 // ExtractImages extracts all images from markdown content.
 func ExtractImages(content string) []Image {
+	source := []byte(content)
+	md := newGoldmarkParser()
+	reader := text.NewReader(source)
+	doc := md.Parser().Parse(reader)
+
 	var images []Image
-	for _, m := range reImage.FindAllStringSubmatch(content, -1) {
-		img := Image{
-			Alt: m[1],
-			Src: m[2],
+	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		if len(m) > 3 {
-			img.Title = m[3]
+		if img, ok := n.(*ast.Image); ok {
+			images = append(images, Image{
+				Alt:   extractPlainText(img, source),
+				Src:   string(img.Destination),
+				Title: string(img.Title),
+			})
 		}
-		images = append(images, img)
-	}
+		return ast.WalkContinue, nil
+	})
 	return images
 }
 
 // ExtractCodeBlocks extracts fenced code blocks from markdown.
 func ExtractCodeBlocks(content string) []CodeBlock {
+	source := []byte(content)
+	md := newGoldmarkParser()
+	reader := text.NewReader(source)
+	doc := md.Parser().Parse(reader)
+
+	lineOffsets := buildLineOffsets(source)
+
 	var blocks []CodeBlock
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	lineNum := 0
-	inBlock := false
-	var fence, lang string
-	var blockLines []string
-	var startLine int
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		lineNum++
-		trimmed := strings.TrimLeft(line, " \t")
-
-		if !inBlock {
-			if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-				inBlock = true
-				fence = trimmed[:3]
-				lang = strings.TrimSpace(trimmed[3:])
-				startLine = lineNum
-				blockLines = nil
-			}
-		} else {
-			if strings.HasPrefix(trimmed, fence) {
-				blocks = append(blocks, CodeBlock{
-					Language:  lang,
-					Content:   strings.Join(blockLines, "\n"),
-					StartLine: startLine,
-					EndLine:   lineNum,
-				})
-				inBlock = false
-				fence = ""
-				lang = ""
-				blockLines = nil
-			} else {
-				blockLines = append(blockLines, line)
-			}
+	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-	}
+		if fb, ok := n.(*ast.FencedCodeBlock); ok {
+			lang := ""
+			if fb.Info != nil {
+				lang = strings.TrimSpace(string(fb.Info.Segment.Value(source)))
+			}
 
+			// Collect content lines
+			var contentLines []string
+			for i := 0; i < fb.Lines().Len(); i++ {
+				seg := fb.Lines().At(i)
+				line := string(seg.Value(source))
+				// Remove trailing newline
+				line = strings.TrimRight(line, "\n")
+				contentLines = append(contentLines, line)
+			}
+
+			// Determine start/end lines
+			// The fence opening is one line before the first content line
+			startLine := 1
+			if fb.Lines().Len() > 0 {
+				firstSeg := fb.Lines().At(0)
+				startLine = offsetToLine(lineOffsets, firstSeg.Start) - 1
+			}
+			// The fence closing is one line after the last content line
+			endLine := startLine + len(contentLines) + 1
+			if fb.Lines().Len() > 0 {
+				lastSeg := fb.Lines().At(fb.Lines().Len() - 1)
+				endLine = offsetToLine(lineOffsets, lastSeg.Stop)
+			}
+
+			blocks = append(blocks, CodeBlock{
+				Language:  lang,
+				Content:   strings.Join(contentLines, "\n"),
+				StartLine: startLine,
+				EndLine:   endLine,
+			})
+		}
+		return ast.WalkContinue, nil
+	})
 	return blocks
 }
 
 // ExtractTables extracts markdown tables.
 func ExtractTables(content string) []Table {
-	var tables []Table
-	lines := strings.Split(content, "\n")
-	i := 0
-	for i < len(lines) {
-		line := strings.TrimSpace(lines[i])
-		if reTableRow.MatchString(line) && i+1 < len(lines) && reTableSep.MatchString(strings.TrimSpace(lines[i+1])) {
-			// Parse header row
-			headers := parseTableRow(line)
-			// Parse separator for alignments
-			alignments := parseTableAlignments(strings.TrimSpace(lines[i+1]))
-			i += 2
+	source := []byte(content)
+	md := newGoldmarkParser()
+	reader := text.NewReader(source)
+	doc := md.Parser().Parse(reader)
 
-			// Parse data rows
+	var tables []Table
+	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		if tbl, ok := n.(*east.Table); ok {
+			var headers []string
+			var alignments []string
 			var rows [][]string
-			for i < len(lines) {
-				rowLine := strings.TrimSpace(lines[i])
-				if !reTableRow.MatchString(rowLine) {
-					break
+
+			for child := tbl.FirstChild(); child != nil; child = child.NextSibling() {
+				switch row := child.(type) {
+				case *east.TableHeader:
+					// Header row
+					for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
+						if tc, ok := cell.(*east.TableCell); ok {
+							headers = append(headers, extractPlainText(tc, source))
+							alignments = append(alignments, alignmentToString(tc.Alignment))
+						}
+					}
+				case *east.TableRow:
+					// Data row
+					var rowCells []string
+					for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
+						if tc, ok := cell.(*east.TableCell); ok {
+							rowCells = append(rowCells, extractPlainText(tc, source))
+						}
+					}
+					rows = append(rows, rowCells)
 				}
-				rows = append(rows, parseTableRow(rowLine))
-				i++
 			}
 
 			tables = append(tables, Table{
@@ -221,100 +304,112 @@ func ExtractTables(content string) []Table {
 				Rows:       rows,
 				Alignments: alignments,
 			})
-		} else {
-			i++
 		}
-	}
+		return ast.WalkContinue, nil
+	})
 	return tables
 }
 
-func parseTableRow(line string) []string {
-	// Remove leading/trailing pipes
-	line = strings.TrimPrefix(line, "|")
-	line = strings.TrimSuffix(line, "|")
-	cells := strings.Split(line, "|")
-	for i, c := range cells {
-		cells[i] = strings.TrimSpace(c)
+func alignmentToString(a east.Alignment) string {
+	switch a {
+	case east.AlignLeft:
+		return "left"
+	case east.AlignRight:
+		return "right"
+	case east.AlignCenter:
+		return "center"
+	default:
+		return "left"
 	}
-	return cells
-}
-
-func parseTableAlignments(line string) []string {
-	cells := parseTableRow(line)
-	alignments := make([]string, len(cells))
-	for i, c := range cells {
-		c = strings.TrimSpace(c)
-		left := strings.HasPrefix(c, ":")
-		right := strings.HasSuffix(c, ":")
-		if left && right {
-			alignments[i] = "center"
-		} else if right {
-			alignments[i] = "right"
-		} else {
-			alignments[i] = "left"
-		}
-	}
-	return alignments
 }
 
 // ExtractLists extracts markdown lists.
 func ExtractLists(content string) []List {
+	source := []byte(content)
+	md := newGoldmarkParser()
+	reader := text.NewReader(source)
+	doc := md.Parser().Parse(reader)
+
 	var lists []List
-	lines := strings.Split(content, "\n")
-	i := 0
-	for i < len(lines) {
-		line := lines[i]
-		stripped := strings.TrimSpace(line)
-		if isListItem(stripped) {
-			ordered := isOrderedListItem(stripped)
-			var items []ListItem
-			for i < len(lines) {
-				l := strings.TrimSpace(lines[i])
-				if !isListItem(l) {
-					break
-				}
-				itemText := extractListItemText(l)
-				item := ListItem{Content: itemText}
-				if m := reCheckbox.FindStringIndex(itemText); m != nil {
-					checked := strings.ToLower(itemText[1:2]) == "x"
-					item.Checked = &checked
-					item.Content = strings.TrimSpace(itemText[m[1]:])
-				}
-				items = append(items, item)
-				i++
-			}
-			lists = append(lists, List{Ordered: ordered, Items: items})
-		} else {
-			i++
+	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-	}
+		if list, ok := n.(*ast.List); ok {
+			l := List{Ordered: list.IsOrdered()}
+
+			for child := list.FirstChild(); child != nil; child = child.NextSibling() {
+				if li, ok := child.(*ast.ListItem); ok {
+					item := ListItem{}
+
+					// Extract text content from list item
+					var textContent string
+					for liChild := li.FirstChild(); liChild != nil; liChild = liChild.NextSibling() {
+						if para, ok := liChild.(*ast.TextBlock); ok {
+							textContent = extractListItemContent(para, source)
+						} else if para, ok := liChild.(*ast.Paragraph); ok {
+							textContent = extractListItemContent(para, source)
+						}
+					}
+
+					// Check for task list checkbox
+					if tb, ok := child.(*ast.ListItem); ok && tb.HasChildren() {
+						rawLine := getFirstLineRaw(tb, source)
+						if strings.HasPrefix(rawLine, "[x] ") || strings.HasPrefix(rawLine, "[X] ") {
+							checked := true
+							item.Checked = &checked
+							textContent = strings.TrimSpace(rawLine[4:])
+						} else if strings.HasPrefix(rawLine, "[ ] ") {
+							checked := false
+							item.Checked = &checked
+							textContent = strings.TrimSpace(rawLine[4:])
+						}
+					}
+
+					item.Content = textContent
+					l.Items = append(l.Items, item)
+				}
+			}
+
+			lists = append(lists, l)
+			return ast.WalkSkipChildren, nil
+		}
+		return ast.WalkContinue, nil
+	})
 	return lists
 }
 
-func isListItem(line string) bool {
-	return isUnorderedListItem(line) || isOrderedListItem(line)
+// extractListItemContent extracts text from a paragraph or text block node.
+func extractListItemContent(n ast.Node, source []byte) string {
+	var sb strings.Builder
+	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+		if t, ok := child.(*ast.Text); ok {
+			sb.Write(t.Segment.Value(source))
+			if t.SoftLineBreak() {
+				sb.WriteByte(' ')
+			}
+		} else {
+			sb.WriteString(extractPlainText(child, source))
+		}
+	}
+	return sb.String()
 }
 
-func isUnorderedListItem(line string) bool {
-	return len(line) > 1 && (line[0] == '-' || line[0] == '*' || line[0] == '+') && line[1] == ' '
-}
-
-func isOrderedListItem(line string) bool {
-	i := 0
-	for i < len(line) && line[i] >= '0' && line[i] <= '9' {
-		i++
+// getFirstLineRaw gets the raw text of the first line in a list item's text content.
+func getFirstLineRaw(li *ast.ListItem, source []byte) string {
+	for child := li.FirstChild(); child != nil; child = child.NextSibling() {
+		switch p := child.(type) {
+		case *ast.TextBlock:
+			if p.Lines().Len() > 0 {
+				seg := p.Lines().At(0)
+				return string(seg.Value(source))
+			}
+		case *ast.Paragraph:
+			if p.Lines().Len() > 0 {
+				seg := p.Lines().At(0)
+				return string(seg.Value(source))
+			}
+		}
 	}
-	return i > 0 && i < len(line) && line[i] == '.' && i+1 < len(line) && line[i+1] == ' '
-}
-
-func extractListItemText(line string) string {
-	if isUnorderedListItem(line) {
-		return strings.TrimSpace(line[2:])
-	}
-	// ordered: find ". "
-	i := 0
-	for i < len(line) && line[i] >= '0' && line[i] <= '9' {
-		i++
-	}
-	return strings.TrimSpace(line[i+2:])
+	return ""
 }

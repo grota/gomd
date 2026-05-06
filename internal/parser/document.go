@@ -1,11 +1,14 @@
 // Package parser provides markdown document parsing functionality.
-// It extracts headings with byte offsets and builds hierarchical tree structures.
+// It extracts headings with byte offsets and builds hierarchical tree structures
+// using goldmark for AST parsing.
 package parser
 
 import (
-	"bufio"
 	"strings"
-	"unicode"
+
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/text"
 )
 
 // Heading represents a single heading in a markdown document.
@@ -192,134 +195,97 @@ func (n *HeadingNode) RenderBoxTree(prefix string, isLast bool, compact bool) st
 	return sb.String()
 }
 
-// parseMarkdownHeadings extracts headings from markdown content.
-// It is code-block-aware (ignores headings inside fenced code blocks).
-func parseMarkdownHeadings(content string) []Heading {
-	var headings []Heading
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	offset := 0
-	lineNum := 0
-	inCodeBlock := false
-	var codeBlockFence string
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		lineNum++
-
-		// Track fenced code blocks
-		trimmed := strings.TrimLeft(line, " \t")
-		if !inCodeBlock {
-			if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-				inCodeBlock = true
-				codeBlockFence = trimmed[:3]
+// extractTextFromNode recursively extracts plain text from an AST node's children.
+func extractTextFromNode(n ast.Node, source []byte) string {
+	var sb strings.Builder
+	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+		switch c := child.(type) {
+		case *ast.Text:
+			sb.Write(c.Segment.Value(source))
+		case *ast.CodeSpan:
+			// Extract text inside code span
+			for gc := c.FirstChild(); gc != nil; gc = gc.NextSibling() {
+				if t, ok := gc.(*ast.Text); ok {
+					sb.Write(t.Segment.Value(source))
+				}
 			}
-		} else {
-			if strings.HasPrefix(trimmed, codeBlockFence) {
-				inCodeBlock = false
-				codeBlockFence = ""
-			}
+		case *ast.Link:
+			// Extract link text
+			sb.WriteString(extractTextFromNode(c, source))
+		default:
+			// Recurse for emphasis, strong, etc.
+			sb.WriteString(extractTextFromNode(child, source))
 		}
-
-		if !inCodeBlock && strings.HasPrefix(line, "#") {
-			level, text := parseHeadingLine(line)
-			if level > 0 {
-				headings = append(headings, Heading{
-					Level:  level,
-					Text:   text,
-					Offset: offset,
-					Line:   lineNum,
-				})
-			}
-		}
-
-		offset += len(line) + 1 // +1 for newline
 	}
+	return sb.String()
+}
+
+// parseMarkdownHeadings extracts headings from markdown content using goldmark.
+func parseMarkdownHeadings(content string) []Heading {
+	source := []byte(content)
+	md := goldmark.New()
+	reader := text.NewReader(source)
+	doc := md.Parser().Parse(reader)
+
+	// Build a line offset table to convert byte offsets to line numbers
+	lineOffsets := buildLineOffsets(source)
+
+	var headings []Heading
+	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		if heading, ok := n.(*ast.Heading); ok {
+			// Get byte offset of content, then find line start
+			contentOffset := 0
+			if heading.Lines().Len() > 0 {
+				contentOffset = heading.Lines().At(0).Start
+			}
+
+			// Find the start of the line (the actual `#` characters)
+			lineNum := offsetToLine(lineOffsets, contentOffset)
+			lineStart := lineOffsets[lineNum-1] // lineNum is 1-based, lineOffsets is 0-based
+
+			// Extract plain text from heading children
+			headingText := extractTextFromNode(heading, source)
+
+			headings = append(headings, Heading{
+				Level:  heading.Level,
+				Text:   headingText,
+				Offset: lineStart,
+				Line:   lineNum,
+			})
+		}
+		return ast.WalkContinue, nil
+	})
 
 	return headings
 }
 
-// parseHeadingLine parses a markdown heading line.
-// Returns (level, text) or (0, "") if not a heading.
-func parseHeadingLine(line string) (int, string) {
-	level := 0
-	for level < len(line) && line[level] == '#' {
-		level++
-	}
-	if level == 0 || level > 6 {
-		return 0, ""
-	}
-	// Must be followed by a space
-	if level >= len(line) || line[level] != ' ' {
-		return 0, ""
-	}
-	text := strings.TrimSpace(line[level+1:])
-	text = stripInlineMarkdown(text)
-	return level, text
-}
-
-// stripInlineMarkdown removes inline markdown formatting from text.
-func stripInlineMarkdown(text string) string {
-	var sb strings.Builder
-	runes := []rune(text)
-	i := 0
-	for i < len(runes) {
-		c := runes[i]
-		switch c {
-		case '*', '_':
-			// Skip bold/italic markers
-			j := i
-			for j < len(runes) && runes[j] == c {
-				j++
-			}
-			i = j
-		case '`':
-			// Skip code span
-			j := i + 1
-			for j < len(runes) && runes[j] != '`' {
-				j++
-			}
-			if j < len(runes) {
-				// Extract content inside backticks
-				sb.WriteString(string(runes[i+1 : j]))
-				i = j + 1
-			} else {
-				i++
-			}
-		case '[':
-			// Link: [text](url) -> text
-			j := i + 1
-			for j < len(runes) && runes[j] != ']' {
-				j++
-			}
-			if j < len(runes) && j+1 < len(runes) && runes[j+1] == '(' {
-				// It's a link - extract the text
-				sb.WriteString(string(runes[i+1 : j]))
-				// Skip past the URL
-				j += 2
-				for j < len(runes) && runes[j] != ')' {
-					j++
-				}
-				i = j + 1
-			} else {
-				sb.WriteRune(c)
-				i++
-			}
-		case '\\':
-			// Escape sequence
-			if i+1 < len(runes) {
-				sb.WriteRune(runes[i+1])
-				i += 2
-			} else {
-				i++
-			}
-		default:
-			if !unicode.IsControl(c) {
-				sb.WriteRune(c)
-			}
-			i++
+// buildLineOffsets returns byte offsets where each line starts (0-indexed lines).
+func buildLineOffsets(source []byte) []int {
+	offsets := []int{0}
+	for i, b := range source {
+		if b == '\n' {
+			offsets = append(offsets, i+1)
 		}
 	}
-	return sb.String()
+	return offsets
+}
+
+// offsetToLine converts a byte offset to a 1-based line number.
+func offsetToLine(lineOffsets []int, offset int) int {
+	// Binary search for the line containing this offset
+	lo, hi := 0, len(lineOffsets)-1
+	for lo <= hi {
+		mid := (lo + hi) / 2
+		if lineOffsets[mid] <= offset {
+			lo = mid + 1
+		} else {
+			hi = mid - 1
+		}
+	}
+	return lo // 1-based because lineOffsets[0] = 0 means line 1
 }
 
 // ParseMarkdown parses markdown content and returns a Document.
@@ -327,3 +293,5 @@ func ParseMarkdown(content string) *Document {
 	headings := parseMarkdownHeadings(content)
 	return NewDocument(content, headings)
 }
+
+
