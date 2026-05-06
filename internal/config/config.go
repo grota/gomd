@@ -22,6 +22,7 @@ type Config struct {
 type UIConfig struct {
 	Theme       string `toml:"theme"`
 	CompactTree bool   `toml:"compact_tree"`
+	Opener      string `toml:"opener"` // command to open URLs (default: xdg-open on Linux, open on macOS)
 }
 
 // TerminalConfig holds terminal-related settings.
@@ -72,11 +73,17 @@ type KeysConfig struct {
 	ContentSearch    string `toml:"content_search"`
 	ContentNextMatch string `toml:"content_next_match"`
 	ContentPrevMatch string `toml:"content_prev_match"`
+	Jump             string `toml:"jump"`
+
+	// Navigation history
+	NavBack    string `toml:"nav_back"`
+	NavForward string `toml:"nav_forward"`
 
 	// Node select
 	NodeNext string `toml:"node_next"`
 	NodePrev string `toml:"node_prev"`
 	NodeCopy string `toml:"node_copy"`
+	NodeOpen string `toml:"node_open"`
 	NodeExit string `toml:"node_exit"`
 }
 
@@ -107,9 +114,13 @@ func DefaultKeys() KeysConfig {
 		ContentSearch:    "/",
 		ContentNextMatch: "n",
 		ContentPrevMatch: "N",
+		Jump:             "f",
+		NavBack:          "ctrl+o",
+		NavForward:       "ctrl+i",
 		NodeNext:         "j,down,tab",
 		NodePrev:         "k,up,shift+tab",
 		NodeCopy:         "y",
+		NodeOpen:         "enter",
 		NodeExit:         "esc,q,i",
 	}
 }

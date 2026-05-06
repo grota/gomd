@@ -123,10 +123,11 @@ const (
 	ModeHelp
 	ModeThemePicker
 	ModeNodeSelect // interactive node selection in content pane
+	ModeJump       // EasyMotion-style jump labels
 )
 
 const (
-	nodeKindCount  = 3  // number of node sub-modes (code, inline, link)
+	nodeKindCount  = 4  // number of node sub-modes (code, inline, link, all)
 	helpModalWidth = 60 // fixed width for the help modal overlay
 	tabStopWidth   = 8  // tab expansion width
 )
@@ -141,6 +142,7 @@ const (
 	nodeCodeBlock nodeKind = iota
 	nodeInlineCode
 	nodeLink
+	nodeAll
 )
 
 type codeNode struct {
@@ -223,6 +225,14 @@ type App struct {
 
 	// File watcher
 	watcher *fsnotify.Watcher
+
+	// Navigation history
+	navHistory []int // stack of previous selectedIdx values
+	navFuture  []int // forward stack
+
+	// Jump (EasyMotion) state
+	jumpLabels map[string]int // label -> node index in codeNodes
+	jumpInput  string         // characters typed so far
 
 	// Status
 	statusMsg string
@@ -581,7 +591,7 @@ func extractLinkNodes(line string, lineIdx int) []codeNode {
 func (a *App) filteredNodeIndices() []int {
 	var indices []int
 	for i, n := range a.codeNodes {
-		if n.kind == a.nodeSubMode {
+		if a.nodeSubMode == nodeAll || n.kind == a.nodeSubMode {
 			indices = append(indices, i)
 		}
 	}
@@ -712,6 +722,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		return a.handleKey(msg)
+
+	case tea.MouseMsg:
+		return a.handleMouse(msg)
 	}
 
 	return a, nil
@@ -745,6 +758,8 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a.handleThemeKey(msg)
 	case ModeNodeSelect:
 		return a.handleNodeSelectKey(msg)
+	case ModeJump:
+		return a.handleJumpKey(msg)
 	}
 
 	// Normal mode — shared keys regardless of focus
@@ -787,6 +802,12 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		a.statusMsg = "No file to edit"
 		return a, nil
+	case config.KeyMatches(k, km.NavBack):
+		a.navGoBack()
+		return a, nil
+	case config.KeyMatches(k, km.NavForward):
+		a.navGoForward()
+		return a, nil
 	}
 
 	// Focus-specific keys
@@ -805,6 +826,47 @@ func (a *App) toggleFocus() {
 	} else {
 		a.focus = FocusSidebar
 	}
+}
+
+// handleMouse handles mouse events for sidebar clicks and content scrolling.
+func (a *App) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	if a.mode != ModeNormal {
+		return a, nil
+	}
+
+	switch msg.Button {
+	case tea.MouseButtonWheelUp:
+		if a.focus == FocusContent || a.sidebarHidden {
+			a.contentOffset -= 3
+			if a.contentOffset < 0 {
+				a.contentOffset = 0
+			}
+		}
+	case tea.MouseButtonWheelDown:
+		if a.focus == FocusContent || a.sidebarHidden {
+			a.contentOffset += 3
+			a.clampContentOffset()
+		}
+	case tea.MouseButtonLeft:
+		if msg.Action != tea.MouseActionPress {
+			break
+		}
+		// Check if click is in the sidebar
+		sw := a.sidebarWidth()
+		if !a.sidebarHidden && msg.X < sw && msg.Y >= 2 && msg.Y < a.height-1 {
+			// Click in sidebar — determine which entry was clicked
+			row := msg.Y - 2 // subtract title(1) + border-top(1)
+			entryIdx := a.outlineOffset + row
+			if entryIdx >= 0 && entryIdx < a.totalEntries() {
+				newIdx := entryIdx - 1 // entryIdx 0 = root (-1)
+				a.navigateTo(newIdx)
+				a.focus = FocusSidebar
+			}
+		} else if msg.X >= sw {
+			a.focus = FocusContent
+		}
+	}
+	return a, nil
 }
 
 // ─────────────────────────────────────────────
@@ -869,6 +931,67 @@ func (a *App) moveSidebarUp(n int) {
 	}
 }
 
+// navigateTo changes the selected heading with history tracking.
+func (a *App) navigateTo(idx int) {
+	if idx == a.selectedIdx {
+		return
+	}
+	a.navHistory = append(a.navHistory, a.selectedIdx)
+	a.navFuture = nil
+	a.selectedIdx = idx
+	a.scrollOutlineToSelected()
+	a.rebuildSection()
+}
+
+// navGoBack navigates to the previous heading in history.
+func (a *App) navGoBack() {
+	if len(a.navHistory) == 0 {
+		return
+	}
+	a.navFuture = append(a.navFuture, a.selectedIdx)
+	a.selectedIdx = a.navHistory[len(a.navHistory)-1]
+	a.navHistory = a.navHistory[:len(a.navHistory)-1]
+	a.scrollOutlineToSelected()
+	a.rebuildSection()
+}
+
+// navGoForward navigates forward in history.
+func (a *App) navGoForward() {
+	if len(a.navFuture) == 0 {
+		return
+	}
+	a.navHistory = append(a.navHistory, a.selectedIdx)
+	a.selectedIdx = a.navFuture[len(a.navFuture)-1]
+	a.navFuture = a.navFuture[:len(a.navFuture)-1]
+	a.scrollOutlineToSelected()
+	a.rebuildSection()
+}
+
+// findHeadingByAnchor finds a heading index by GitHub-style anchor slug.
+func (a *App) findHeadingByAnchor(anchor string) int {
+	anchor = strings.ToLower(anchor)
+	for i, h := range a.doc.Headings {
+		if headingToAnchor(h.Text) == anchor {
+			return i
+		}
+	}
+	return -1
+}
+
+// headingToAnchor converts heading text to a GitHub-style anchor slug.
+func headingToAnchor(text string) string {
+	text = strings.ToLower(text)
+	var sb strings.Builder
+	for _, r := range text {
+		if r == ' ' || r == '-' {
+			sb.WriteByte('-')
+		} else if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
+}
+
 // displayIdx returns the sidebar display index for the current selection.
 // Root (selectedIdx==-1) → 0; heading i → i+1.
 func (a *App) displayIdx() int {
@@ -931,6 +1054,8 @@ func (a *App) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.nextContentSearchMatch()
 	case config.KeyMatches(k, km.ContentPrevMatch):
 		a.prevContentSearchMatch()
+	case config.KeyMatches(k, km.Jump):
+		a.enterJumpMode()
 	}
 	return a, nil
 }
@@ -1006,6 +1131,107 @@ func (a *App) enterNodeSelectMode() {
 	a.statusMsg = ""
 }
 
+// enterJumpMode activates EasyMotion-style jump labels for all selectable nodes.
+func (a *App) enterJumpMode() {
+	if len(a.codeNodes) == 0 {
+		a.statusMsg = "No selectable nodes in this section"
+		return
+	}
+	a.ensureRenderedLines()
+
+	// Generate unique labels for all nodes
+	labels := generateLabels(len(a.codeNodes))
+	a.jumpLabels = make(map[string]int, len(a.codeNodes))
+	for i, lbl := range labels {
+		a.jumpLabels[lbl] = i
+	}
+	a.jumpInput = ""
+	a.mode = ModeJump
+}
+
+// generateLabels produces unique short labels (a-z, then aa-zz) for n items.
+func generateLabels(n int) []string {
+	// Use single chars first (a-z), then two-char combos
+	chars := "abcdeghijklmnoprstuvwxyz" // skip f,q which are used as keys
+	labels := make([]string, 0, n)
+	for i := 0; i < len(chars) && len(labels) < n; i++ {
+		labels = append(labels, string(chars[i]))
+	}
+	for i := 0; i < len(chars) && len(labels) < n; i++ {
+		for j := 0; j < len(chars) && len(labels) < n; j++ {
+			labels = append(labels, string(chars[i])+string(chars[j]))
+		}
+	}
+	return labels[:n]
+}
+
+// handleJumpKey processes input during jump mode.
+func (a *App) handleJumpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	k := msg.String()
+	switch k {
+	case "esc":
+		a.mode = ModeNormal
+		a.jumpLabels = nil
+		return a, nil
+	}
+
+	if len(msg.Runes) == 0 {
+		return a, nil
+	}
+
+	a.jumpInput += string(msg.Runes)
+
+	// Check for exact match
+	if idx, ok := a.jumpLabels[a.jumpInput]; ok {
+		// Jump to the node — enter node-select mode with "all" sub-mode
+		a.mode = ModeNodeSelect
+		a.nodeSubMode = nodeAll
+		a.jumpLabels = nil
+		a.jumpInput = ""
+
+		// Find the position in filtered list
+		indices := a.filteredNodeIndices()
+		for i, nodeIdx := range indices {
+			if nodeIdx == idx {
+				a.nodeSelIdx = i
+				break
+			}
+		}
+		a.scrollToFilteredNode(a.nodeSelIdx)
+		return a, nil
+	}
+
+	// Check if any label starts with current input (partial match)
+	hasPrefix := false
+	for lbl := range a.jumpLabels {
+		if strings.HasPrefix(lbl, a.jumpInput) {
+			hasPrefix = true
+			break
+		}
+	}
+	if !hasPrefix {
+		// No possible match — cancel
+		a.mode = ModeNormal
+		a.jumpLabels = nil
+		a.jumpInput = ""
+	}
+
+	return a, nil
+}
+
+// jumpLabelForNode returns the label for a given node index, or "" if not in jump mode.
+func (a *App) jumpLabelForNode(nodeIdx int) string {
+	if a.mode != ModeJump || a.jumpLabels == nil {
+		return ""
+	}
+	for lbl, idx := range a.jumpLabels {
+		if idx == nodeIdx {
+			return lbl
+		}
+	}
+	return ""
+}
+
 // ─────────────────────────────────────────────
 // Node selection mode keys
 // ─────────────────────────────────────────────
@@ -1053,12 +1279,30 @@ func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.copyMsg = ""
 			a.mode = ModeNormal
 		}
-	case k == "enter" && a.nodeSubMode == nodeLink:
+	case config.KeyMatches(k, km.NodeOpen) && a.nodeSubMode == nodeLink:
 		if len(filtered) > 0 {
 			node := filtered[a.nodeSelIdx]
 			url := node.content
-			if url != "" {
-				cmd := exec.Command("xdg-open", url)
+			if url == "" {
+				break
+			}
+			// Internal anchor link — jump to heading
+			if strings.HasPrefix(url, "#") {
+				anchor := url[1:]
+				if idx := a.findHeadingByAnchor(anchor); idx >= 0 {
+					a.mode = ModeNormal
+					a.navigateTo(idx)
+					a.statusMsg = fmt.Sprintf("Jumped to: %s", a.doc.Headings[idx].Text)
+				} else {
+					a.statusMsg = fmt.Sprintf("Heading not found: %s", anchor)
+				}
+			} else {
+				// External link — open with configured opener
+				opener := a.cfg.UI.Opener
+				if opener == "" {
+					opener = "xdg-open"
+				}
+				cmd := exec.Command(opener, url)
 				cmd.Stdout = nil
 				cmd.Stderr = nil
 				_ = cmd.Start()
@@ -1125,15 +1369,13 @@ func (a *App) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.searchMatches = nil
 		q := strings.ToLower(a.searchQuery)
 		for i, h := range a.doc.Headings {
-			if strings.Contains(strings.ToLower(h.Text), q) {
+			if fuzzyMatch(strings.ToLower(h.Text), q) {
 				a.searchMatches = append(a.searchMatches, i)
 			}
 		}
 		a.searchIdx = 0
 		if len(a.searchMatches) > 0 {
-			a.selectedIdx = a.searchMatches[0]
-			a.scrollOutlineToSelected()
-			a.rebuildSection()
+			a.navigateTo(a.searchMatches[0])
 		}
 		a.mode = ModeNormal
 
@@ -1152,6 +1394,26 @@ func (a *App) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return a, nil
+}
+
+// fuzzyMatch checks if all characters in pattern appear in text in order.
+func fuzzyMatch(text, pattern string) bool {
+	ti := 0
+	for _, pc := range pattern {
+		found := false
+		for ti < len([]rune(text)) {
+			if []rune(text)[ti] == pc {
+				ti++
+				found = true
+				break
+			}
+			ti++
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *App) nextSearchMatch() {
@@ -1308,10 +1570,33 @@ func (a *App) sidebarWidth() int {
 	if a.sidebarHidden {
 		return 0
 	}
-	if a.width < 60 {
-		return a.width / 3
+
+	// Compute based on longest heading (with indent)
+	maxLen := len("(Document)")
+	for _, h := range a.doc.Headings {
+		// indent(2*level) + marker(level) + space(1) + text
+		entryLen := 2*h.Level + h.Level + 1 + len([]rune(h.Text))
+		if entryLen > maxLen {
+			maxLen = entryLen
+		}
 	}
-	return a.width / 4
+
+	// Add 2 for borders, 1 for padding
+	ideal := maxLen + 3
+
+	// Clamp: minimum 20, maximum 40% of width
+	minW := 20
+	maxW := a.width * 2 / 5
+	if ideal < minW {
+		ideal = minW
+	}
+	if ideal > maxW {
+		ideal = maxW
+	}
+	if ideal > a.width/2 {
+		ideal = a.width / 2
+	}
+	return ideal
 }
 
 func (a *App) contentWidth() int {
@@ -1385,13 +1670,37 @@ func (a *App) renderTitle() string {
 		name = "gomd"
 	}
 
+	title := "gomd — " + name
+	if bc := a.breadcrumb(); bc != "" {
+		title += " > " + bc
+	}
+
 	return lipgloss.NewStyle().
 		Background(a.theme.Border).
 		Foreground(a.theme.Foreground).
 		Bold(true).
 		Width(a.width).
 		Padding(0, 1).
-		Render("gomd — " + name)
+		Render(title)
+}
+
+// breadcrumb returns the heading path from root to the current selection.
+func (a *App) breadcrumb() string {
+	if a.selectedIdx < 0 {
+		return ""
+	}
+	h := a.doc.Headings[a.selectedIdx]
+	var parts []string
+	parts = append(parts, h.Text)
+
+	// Walk backwards to find ancestor headings (lower level)
+	for i := a.selectedIdx - 1; i >= 0; i-- {
+		if a.doc.Headings[i].Level < h.Level {
+			parts = append([]string{a.doc.Headings[i].Text}, parts...)
+			h = a.doc.Headings[i]
+		}
+	}
+	return strings.Join(parts, " > ")
 }
 
 // drawBox draws a bordered box around content lines.
@@ -1590,6 +1899,11 @@ func (a *App) renderContentGlamour(w, h int) string {
 			}
 			lines = applyNodeHighlights(lines, filtered, a.nodeSelIdx, filteredInfo, a.theme, w)
 		}
+	}
+
+	// In jump mode, dim content and overlay labels.
+	if a.mode == ModeJump && a.jumpLabels != nil {
+		lines = a.applyJumpLabels(lines, w)
 	}
 
 	// Apply content search highlights
@@ -1957,6 +2271,39 @@ func (a *App) applyContentSearchHighlights(lines []string) []string {
 //   - All selectable inline/block nodes get a dim "available" background tint.
 //   - The currently selected node gets a bright "selected" background.
 //
+// applyJumpLabels dims all content and overlays labels at node positions.
+func (a *App) applyJumpLabels(lines []string, w int) []string {
+	dimStyle := lipgloss.NewStyle().Faint(true)
+	labelStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#ffffff")).
+		Background(lipgloss.Color("#ff5f00"))
+
+	out := make([]string, len(lines))
+	for i, line := range lines {
+		out[i] = dimStyle.Render(line)
+	}
+
+	// Overlay labels at the rendered position of each node
+	for lbl, nodeIdx := range a.jumpLabels {
+		if nodeIdx >= len(a.nodeRenderInfo) {
+			continue
+		}
+		info := a.nodeRenderInfo[nodeIdx]
+		if info.firstLine < 0 || info.firstLine >= len(out) {
+			continue
+		}
+
+		// Place label at the start of the node's first rendered line
+		lineIdx := info.firstLine
+		labelRendered := labelStyle.Render(lbl)
+		// Prepend label to the line
+		out[lineIdx] = labelRendered + " " + dimStyle.Render(lines[lineIdx])
+	}
+
+	return out
+}
+
 // For inline nodes the highlight is applied only to the span, preserving surrounding
 // glamour styling. For fenced blocks the whole-line background is applied (appropriate
 // since the block is the selectable unit).
@@ -2033,6 +2380,8 @@ func (a *App) renderStatus() string {
 				modeName = "INLINE"
 			case nodeLink:
 				modeName = "LINKS"
+			case nodeAll:
+				modeName = "ALL"
 			}
 			if len(filtered) > 0 {
 				leftPlain = fmt.Sprintf("%s [%d/%d]  m:mode  y:copy  j/k:nav  Esc:exit",
@@ -2040,6 +2389,11 @@ func (a *App) renderStatus() string {
 			} else {
 				leftPlain = fmt.Sprintf("%s [0/0]  m:mode  Esc:exit", modeName)
 			}
+		}
+	case ModeJump:
+		leftPlain = "JUMP: type label to jump (Esc to cancel)"
+		if a.jumpInput != "" {
+			leftPlain = fmt.Sprintf("JUMP: %s…", a.jumpInput)
 		}
 	default:
 		if a.selectedIdx < 0 {
@@ -2058,6 +2412,8 @@ func (a *App) renderStatus() string {
 	var rightPlain string
 	switch a.mode {
 	case ModeNodeSelect:
+		rightPlain = ""
+	case ModeJump:
 		rightPlain = ""
 	default:
 		if a.sidebarHidden {
@@ -2084,6 +2440,8 @@ func (a *App) renderStatus() string {
 			strings.Repeat(" ", pad) + rightPlain
 	case ModeNodeSelect:
 		content = lipgloss.NewStyle().Foreground(a.theme.NodeSel).Bold(true).Render(leftPlain)
+	case ModeJump:
+		content = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff5f00")).Bold(true).Render(leftPlain)
 	default:
 		content = leftPlain + strings.Repeat(" ", pad) + rightPlain
 	}
@@ -2250,7 +2608,7 @@ func highlightCode(code, lang string) string {
 
 func Run(doc *parser.Document, filename, filePath string, cfg config.Config) error {
 	app := NewApp(doc, filename, filePath, cfg)
-	p := tea.NewProgram(app, tea.WithAltScreen())
+	p := tea.NewProgram(app, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err
 }
