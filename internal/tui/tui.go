@@ -1098,12 +1098,12 @@ func (a *App) enterNodeSelectMode() {
 	}
 
 	a.mode = ModeNodeSelect
-	a.nodeSubMode = nodeCodeBlock
+	a.nodeSubMode = nodeAll
 	a.nodeSelIdx = 0
 
 	// Find the first sub-mode that has nodes
 	if len(a.filteredNodeIndices()) == 0 {
-		for _, mode := range []nodeKind{nodeInlineCode, nodeLink} {
+		for _, mode := range []nodeKind{nodeCodeBlock, nodeInlineCode, nodeLink} {
 			a.nodeSubMode = mode
 			if len(a.filteredNodeIndices()) > 0 {
 				break
@@ -1323,8 +1323,51 @@ func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				a.mode = ModeNormal
 			}
 		}
+	case k == "pgdown" || config.KeyMatches(k, km.ScrollHalfDown):
+		a.nodeSelectScroll(a.contentHeight())
+	case k == "pgup" || config.KeyMatches(k, km.ScrollHalfUp):
+		a.nodeSelectScroll(-a.contentHeight())
 	}
 	return a, nil
+}
+
+// nodeSelectScroll scrolls the viewport in node-select mode and reselects
+// the closest visible node in the new viewport.
+func (a *App) nodeSelectScroll(delta int) {
+	a.contentOffset += delta
+	a.clampContentOffset()
+
+	// Find the closest visible filtered node
+	indices := a.filteredNodeIndices()
+	if len(indices) == 0 {
+		return
+	}
+
+	visibleStart := a.contentOffset
+	visibleEnd := a.contentOffset + a.contentHeight()
+
+	if delta > 0 {
+		// Scrolled down — pick the topmost visible node
+		for i, idx := range indices {
+			if idx < len(a.nodeRenderInfo) && a.nodeRenderInfo[idx].firstLine >= visibleStart && a.nodeRenderInfo[idx].firstLine < visibleEnd {
+				a.nodeSelIdx = i
+				return
+			}
+		}
+		// No visible node found — select the last one
+		a.nodeSelIdx = len(indices) - 1
+	} else {
+		// Scrolled up — pick the bottommost visible node
+		for i := len(indices) - 1; i >= 0; i-- {
+			idx := indices[i]
+			if idx < len(a.nodeRenderInfo) && a.nodeRenderInfo[idx].firstLine >= visibleStart && a.nodeRenderInfo[idx].firstLine < visibleEnd {
+				a.nodeSelIdx = i
+				return
+			}
+		}
+		// No visible node — select the first one
+		a.nodeSelIdx = 0
+	}
 }
 
 // ensureRenderedLines builds renderedLines and nodeRenderInfo if they are
@@ -2102,10 +2145,17 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 							absIdx := colOffset + pos + idx
 							endIdx := absIdx + len(needle)
 							fullLine := stripped[ri]
-							// Must have space before (or be at start after indent)
-							hasPre := absIdx > 0 && fullLine[absIdx-1] == ' '
+							// For longer needles (>=3 chars), require 2 spaces before to
+							// distinguish code spans from prose. For short needles (1-2 chars),
+							// 1 space suffices since they can't be confused with prose words.
+							var hasPre bool
+							if len(needle) >= 3 {
+								hasPre = absIdx > 1 && fullLine[absIdx-1] == ' ' && fullLine[absIdx-2] == ' '
+							} else {
+								hasPre = absIdx > 0 && fullLine[absIdx-1] == ' '
+							}
 							// Must have space after (or be at end of trimmed content)
-							hasPost := endIdx >= len(strings.TrimRight(fullLine, " ")) || fullLine[endIdx] == ' '
+							hasPost := endIdx >= len(strings.TrimRight(fullLine, " ")) || (endIdx < len(fullLine) && fullLine[endIdx] == ' ')
 							if hasPre && hasPost {
 								bestCol = absIdx
 								bestColEnd = endIdx
