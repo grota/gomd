@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	maxInputBytes = 100 * 1024 * 1024 // 100 MB
-	maxLineBytes  = 10 * 1024 * 1024  // 10 MB per line
+	maxInputBytes = 10 * 1024 * 1024 // 10 MB
+	maxLineBytes  = 1 * 1024 * 1024  // 1 MB per line
 )
 
 // Source describes an input source.

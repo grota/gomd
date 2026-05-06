@@ -293,5 +293,3 @@ func ParseMarkdown(content string) *Document {
 	headings := parseMarkdownHeadings(content)
 	return NewDocument(content, headings)
 }
-
-

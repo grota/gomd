@@ -216,10 +216,10 @@ type App struct {
 	contentSearchIdx     int            // current match index
 
 	// Interactive node selection
-	codeNodes    []codeNode // all selectable nodes in current section
-	nodeSelIdx   int        // which node is highlighted (within filtered list)
-	nodeSubMode  nodeKind   // current sub-mode filter
-	copyMsg      string     // transient "Copied!" feedback
+	codeNodes   []codeNode // all selectable nodes in current section
+	nodeSelIdx  int        // which node is highlighted (within filtered list)
+	nodeSubMode nodeKind   // current sub-mode filter
+	copyMsg     string     // transient "Copied!" feedback
 
 	// File watcher
 	watcher *fsnotify.Watcher
@@ -2141,7 +2141,7 @@ func (a *App) overlayHelp(background string) string {
 		BorderForeground(a.theme.Border).
 		Background(a.theme.Background).
 		Foreground(a.theme.Foreground).
-		Width(modalW - 2). // inner width
+		Width(modalW-2). // inner width
 		Padding(0, 1)
 
 	modal := boxStyle.Render(text)

@@ -44,13 +44,13 @@ type ContentConfig struct {
 // Key strings use the same format as bubbletea (e.g., "j", "down", "ctrl+d", "tab").
 type KeysConfig struct {
 	// Shared normal mode
-	Quit       string `toml:"quit"`
-	Help       string `toml:"help"`
-	ThemePicker string `toml:"theme_picker"`
-	ToggleFocus string `toml:"toggle_focus"`
+	Quit          string `toml:"quit"`
+	Help          string `toml:"help"`
+	ThemePicker   string `toml:"theme_picker"`
+	ToggleFocus   string `toml:"toggle_focus"`
 	ToggleSidebar string `toml:"toggle_sidebar"`
-	Reload     string `toml:"reload"`
-	Edit       string `toml:"edit"`
+	Reload        string `toml:"reload"`
+	Edit          string `toml:"edit"`
 
 	// Sidebar
 	SidebarDown   string `toml:"sidebar_down"`
@@ -62,14 +62,14 @@ type KeysConfig struct {
 	PrevMatch     string `toml:"prev_match"`
 
 	// Content
-	ScrollDown    string `toml:"scroll_down"`
-	ScrollUp      string `toml:"scroll_up"`
-	ScrollHalfDown string `toml:"scroll_half_down"`
-	ScrollHalfUp  string `toml:"scroll_half_up"`
-	ContentTop    string `toml:"content_top"`
-	ContentBottom string `toml:"content_bottom"`
-	NodeSelect    string `toml:"node_select"`
-	ContentSearch string `toml:"content_search"`
+	ScrollDown       string `toml:"scroll_down"`
+	ScrollUp         string `toml:"scroll_up"`
+	ScrollHalfDown   string `toml:"scroll_half_down"`
+	ScrollHalfUp     string `toml:"scroll_half_up"`
+	ContentTop       string `toml:"content_top"`
+	ContentBottom    string `toml:"content_bottom"`
+	NodeSelect       string `toml:"node_select"`
+	ContentSearch    string `toml:"content_search"`
 	ContentNextMatch string `toml:"content_next_match"`
 	ContentPrevMatch string `toml:"content_prev_match"`
 
@@ -83,34 +83,34 @@ type KeysConfig struct {
 // DefaultKeys returns the default key bindings.
 func DefaultKeys() KeysConfig {
 	return KeysConfig{
-		Quit:           "q",
-		Help:           "?",
-		ThemePicker:    "T",
-		ToggleFocus:    "tab",
-		ToggleSidebar:  "w",
-		Reload:         "r",
-		Edit:           "e",
-		SidebarDown:    "j,down",
-		SidebarUp:      "k,up",
-		SidebarTop:     "g",
-		SidebarBottom:  "G",
-		SidebarSearch:  "/",
-		NextMatch:      "n",
-		PrevMatch:      "N",
-		ScrollDown:     "j,down",
-		ScrollUp:       "k,up",
-		ScrollHalfDown: "ctrl+d,ctrl+f,pgdown, ",
-		ScrollHalfUp:   "ctrl+u,ctrl+b,pgup",
-		ContentTop:     "g",
-		ContentBottom:  "G",
-		NodeSelect:     "i",
-		ContentSearch:  "/",
+		Quit:             "q",
+		Help:             "?",
+		ThemePicker:      "T",
+		ToggleFocus:      "tab",
+		ToggleSidebar:    "w",
+		Reload:           "r",
+		Edit:             "e",
+		SidebarDown:      "j,down",
+		SidebarUp:        "k,up",
+		SidebarTop:       "g",
+		SidebarBottom:    "G",
+		SidebarSearch:    "/",
+		NextMatch:        "n",
+		PrevMatch:        "N",
+		ScrollDown:       "j,down",
+		ScrollUp:         "k,up",
+		ScrollHalfDown:   "ctrl+d,ctrl+f,pgdown, ",
+		ScrollHalfUp:     "ctrl+u,ctrl+b,pgup",
+		ContentTop:       "g",
+		ContentBottom:    "G",
+		NodeSelect:       "i",
+		ContentSearch:    "/",
 		ContentNextMatch: "n",
 		ContentPrevMatch: "N",
-		NodeNext:       "j,down,tab",
-		NodePrev:       "k,up,shift+tab",
-		NodeCopy:       "y",
-		NodeExit:       "esc,q,i",
+		NodeNext:         "j,down,tab",
+		NodePrev:         "k,up,shift+tab",
+		NodeCopy:         "y",
+		NodeExit:         "esc,q,i",
 	}
 }
 
