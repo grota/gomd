@@ -2271,20 +2271,20 @@ func (a *App) applyContentSearchHighlights(lines []string) []string {
 //   - All selectable inline/block nodes get a dim "available" background tint.
 //   - The currently selected node gets a bright "selected" background.
 //
-// applyJumpLabels dims all content and overlays labels at node positions.
+// applyJumpLabels overlays labels next to selectable nodes with subtle highlights.
+// Content remains unchanged; nodes get a background tint and labels appear beside them.
 func (a *App) applyJumpLabels(lines []string, w int) []string {
-	dimStyle := lipgloss.NewStyle().Faint(true)
 	labelStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("#ffffff")).
 		Background(lipgloss.Color("#ff5f00"))
 
+	// Copy lines
 	out := make([]string, len(lines))
-	for i, line := range lines {
-		out[i] = dimStyle.Render(line)
-	}
+	copy(out, lines)
 
-	// Overlay labels at the rendered position of each node
+	nodeBg := lipgloss.NewStyle().Background(a.theme.Selected)
+
 	for lbl, nodeIdx := range a.jumpLabels {
 		if nodeIdx >= len(a.nodeRenderInfo) {
 			continue
@@ -2294,11 +2294,40 @@ func (a *App) applyJumpLabels(lines []string, w int) []string {
 			continue
 		}
 
-		// Place label at the start of the node's first rendered line
-		lineIdx := info.firstLine
 		labelRendered := labelStyle.Render(lbl)
-		// Prepend label to the line
-		out[lineIdx] = labelRendered + " " + dimStyle.Render(lines[lineIdx])
+		node := a.codeNodes[nodeIdx]
+
+		if node.inline && info.spanCol >= 0 {
+			// Inline node: insert label just before the span column
+			lineIdx := info.firstLine
+			stripped := ansi.Strip(lines[lineIdx])
+			runes := []rune(stripped)
+			col := info.spanCol
+			if col > len(runes) {
+				col = len(runes)
+			}
+			// Build: prefix + label + highlighted span + suffix
+			spanEnd := info.spanColEnd
+			if spanEnd > len(runes) {
+				spanEnd = len(runes)
+			}
+			prefix := string(runes[:col])
+			span := string(runes[col:spanEnd])
+			suffix := string(runes[spanEnd:])
+			out[lineIdx] = prefix + labelRendered + nodeBg.Render(span) + suffix
+		} else {
+			// Block node: highlight all lines of the block and prepend label on first
+			firstLine := info.firstLine
+			lastLine := info.lastLine
+			if lastLine >= len(out) {
+				lastLine = len(out) - 1
+			}
+			for li := firstLine; li <= lastLine; li++ {
+				stripped := ansi.Strip(out[li])
+				out[li] = nodeBg.Render(stripped)
+			}
+			out[firstLine] = labelRendered + " " + out[firstLine]
+		}
 	}
 
 	return out
