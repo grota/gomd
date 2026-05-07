@@ -1,6 +1,37 @@
-# gomd
+<div align="center">
+  <h1>gomd</h1>
+</div>
+A terminal markdown viewer with interactive element selection and vim-style navigation.
 
-A terminal markdown viewer with an interactive dual-pane TUI and vim-style navigation.
+<br>
+<br>
+
+Think [glow](https://github.com/charmbracelet/glow) but with more interactivity with the markdown document.
+
+## Screenshots
+
+<div align="center">
+normal mode:
+</div>
+
+<img width="1536" height="1022" alt="gomd screenshot 1" src="https://github.com/user-attachments/assets/0f0db041-0dc3-4d35-8ee1-d89701707aff" />
+
+---
+
+<div align="center">
+jump mode:
+</div>
+
+<img width="1536" height="1020" alt="gomd screenshot 2" src="https://github.com/user-attachments/assets/ba477053-48d4-4380-b682-8f2bf39b72b2" />
+
+---
+
+<div align="center">
+interactive mode:
+</div>
+
+<img width="1536" height="1020" alt="gomd screenshot 3" src="https://github.com/user-attachments/assets/d0c03603-662a-4092-ad15-e03c8c1f6aaa" />
+
 
 ## Features
 
@@ -21,6 +52,10 @@ A terminal markdown viewer with an interactive dual-pane TUI and vim-style navig
 - **Configurable link opener** — set `opener` in config to customize how URLs are opened
 
 ## Installation
+
+Download the [latest release](https://github.com/grota/gomd/releases/latest) from this project.
+
+Or via go install:
 
 ```bash
 go install github.com/grota/gomd/cmd/gomd@latest
