@@ -129,7 +129,7 @@ const (
 
 const (
 	nodeKindCount  = 4  // number of node sub-modes (code, inline, link, all)
-	helpModalWidth = 60 // fixed width for the help modal overlay
+	helpModalWidth = 62 // fixed width for the help modal overlay
 	tabStopWidth   = 8  // tab expansion width
 )
 
@@ -234,6 +234,9 @@ type App struct {
 	// Jump (EasyMotion) state
 	jumpLabels map[string]int // label -> node index in codeNodes
 	jumpInput  string         // characters typed so far
+
+	// Pending key prefix for multi-key sequences (gg, zz, zt, zb)
+	pendingKey string
 
 	// Status
 	statusMsg string
@@ -764,9 +767,11 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Normal mode — shared keys regardless of focus
+	// If a shared key matches, cancel any pending key sequence.
 	km := a.cfg.Keys
 	switch {
 	case config.KeyMatches(k, km.Quit):
+		a.pendingKey = ""
 		if a.watcher != nil {
 			a.watcher.Close()
 		}
@@ -877,6 +882,32 @@ func (a *App) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 func (a *App) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 	km := a.cfg.Keys
+
+	// Handle pending key sequences (gg, zz, zt, zb)
+	if a.pendingKey != "" {
+		combo := a.pendingKey + k
+		a.pendingKey = ""
+		switch {
+		case config.KeyMatches(combo, km.SidebarTop):
+			a.selectedIdx = -1
+			a.scrollOutlineToSelected()
+			a.rebuildSection()
+		case config.KeyMatches(combo, km.ViewCenter):
+			a.sidebarViewCenter()
+		case config.KeyMatches(combo, km.ViewTop):
+			a.sidebarViewTop()
+		case config.KeyMatches(combo, km.ViewBottom):
+			a.sidebarViewBottom()
+		}
+		return a, nil
+	}
+
+	// Check for prefix keys
+	if k == "g" || k == "z" {
+		a.pendingKey = k
+		return a, nil
+	}
+
 	switch {
 	case config.KeyMatches(k, km.SidebarDown):
 		a.moveSidebarDown(1)
@@ -886,16 +917,18 @@ func (a *App) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.moveSidebarDown(a.outlineHeight())
 	case k == "pgup":
 		a.moveSidebarUp(a.outlineHeight())
-	case config.KeyMatches(k, km.SidebarTop):
-		a.selectedIdx = -1
-		a.scrollOutlineToSelected()
-		a.rebuildSection()
 	case config.KeyMatches(k, km.SidebarBottom):
 		if len(a.doc.Headings) > 0 {
 			a.selectedIdx = len(a.doc.Headings) - 1
 		}
 		a.scrollOutlineToSelected()
 		a.rebuildSection()
+	case config.KeyMatches(k, km.JumpHigh):
+		a.sidebarJumpHigh()
+	case config.KeyMatches(k, km.JumpMid):
+		a.sidebarJumpMid()
+	case config.KeyMatches(k, km.JumpLow):
+		a.sidebarJumpLow()
 	case config.KeyMatches(k, km.SidebarSearch):
 		a.mode = ModeSearch
 		a.searchQuery = ""
@@ -929,6 +962,89 @@ func (a *App) moveSidebarUp(n int) {
 	if a.selectedIdx != prev {
 		a.scrollOutlineToSelected()
 		a.rebuildSection()
+	}
+}
+
+// sidebarJumpHigh jumps to the topmost visible heading in the sidebar.
+func (a *App) sidebarJumpHigh() {
+	if len(a.doc.Headings) == 0 {
+		return
+	}
+	// First visible heading is at outlineOffset
+	idx := a.outlineOffset
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(a.doc.Headings) {
+		idx = len(a.doc.Headings) - 1
+	}
+	a.selectedIdx = idx
+	a.rebuildSection()
+}
+
+// sidebarJumpMid jumps to the middle visible heading in the sidebar.
+func (a *App) sidebarJumpMid() {
+	if len(a.doc.Headings) == 0 {
+		return
+	}
+	h := a.outlineHeight()
+	top := a.outlineOffset
+	bot := top + h - 1
+	if bot >= len(a.doc.Headings) {
+		bot = len(a.doc.Headings) - 1
+	}
+	if top < 0 {
+		top = 0
+	}
+	a.selectedIdx = (top + bot) / 2
+	a.rebuildSection()
+}
+
+// sidebarJumpLow jumps to the bottommost visible heading in the sidebar.
+func (a *App) sidebarJumpLow() {
+	if len(a.doc.Headings) == 0 {
+		return
+	}
+	h := a.outlineHeight()
+	bot := a.outlineOffset + h - 1
+	if bot >= len(a.doc.Headings) {
+		bot = len(a.doc.Headings) - 1
+	}
+	a.selectedIdx = bot
+	a.rebuildSection()
+}
+
+// sidebarViewCenter scrolls the sidebar so the selected heading is centered.
+func (a *App) sidebarViewCenter() {
+	h := a.outlineHeight()
+	a.outlineOffset = a.selectedIdx - h/2
+	a.clampOutlineOffset()
+}
+
+// sidebarViewTop scrolls the sidebar so the selected heading is at the top.
+func (a *App) sidebarViewTop() {
+	a.outlineOffset = a.selectedIdx
+	a.clampOutlineOffset()
+}
+
+// sidebarViewBottom scrolls the sidebar so the selected heading is at the bottom.
+func (a *App) sidebarViewBottom() {
+	h := a.outlineHeight()
+	a.outlineOffset = a.selectedIdx - h + 1
+	a.clampOutlineOffset()
+}
+
+// clampOutlineOffset ensures outlineOffset stays within valid bounds.
+func (a *App) clampOutlineOffset() {
+	if a.outlineOffset < 0 {
+		a.outlineOffset = 0
+	}
+	max := len(a.doc.Headings) - a.outlineHeight()
+	if max < 0 {
+		max = 0
+	}
+	if a.outlineOffset > max {
+		a.outlineOffset = max
 	}
 }
 
@@ -1030,6 +1146,30 @@ func (a *App) scrollOutlineToSelected() {
 func (a *App) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 	km := a.cfg.Keys
+
+	// Handle pending key sequences (gg, zz, zt, zb)
+	if a.pendingKey != "" {
+		combo := a.pendingKey + k
+		a.pendingKey = ""
+		switch {
+		case config.KeyMatches(combo, km.ContentTop):
+			a.contentOffset = 0
+		case config.KeyMatches(combo, km.ViewCenter):
+			a.contentViewCenter()
+		case config.KeyMatches(combo, km.ViewTop):
+			a.contentViewTop()
+		case config.KeyMatches(combo, km.ViewBottom):
+			a.contentViewBottom()
+		}
+		return a, nil
+	}
+
+	// Check for prefix keys
+	if k == "g" || k == "z" {
+		a.pendingKey = k
+		return a, nil
+	}
+
 	switch {
 	case config.KeyMatches(k, km.ScrollDown):
 		a.scrollContent(1)
@@ -1039,11 +1179,15 @@ func (a *App) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.scrollContent(a.contentHeight() / 2)
 	case config.KeyMatches(k, km.ScrollHalfUp):
 		a.scrollContent(-a.contentHeight() / 2)
-	case config.KeyMatches(k, km.ContentTop):
-		a.contentOffset = 0
 	case config.KeyMatches(k, km.ContentBottom):
 		a.contentOffset = len(a.activeLines())
 		a.clampContentOffset()
+	case config.KeyMatches(k, km.JumpHigh):
+		// H: no-op in content scroll mode (no selectable items)
+	case config.KeyMatches(k, km.JumpMid):
+		// M: no-op in content scroll mode
+	case config.KeyMatches(k, km.JumpLow):
+		// L: no-op in content scroll mode
 	case config.KeyMatches(k, km.NodeSelect):
 		a.enterNodeSelectMode()
 	case config.KeyMatches(k, km.ContentSearch):
@@ -1059,6 +1203,20 @@ func (a *App) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.enterJumpMode()
 	}
 	return a, nil
+}
+
+// contentViewCenter scrolls so the middle of the viewport stays centered (no-op in pure scroll mode,
+// but useful as a viewport reset). In content mode without selection, centers the current view.
+func (a *App) contentViewCenter() {
+	// No selected item in content scroll mode — no-op
+}
+
+func (a *App) contentViewTop() {
+	// No selected item in content scroll mode — no-op
+}
+
+func (a *App) contentViewBottom() {
+	// No selected item in content scroll mode — no-op
 }
 
 func (a *App) scrollContent(delta int) {
@@ -1254,12 +1412,34 @@ func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 	km := a.cfg.Keys
 	filtered := a.filteredNodes()
+
+	// Handle pending key sequences (gg, zz, zt, zb)
+	if a.pendingKey != "" {
+		combo := a.pendingKey + k
+		a.pendingKey = ""
+		switch {
+		case config.KeyMatches(combo, km.ViewCenter):
+			a.nodeSelectViewCenter()
+		case config.KeyMatches(combo, km.ViewTop):
+			a.nodeSelectViewTop()
+		case config.KeyMatches(combo, km.ViewBottom):
+			a.nodeSelectViewBottom()
+		}
+		return a, nil
+	}
+
+	// Check for prefix keys
+	if k == "z" {
+		a.pendingKey = k
+		return a, nil
+	}
+
 	switch {
 	case config.KeyMatches(k, km.NodeExit):
 		a.mode = ModeNormal
 		a.copyMsg = ""
 	case k == "m":
-		// Cycle sub-mode: code -> inline -> links -> code ...
+		// Cycle sub-mode
 		a.nodeSubMode = (a.nodeSubMode + 1) % nodeKindCount
 		a.nodeSelIdx = 0
 		a.scrollToFilteredNode(0)
@@ -1273,6 +1453,12 @@ func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.nodeSelIdx = (a.nodeSelIdx - 1 + len(filtered)) % len(filtered)
 			a.scrollToFilteredNode(a.nodeSelIdx)
 		}
+	case config.KeyMatches(k, km.JumpHigh):
+		a.nodeSelectJumpHigh()
+	case config.KeyMatches(k, km.JumpMid):
+		a.nodeSelectJumpMid()
+	case config.KeyMatches(k, km.JumpLow):
+		a.nodeSelectJumpLow()
 	case config.KeyMatches(k, km.NodeCopy):
 		if len(filtered) > 0 {
 			node := filtered[a.nodeSelIdx]
@@ -1369,6 +1555,106 @@ func (a *App) nodeSelectScroll(delta int) {
 		// No visible node — select the first one
 		a.nodeSelIdx = 0
 	}
+}
+
+// nodeSelectJumpHigh selects the topmost visible node in the viewport.
+func (a *App) nodeSelectJumpHigh() {
+	indices := a.filteredNodeIndices()
+	if len(indices) == 0 {
+		return
+	}
+	visibleStart := a.contentOffset
+	visibleEnd := a.contentOffset + a.contentHeight()
+	for i, idx := range indices {
+		if idx < len(a.nodeRenderInfo) && a.nodeRenderInfo[idx].firstLine >= visibleStart && a.nodeRenderInfo[idx].firstLine < visibleEnd {
+			a.nodeSelIdx = i
+			return
+		}
+	}
+}
+
+// nodeSelectJumpMid selects the node closest to the middle of the viewport.
+func (a *App) nodeSelectJumpMid() {
+	indices := a.filteredNodeIndices()
+	if len(indices) == 0 {
+		return
+	}
+	midLine := a.contentOffset + a.contentHeight()/2
+	bestDist := -1
+	bestIdx := 0
+	for i, idx := range indices {
+		if idx < len(a.nodeRenderInfo) && a.nodeRenderInfo[idx].firstLine >= 0 {
+			dist := a.nodeRenderInfo[idx].firstLine - midLine
+			if dist < 0 {
+				dist = -dist
+			}
+			if bestDist < 0 || dist < bestDist {
+				bestDist = dist
+				bestIdx = i
+			}
+		}
+	}
+	a.nodeSelIdx = bestIdx
+	a.scrollToFilteredNode(a.nodeSelIdx)
+}
+
+// nodeSelectJumpLow selects the bottommost visible node in the viewport.
+func (a *App) nodeSelectJumpLow() {
+	indices := a.filteredNodeIndices()
+	if len(indices) == 0 {
+		return
+	}
+	visibleStart := a.contentOffset
+	visibleEnd := a.contentOffset + a.contentHeight()
+	for i := len(indices) - 1; i >= 0; i-- {
+		idx := indices[i]
+		if idx < len(a.nodeRenderInfo) && a.nodeRenderInfo[idx].firstLine >= visibleStart && a.nodeRenderInfo[idx].firstLine < visibleEnd {
+			a.nodeSelIdx = i
+			return
+		}
+	}
+}
+
+// nodeSelectViewCenter scrolls so the selected node is centered in the viewport.
+func (a *App) nodeSelectViewCenter() {
+	indices := a.filteredNodeIndices()
+	if a.nodeSelIdx >= len(indices) {
+		return
+	}
+	idx := indices[a.nodeSelIdx]
+	if idx >= len(a.nodeRenderInfo) || a.nodeRenderInfo[idx].firstLine < 0 {
+		return
+	}
+	a.contentOffset = a.nodeRenderInfo[idx].firstLine - a.contentHeight()/2
+	a.clampContentOffset()
+}
+
+// nodeSelectViewTop scrolls so the selected node is at the top of the viewport.
+func (a *App) nodeSelectViewTop() {
+	indices := a.filteredNodeIndices()
+	if a.nodeSelIdx >= len(indices) {
+		return
+	}
+	idx := indices[a.nodeSelIdx]
+	if idx >= len(a.nodeRenderInfo) || a.nodeRenderInfo[idx].firstLine < 0 {
+		return
+	}
+	a.contentOffset = a.nodeRenderInfo[idx].firstLine
+	a.clampContentOffset()
+}
+
+// nodeSelectViewBottom scrolls so the selected node is at the bottom of the viewport.
+func (a *App) nodeSelectViewBottom() {
+	indices := a.filteredNodeIndices()
+	if a.nodeSelIdx >= len(indices) {
+		return
+	}
+	idx := indices[a.nodeSelIdx]
+	if idx >= len(a.nodeRenderInfo) || a.nodeRenderInfo[idx].firstLine < 0 {
+		return
+	}
+	a.contentOffset = a.nodeRenderInfo[idx].firstLine - a.contentHeight() + 1
+	a.clampContentOffset()
 }
 
 // ensureRenderedLines builds renderedLines and nodeRenderInfo if they are
@@ -2536,9 +2822,9 @@ func (a *App) renderStatus() string {
 		rightPlain = ""
 	default:
 		if a.sidebarHidden {
-			rightPlain = "w:sidebar  Tab:focus  e:edit  i:nodes  /:search  T:theme  ?:help  q:quit"
+			rightPlain = "w:sidebar  Tab:focus  e:edit  i:interactive  /:search  T:theme  ?:help  q:quit"
 		} else {
-			rightPlain = "Tab:focus  w:hide sidebar  e:edit  i:nodes  /:search  T:theme  ?:help  q:quit"
+			rightPlain = "Tab:focus  w:hide sidebar  e:edit  i:interactive  /:search  T:theme  ?:help  q:quit"
 		}
 	}
 
@@ -2597,7 +2883,9 @@ func (a *App) overlayHelp(background string) string {
   SIDEBAR  (when focused)
     j / ↓        Select next heading
     k / ↑        Select previous heading
-    g / G        Jump to root / last heading
+    gg / G       Jump to root / last heading
+    H / M / L    Jump to top / mid / bottom of visible area
+    zz / zt / zb Center / top / bottom selection in viewport
     /            Search headings
     n / N        Next / previous search match
 
@@ -2606,16 +2894,20 @@ func (a *App) overlayHelp(background string) string {
     k / ↑        Scroll up one line
     Space/Ctrl+D Page down
     Ctrl+U/B     Page up
-    g / G        Jump to top / bottom
+    gg / G       Jump to top / bottom
     /            Search content
-    i            Enter interactive node selection
+    i            Enter interactive mode
+    f            Jump mode (EasyMotion labels)
 
-  NODE SELECTION  (press i from content)
+  INTERACTIVE  (press i from content)
     j / ↓ / Tab       Next node
     k / ↑ / Shift+Tab Previous node
-    m            Cycle sub-mode (code/inline/links)
+    m            Cycle sub-mode (all/code/inline/links)
+    H / M / L    Jump to top / mid / bottom visible node
+    zz / zt / zb Center / top / bottom node in viewport
     y            Copy to clipboard and exit
-    Esc / q / i  Exit node selection
+    Enter        Open link
+    Esc / q / i  Exit interactive mode
 
   Press any key to dismiss`, focusState)
 

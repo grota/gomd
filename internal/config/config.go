@@ -75,6 +75,16 @@ type KeysConfig struct {
 	ContentPrevMatch string `toml:"content_prev_match"`
 	Jump             string `toml:"jump"`
 
+	// Viewport positioning
+	ViewCenter string `toml:"view_center"` // zz: center selection in viewport
+	ViewTop    string `toml:"view_top"`    // zt: scroll selection to top of viewport
+	ViewBottom string `toml:"view_bottom"` // zb: scroll selection to bottom of viewport
+
+	// Visible area jumps
+	JumpHigh string `toml:"jump_high"` // H: top of visible area
+	JumpMid  string `toml:"jump_mid"`  // M: middle of visible area
+	JumpLow  string `toml:"jump_low"`  // L: bottom of visible area
+
 	// Navigation history
 	NavBack    string `toml:"nav_back"`
 	NavForward string `toml:"nav_forward"`
@@ -99,7 +109,7 @@ func DefaultKeys() KeysConfig {
 		Edit:             "e",
 		SidebarDown:      "j,down",
 		SidebarUp:        "k,up",
-		SidebarTop:       "g",
+		SidebarTop:       "gg",
 		SidebarBottom:    "G",
 		SidebarSearch:    "/",
 		NextMatch:        "n",
@@ -108,13 +118,19 @@ func DefaultKeys() KeysConfig {
 		ScrollUp:         "k,up",
 		ScrollHalfDown:   "ctrl+d,ctrl+f,pgdown, ",
 		ScrollHalfUp:     "ctrl+u,ctrl+b,pgup",
-		ContentTop:       "g",
+		ContentTop:       "gg",
 		ContentBottom:    "G",
 		NodeSelect:       "i",
 		ContentSearch:    "/",
 		ContentNextMatch: "n",
 		ContentPrevMatch: "N",
 		Jump:             "f",
+		ViewCenter:       "zz",
+		ViewTop:          "zt",
+		ViewBottom:       "zb",
+		JumpHigh:         "H",
+		JumpMid:          "M",
+		JumpLow:          "L",
 		NavBack:          "ctrl+o",
 		NavForward:       "ctrl+i",
 		NodeNext:         "j,down,tab",

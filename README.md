@@ -5,10 +5,10 @@ A terminal markdown viewer with an interactive dual-pane TUI and vim-style navig
 ## Features
 
 - **Interactive TUI** — dual-pane layout: outline sidebar + rendered content
-- **Vim-style navigation** — `j`/`k`, `g`/`G`, `/` search
+- **Vim-style navigation** — `j`/`k`, `gg`/`G`, `/` search
 - **Fuzzy search** — sidebar heading search uses fuzzy matching (characters in order)
 - **Breadcrumb bar** — title shows current heading path (e.g., `gomd — file.md > Section > Subsection`)
-- **Node selection** (`i`) — cycle through code blocks, inline code spans, and links; copy with `y`, open links with `Enter`
+- **Interactive mode** (`i`) — cycle through code blocks, inline code spans, and links; copy with `y`, open links with `Enter`
 - **Jump mode** (`f`) — EasyMotion-style labels to quickly jump to any selectable element
 - **Navigation history** — `Ctrl+O` / `Ctrl+I` for back/forward heading navigation
 - **Internal link following** — `Enter` on `#anchor` links jumps to the referenced heading
@@ -53,11 +53,13 @@ gomd                  # print help
 |-----|--------|
 | `j` / `↓` | Next heading |
 | `k` / `↑` | Previous heading |
-| `g` / `G` | Jump to root / last heading |
+| `gg` / `G` | Jump to root / last heading |
+| `H` / `M` / `L` | Jump to top / mid / bottom of visible area |
+| `zz` / `zt` / `zb` | Center / top / bottom selection in viewport |
 | `/` | Search headings (fuzzy) |
 | `Tab` | Switch focus (sidebar ↔ content) |
 | `w` | Toggle sidebar |
-| `i` | Enter node-select mode |
+| `i` | Enter interactive mode |
 | `f` | Jump mode (EasyMotion labels) |
 | `Ctrl+O` | Navigate back |
 | `Ctrl+I` | Navigate forward |
@@ -68,21 +70,23 @@ gomd                  # print help
 | Mouse click | Select sidebar heading |
 | Scroll wheel | Scroll content |
 
-#### Node-select mode (`i`)
+#### Interactive mode (`i`)
 
 Cycles through selectable nodes in the current section: fenced code blocks, inline code spans, and links. Press `m` to cycle sub-modes.
 
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Next / previous node |
-| `m` | Cycle sub-mode (CODE → INLINE → LINKS → ALL) |
+| `m` | Cycle sub-mode (ALL → CODE → INLINE → LINKS) |
+| `H` / `M` / `L` | Jump to top / mid / bottom visible node |
+| `zz` / `zt` / `zb` | Center / top / bottom node in viewport |
 | `y` | Copy node content to clipboard and exit |
 | `Enter` | Open link (external: browser; `#anchor`: jump to heading) |
-| `Esc` | Exit node-select mode |
+| `Esc` | Exit interactive mode |
 
 #### Jump mode (`f`)
 
-Shows short labels next to all selectable elements. Type a label to jump directly to that element (enters node-select ALL mode). Press `Esc` to cancel.
+Shows short labels next to all selectable elements. Type a label to jump directly to that element (enters interactive ALL mode). Press `Esc` to cancel.
 
 ### CLI mode
 
