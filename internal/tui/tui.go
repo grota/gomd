@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/alecthomas/chroma/v2"
@@ -2348,6 +2349,15 @@ func (a *App) applyJumpLabels(lines []string, w int) []string {
 
 	nodeBg := lipgloss.NewStyle().Background(a.theme.Selected)
 
+	// Group inline labels by line so we can apply right-to-left (preserving positions).
+	type inlineLabel struct {
+		lbl     string
+		col     int // spanCol
+		colEnd  int // spanColEnd
+		nodeIdx int
+	}
+	lineLabels := make(map[int][]inlineLabel)
+
 	for lbl, nodeIdx := range a.jumpLabels {
 		if nodeIdx >= len(a.nodeRenderInfo) {
 			continue
@@ -2357,29 +2367,15 @@ func (a *App) applyJumpLabels(lines []string, w int) []string {
 			continue
 		}
 
-		labelRendered := labelStyle.Render(lbl)
 		node := a.codeNodes[nodeIdx]
 
 		if node.inline && info.spanCol >= 0 {
-			// Inline node: insert label just before the span column
-			lineIdx := info.firstLine
-			stripped := ansi.Strip(lines[lineIdx])
-			runes := []rune(stripped)
-			col := info.spanCol
-			if col > len(runes) {
-				col = len(runes)
-			}
-			// Build: prefix + label + highlighted span + suffix
-			spanEnd := info.spanColEnd
-			if spanEnd > len(runes) {
-				spanEnd = len(runes)
-			}
-			prefix := string(runes[:col])
-			span := string(runes[col:spanEnd])
-			suffix := string(runes[spanEnd:])
-			out[lineIdx] = prefix + labelRendered + nodeBg.Render(span) + suffix
+			lineLabels[info.firstLine] = append(lineLabels[info.firstLine], inlineLabel{
+				lbl: lbl, col: info.spanCol, colEnd: info.spanColEnd, nodeIdx: nodeIdx,
+			})
 		} else {
 			// Block node: highlight all lines of the block and prepend label on first
+			labelRendered := labelStyle.Render(lbl)
 			firstLine := info.firstLine
 			lastLine := info.lastLine
 			if lastLine >= len(out) {
@@ -2391,6 +2387,37 @@ func (a *App) applyJumpLabels(lines []string, w int) []string {
 			}
 			out[firstLine] = labelRendered + " " + out[firstLine]
 		}
+	}
+
+	// Apply inline labels per line, sorted right-to-left to preserve column positions.
+	for lineIdx, labels := range lineLabels {
+		// Sort by column descending
+		sort.Slice(labels, func(i, j int) bool {
+			return labels[i].col > labels[j].col
+		})
+		stripped := ansi.Strip(lines[lineIdx])
+		runes := []rune(stripped)
+		// Apply each label from right to left
+		for _, il := range labels {
+			col := il.col
+			if col > len(runes) {
+				col = len(runes)
+			}
+			spanEnd := il.colEnd
+			if spanEnd > len(runes) {
+				spanEnd = len(runes)
+			}
+			labelRendered := labelStyle.Render(il.lbl)
+			span := string(runes[col:spanEnd])
+			// Replace runes[col:spanEnd] with label + highlighted span
+			replacement := []rune(labelRendered + nodeBg.Render(span))
+			newRunes := make([]rune, 0, len(runes)-spanEnd+col+len(replacement))
+			newRunes = append(newRunes, runes[:col]...)
+			newRunes = append(newRunes, replacement...)
+			newRunes = append(newRunes, runes[spanEnd:]...)
+			runes = newRunes
+		}
+		out[lineIdx] = string(runes)
 	}
 
 	return out
