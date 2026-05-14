@@ -84,40 +84,40 @@ gomd                  # print help
 
 #### Key bindings
 
-| Key | Action |
-|-----|--------|
-| `j` / `↓` | Next heading |
-| `k` / `↑` | Previous heading |
-| `gg` / `G` | Jump to root / last heading |
-| `H` / `M` / `L` | Jump to top / mid / bottom of visible area |
+| Key                | Action                                      |
+| ------------------ | ------------------------------------------- |
+| `j` / `↓`          | Next heading                                |
+| `k` / `↑`          | Previous heading                            |
+| `gg` / `G`         | Jump to root / last heading                 |
+| `H` / `M` / `L`    | Jump to top / mid / bottom of visible area  |
 | `zz` / `zt` / `zb` | Center / top / bottom selection in viewport |
-| `/` | Search headings (fuzzy) |
-| `Tab` | Switch focus (sidebar ↔ content) |
-| `w` | Toggle sidebar |
-| `i` | Enter interactive mode |
-| `f` | Jump mode (EasyMotion labels) |
-| `Ctrl+O` | Navigate back |
-| `Ctrl+I` | Navigate forward |
-| `e` | Open in `$EDITOR` |
-| `T` | Cycle theme |
-| `?` | Help |
-| `q` / `Ctrl+C` | Quit |
-| Mouse click | Select sidebar heading |
-| Scroll wheel | Scroll content |
+| `/`                | Search headings (fuzzy)                     |
+| `Tab`              | Switch focus (sidebar ↔ content)            |
+| `w`                | Toggle sidebar                              |
+| `i`                | Enter interactive mode                      |
+| `f`                | Jump mode (EasyMotion labels)               |
+| `Ctrl+O`           | Navigate back                               |
+| `Ctrl+I`           | Navigate forward                            |
+| `e`                | Open in `$EDITOR`                           |
+| `T`                | Cycle theme                                 |
+| `?`                | Help                                        |
+| `q` / `Ctrl+C`     | Quit                                        |
+| Mouse click        | Select sidebar heading                      |
+| Scroll wheel       | Scroll content                              |
 
 #### Interactive mode (`i`)
 
 Cycles through selectable nodes in the current section: fenced code blocks, inline code spans, and links. Press `m` to cycle sub-modes.
 
-| Key | Action |
-|-----|--------|
-| `j` / `k` | Next / previous node |
-| `m` | Cycle sub-mode (ALL → CODE → INLINE → LINKS) |
-| `H` / `M` / `L` | Jump to top / mid / bottom visible node |
-| `zz` / `zt` / `zb` | Center / top / bottom node in viewport |
-| `y` | Copy node content to clipboard and exit |
-| `Enter` | Open link (external: browser; `#anchor`: jump to heading) |
-| `Esc` | Exit interactive mode |
+| Key                | Action                                                    |
+| ------------------ | --------------------------------------------------------- |
+| `j` / `k`          | Next / previous node                                      |
+| `m`                | Cycle sub-mode (ALL → CODE → INLINE → LINKS)              |
+| `H` / `M` / `L`    | Jump to top / mid / bottom visible node                   |
+| `zz` / `zt` / `zb` | Center / top / bottom node in viewport                    |
+| `y`                | Copy node content to clipboard and exit                   |
+| `Enter`            | Open link (external: browser; `#anchor`: jump to heading) |
+| `Esc`              | Exit interactive mode                                     |
 
 #### Jump mode (`f`)
 
@@ -142,9 +142,27 @@ All settings are optional — only specify what you want to override.
 
 ```toml
 [ui]
-theme = "OceanDark"       # OceanDark | Dracula | Nord | Gruvbox | TokyoNight
+theme = "OceanDark"       # OceanDark | Dracula | Nord | Gruvbox | TokyoNight (or a Ghostty theme name)
 compact_tree = false      # compact sidebar tree
 opener = "xdg-open"       # command to open URLs (macOS: "open")
+ghostty_theme_directory = ""  # path to Ghostty themes (e.g., "/usr/share/ghostty/themes/")
+
+[ui.theme_override]
+# Override individual colors of the active theme (hex values).
+# Any field left empty keeps the theme default.
+# border = "#504945"
+# selected = "#3c3836"
+# heading1 = "#fabd2f"
+# heading2 = "#b8bb26"
+# heading3 = "#83a598"
+# headingn = "#928374"
+# background = "#282828"
+# foreground = "#ebdbb2"
+# statusbar = "#3c3836"
+# highlight = "#fe8019"
+# code = "#1d2021"
+# search = "#fb4934"
+# nodesel = "#8ec07c"
 
 [terminal]
 color_mode = "auto"       # auto | truecolor | 256 | ansi | none
@@ -198,6 +216,25 @@ node_exit = "esc,q,i"
 ```
 
 Key bindings use comma-separated values for multiple keys mapped to the same action. Key names follow bubbletea conventions (e.g., `ctrl+d`, `shift+tab`, `pgdown`, `esc`).
+
+## Theme resolution
+
+gomd resolves the active theme in three steps:
+
+1. **Built-in lookup** — if `theme` matches a built-in name (OceanDark, Nord, Dracula, Gruvbox, TokyoNight), that theme is used.
+2. **Ghostty fallback** — if the name doesn't match a built-in theme and `ghostty_theme_directory` is set, gomd looks for a file with that name in the directory and converts the Ghostty color palette to a gomd theme. The mapping is:
+   - `background` / `foreground` → direct
+   - palette 0 → Selected, StatusBar, Code
+   - palette 1 → Search (red)
+   - palette 2 → Heading2 (green)
+   - palette 3 → Heading1 (yellow)
+   - palette 4 → Heading3 (blue)
+   - palette 6 → NodeSel (cyan)
+   - palette 8 → Border, HeadingN (bright black)
+   - palette 11 → Highlight (bright yellow)
+3. **Color overrides** — any non-empty field in `[ui.theme_override]` replaces the corresponding color, regardless of whether the base theme is built-in or loaded from Ghostty.
+
+If the theme name doesn't match a built-in and no Ghostty directory is configured (or the file isn't found), gomd falls back to OceanDark.
 
 ## Input resolution
 

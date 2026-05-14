@@ -205,11 +205,13 @@ func TestResponsiveSidebarWidth(t *testing.T) {
 	// Short headings = narrower sidebar
 	shortDoc := "# A\n## B\n## C\n"
 	app := newTestApp(shortDoc)
+	app.sidebarHidden = false
 	sw := app.sidebarWidth()
 
 	// Long headings = wider sidebar
 	longDoc := "# This is a very long heading title\n## Another quite long heading here\n"
 	app2 := newTestApp(longDoc)
+	app2.sidebarHidden = false
 	sw2 := app2.sidebarWidth()
 
 	if sw2 <= sw {

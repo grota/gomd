@@ -20,9 +20,30 @@ type Config struct {
 
 // UIConfig holds UI-related settings.
 type UIConfig struct {
-	Theme       string `toml:"theme"`
-	CompactTree bool   `toml:"compact_tree"`
-	Opener      string `toml:"opener"` // command to open URLs (default: xdg-open on Linux, open on macOS)
+	Theme                string            `toml:"theme"`
+	CompactTree          bool              `toml:"compact_tree"`
+	Opener               string            `toml:"opener"` // command to open URLs (default: xdg-open on Linux, open on macOS)
+	GhosttyThemeDir      string            `toml:"ghostty_theme_directory"`
+	SidebarHidden        bool              `toml:"sidebar_hidden"`
+	ThemeOverride        ThemeOverrideConfig `toml:"theme_override"`
+}
+
+// ThemeOverrideConfig allows overriding individual colors of the active theme.
+// Values should be hex color strings (e.g., "#ff0000").
+type ThemeOverrideConfig struct {
+	Border     string `toml:"border"`
+	Selected   string `toml:"selected"`
+	Heading1   string `toml:"heading1"`
+	Heading2   string `toml:"heading2"`
+	Heading3   string `toml:"heading3"`
+	HeadingN   string `toml:"headingn"`
+	Background string `toml:"background"`
+	Foreground string `toml:"foreground"`
+	StatusBar  string `toml:"statusbar"`
+	Highlight  string `toml:"highlight"`
+	Code       string `toml:"code"`
+	Search     string `toml:"search"`
+	NodeSel    string `toml:"nodesel"`
 }
 
 // TerminalConfig holds terminal-related settings.
@@ -100,7 +121,7 @@ type KeysConfig struct {
 // DefaultKeys returns the default key bindings.
 func DefaultKeys() KeysConfig {
 	return KeysConfig{
-		Quit:             "q",
+		Quit:             "q,esc",
 		Help:             "?",
 		ThemePicker:      "T",
 		ToggleFocus:      "tab",
@@ -169,8 +190,9 @@ func splitKeys(s string) []string {
 func Default() Config {
 	return Config{
 		UI: UIConfig{
-			Theme:       "OceanDark",
-			CompactTree: false,
+			Theme:         "OceanDark",
+			CompactTree:   false,
+			SidebarHidden: true,
 		},
 		Terminal: TerminalConfig{
 			ColorMode: "auto",

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/alecthomas/chroma/v2"
@@ -86,11 +87,55 @@ var themes = map[string]Theme{
 	},
 }
 
+// GetTheme returns a built-in theme by name, falling back to "OceanDark".
 func GetTheme(name string) Theme {
 	if t, ok := themes[name]; ok {
 		return t
 	}
 	return themes["OceanDark"]
+}
+
+// ResolveTheme returns the active theme, applying ghostty loading and config overrides.
+// It first checks built-in themes, then tries loading from the ghostty theme directory,
+// and finally applies any color overrides from the config.
+func ResolveTheme(cfg config.Config) Theme {
+	name := cfg.UI.Theme
+	var theme Theme
+
+	if t, ok := themes[name]; ok {
+		theme = t
+	} else if cfg.UI.GhosttyThemeDir != "" {
+		if t, err := LoadGhosttyTheme(cfg.UI.GhosttyThemeDir, name); err == nil {
+			theme = t
+		} else {
+			theme = themes["OceanDark"]
+		}
+	} else {
+		theme = themes["OceanDark"]
+	}
+
+	// Apply per-color overrides from config.
+	ov := cfg.UI.ThemeOverride
+	applyOverride := func(dst *lipgloss.Color, src string) {
+		if src != "" {
+			*dst = lipgloss.Color(src)
+		}
+	}
+	applyOverride(&theme.Border, ov.Border)
+	applyOverride(&theme.Selected, ov.Selected)
+	applyOverride(&theme.Heading1, ov.Heading1)
+	applyOverride(&theme.Heading2, ov.Heading2)
+	applyOverride(&theme.Heading3, ov.Heading3)
+	applyOverride(&theme.HeadingN, ov.HeadingN)
+	applyOverride(&theme.Background, ov.Background)
+	applyOverride(&theme.Foreground, ov.Foreground)
+	applyOverride(&theme.StatusBar, ov.StatusBar)
+	applyOverride(&theme.Highlight, ov.Highlight)
+	applyOverride(&theme.Code, ov.Code)
+	applyOverride(&theme.Search, ov.Search)
+	applyOverride(&theme.NodeSel, ov.NodeSel)
+
+	return theme
 }
 
 // ─────────────────────────────────────────────
@@ -128,9 +173,8 @@ const (
 )
 
 const (
-	nodeKindCount  = 4  // number of node sub-modes (code, inline, link, all)
-	helpModalWidth = 62 // fixed width for the help modal overlay
-	tabStopWidth   = 8  // tab expansion width
+	nodeKindCount = 4 // number of node sub-modes (code, inline, link, all)
+	tabStopWidth  = 8 // tab expansion width
 )
 
 // ─────────────────────────────────────────────
@@ -248,13 +292,14 @@ type App struct {
 
 func NewApp(doc *parser.Document, filename, filePath string, cfg config.Config) *App {
 	a := &App{
-		doc:         doc,
-		filename:    filename,
-		filepath:    filePath,
-		cfg:         cfg,
-		theme:       GetTheme(cfg.UI.Theme),
-		focus:       FocusContent,
-		selectedIdx: -1, // start on the root (Document) node
+		doc:           doc,
+		filename:      filename,
+		filepath:      filePath,
+		cfg:           cfg,
+		theme:         ResolveTheme(cfg),
+		focus:         FocusContent,
+		selectedIdx:   -1, // start on the root (Document) node
+		sidebarHidden: cfg.UI.SidebarHidden,
 	}
 	a.rebuildSection()
 	return a
@@ -266,21 +311,47 @@ func NewApp(doc *parser.Document, filename, filePath string, cfg config.Config) 
 
 // rebuildSection recomputes sectionLines and codeNodes for the selected heading.
 // glamourStyleFor maps a gomd theme name to a glamour standard style name.
-func glamourStyleFor(themeName string) string {
-	switch themeName {
+// For built-in themes it uses a hardcoded mapping; for dynamic themes it
+// detects whether the background is light or dark.
+func glamourStyleFor(theme Theme) string {
+	switch theme.Name {
 	case "Dracula":
 		return "dracula"
 	case "TokyoNight":
 		return "tokyo-night"
+	case "OceanDark", "Nord", "Gruvbox":
+		return "dark"
 	default:
+		// Detect light vs dark from background hex.
+		if isLightColor(string(theme.Background)) {
+			return "light"
+		}
 		return "dark"
 	}
+}
+
+// isLightColor returns true if a hex color string (e.g., "#f7f7f7") is
+// perceptually light (luminance > 0.5).
+func isLightColor(hex string) bool {
+	hex = strings.TrimPrefix(hex, "#")
+	if len(hex) != 6 {
+		return false
+	}
+	r, err1 := strconv.ParseUint(hex[0:2], 16, 8)
+	g, err2 := strconv.ParseUint(hex[2:4], 16, 8)
+	b, err3 := strconv.ParseUint(hex[4:6], 16, 8)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return false
+	}
+	// Relative luminance (simplified sRGB)
+	lum := 0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)
+	return lum > 128
 }
 
 // ensureGlamourRenderer returns a cached glamour renderer for the given inner width
 // and current theme, rebuilding it only when those change.
 func (a *App) ensureGlamourRenderer(innerW int) interface{ Render(string) (string, error) } {
-	styleName := glamourStyleFor(a.theme.Name)
+	styleName := glamourStyleFor(a.theme)
 	if a.glamourRenderer != nil && a.glamourWidth == innerW && a.glamourStyleName == styleName {
 		return a.glamourRenderer
 	}
@@ -1890,8 +1961,8 @@ func (a *App) handleThemeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 		for i, name := range themeNames {
 			if msg.String() == fmt.Sprintf("%d", i+1) {
-				a.theme = GetTheme(name)
 				a.cfg.UI.Theme = name
+				a.theme = ResolveTheme(a.cfg)
 				a.cfg.Save()
 				// Invalidate glamour renderer and rendered lines cache
 				a.glamourRenderer = nil
@@ -1976,7 +2047,7 @@ func (a *App) View() string {
 
 	switch a.mode {
 	case ModeThemePicker:
-		return a.renderThemePicker()
+		// fall through — rendered as overlay below
 	}
 
 	title := a.renderTitle()
@@ -1998,6 +2069,9 @@ func (a *App) View() string {
 
 	if a.mode == ModeHelp {
 		view = a.overlayHelp(view)
+	}
+	if a.mode == ModeThemePicker {
+		view = a.overlayThemePicker(view)
 	}
 
 	return view
@@ -2060,7 +2134,7 @@ func (a *App) drawBox(lines []string, outerW int, focused bool, title string) st
 	if focused {
 		borderColor = a.theme.Highlight
 	}
-	bc := lipgloss.NewStyle().Foreground(borderColor)
+	bc := lipgloss.NewStyle().Foreground(borderColor).Background(a.theme.Background)
 
 	// Top border: ┌─ title ──────┐
 	titleRunes := []rune(title)
@@ -2096,14 +2170,28 @@ func (a *App) drawBox(lines []string, outerW int, focused bool, title string) st
 	sb.WriteByte('\n')
 	borderL := bc.Render("│")
 	borderR := bc.Render("│")
+	bgStyle := lipgloss.NewStyle().
+		Background(a.theme.Background).
+		Foreground(a.theme.Foreground)
+	// Build the ANSI opening sequence for our theme background so we can
+	// inject it after any resets in glamour output.
+	bgOpen := strings.TrimSuffix(bgStyle.Render(" "), " \x1b[0m")
+
 	for _, line := range lines {
 		// Normalize line to exactly innerW display columns so the right
 		// border always appears in the correct column regardless of whether
 		// the line contains ANSI sequences (e.g. from glamour).
 		line = ansi.Truncate(line, innerW, "")
 		visW := lipgloss.Width(line)
+
+		// Replace ANSI full resets with resets that re-apply our background,
+		// so glamour's internal resets don't clear the theme background.
+		line = strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+bgOpen)
+
+		// Paint the entire line with the theme background.
+		line = bgOpen + line + "\x1b[0m"
 		if visW < innerW {
-			line += strings.Repeat(" ", innerW-visW)
+			line += bgStyle.Render(strings.Repeat(" ", innerW-visW))
 		}
 		sb.WriteString(borderL + line + borderR)
 		sb.WriteByte('\n')
@@ -2177,13 +2265,14 @@ func (a *App) renderBorderedOutline(outerW int, focused bool) string {
 				fg = a.theme.HeadingN
 			}
 			lines = append(lines, lipgloss.NewStyle().
+				Background(a.theme.Background).
 				Foreground(fg).
 				Width(innerW).
 				Render(text))
 		}
 	}
 	for len(lines) < h {
-		lines = append(lines, lipgloss.NewStyle().Width(innerW).Render(""))
+		lines = append(lines, lipgloss.NewStyle().Background(a.theme.Background).Width(innerW).Render(""))
 	}
 
 	return a.drawBox(lines, outerW, focused, "Outline")
@@ -2869,50 +2958,135 @@ func (a *App) overlayHelp(background string) string {
 		focusState = "content focused"
 	}
 
-	text := fmt.Sprintf(`gomd — Keyboard Shortcuts   [%s]
+	km := a.cfg.Keys
 
-  GLOBAL
-    Tab          Toggle focus between sidebar ↔ content
-    w            Hide / show sidebar
-    e            Open file in $EDITOR
-    r            Reload file
-    T            Open theme picker
-    ?            Toggle this help
-    q / Ctrl+C   Quit
+	// fmtKeys formats a key binding string for display:
+	// "j,down" → "j / ↓", "ctrl+d,ctrl+f,pgdown, " → "Ctrl+D / Ctrl+F / PgDn / Space"
+	fmtKeys := func(binding string) string {
+		var parts []string
+		for _, k := range strings.Split(binding, ",") {
+			k = strings.TrimSpace(k)
+			if k == "" {
+				continue
+			}
+			switch k {
+			case "up":
+				k = "↑"
+			case "down":
+				k = "↓"
+			case "left":
+				k = "←"
+			case "right":
+				k = "→"
+			case "tab":
+				k = "Tab"
+			case "shift+tab":
+				k = "Shift+Tab"
+			case "enter":
+				k = "Enter"
+			case "esc":
+				k = "Esc"
+			case "pgup":
+				k = "PgUp"
+			case "pgdown":
+				k = "PgDn"
+			case " ":
+				k = "Space"
+			default:
+				if strings.HasPrefix(k, "ctrl+") {
+					k = "Ctrl+" + strings.ToUpper(k[5:])
+				}
+			}
+			parts = append(parts, k)
+		}
+		return strings.Join(parts, " / ")
+	}
 
-  SIDEBAR  (when focused)
-    j / ↓        Select next heading
-    k / ↑        Select previous heading
-    gg / G       Jump to root / last heading
-    H / M / L    Jump to top / mid / bottom of visible area
-    zz / zt / zb Center / top / bottom selection in viewport
-    /            Search headings
-    n / N        Next / previous search match
+	type helpEntry struct {
+		keys string
+		desc string
+	}
 
-  CONTENT  (when focused)
-    j / ↓        Scroll down one line
-    k / ↑        Scroll up one line
-    Space/Ctrl+D Page down
-    Ctrl+U/B     Page up
-    gg / G       Jump to top / bottom
-    /            Search content
-    i            Enter interactive mode
-    f            Jump mode (EasyMotion labels)
+	// Build sections from config.
+	global := []helpEntry{
+		{fmtKeys(km.ToggleFocus), "Toggle focus sidebar ↔ content"},
+		{fmtKeys(km.ToggleSidebar), "Hide / show sidebar"},
+		{fmtKeys(km.Edit), "Open file in $EDITOR"},
+		{fmtKeys(km.Reload), "Reload file"},
+		{fmtKeys(km.ThemePicker), "Open theme picker"},
+		{fmtKeys(km.Help), "Toggle this help"},
+		{fmtKeys(km.Quit), "Quit"},
+	}
 
-  INTERACTIVE  (press i from content)
-    j / ↓ / Tab       Next node
-    k / ↑ / Shift+Tab Previous node
-    m            Cycle sub-mode (all/code/inline/links)
-    H / M / L    Jump to top / mid / bottom visible node
-    zz / zt / zb Center / top / bottom node in viewport
-    y            Copy to clipboard and exit
-    Enter        Open link
-    Esc / q / i  Exit interactive mode
+	sidebar := []helpEntry{
+		{fmtKeys(km.SidebarDown), "Select next heading"},
+		{fmtKeys(km.SidebarUp), "Select previous heading"},
+		{fmtKeys(km.SidebarTop) + " / " + fmtKeys(km.SidebarBottom), "Jump to root / last heading"},
+		{fmtKeys(km.JumpHigh) + " / " + fmtKeys(km.JumpMid) + " / " + fmtKeys(km.JumpLow), "Top / mid / bottom of visible area"},
+		{fmtKeys(km.ViewCenter) + " / " + fmtKeys(km.ViewTop) + " / " + fmtKeys(km.ViewBottom), "Center / top / bottom in viewport"},
+		{fmtKeys(km.SidebarSearch), "Search headings"},
+		{fmtKeys(km.NextMatch) + " / " + fmtKeys(km.PrevMatch), "Next / previous match"},
+	}
 
-  Press any key to dismiss`, focusState)
+	content := []helpEntry{
+		{fmtKeys(km.ScrollDown), "Scroll down one line"},
+		{fmtKeys(km.ScrollUp), "Scroll up one line"},
+		{fmtKeys(km.ScrollHalfDown), "Page down"},
+		{fmtKeys(km.ScrollHalfUp), "Page up"},
+		{fmtKeys(km.ContentTop) + " / " + fmtKeys(km.ContentBottom), "Jump to top / bottom"},
+		{fmtKeys(km.ContentSearch), "Search content"},
+		{fmtKeys(km.NodeSelect), "Enter interactive mode"},
+		{fmtKeys(km.Jump), "Jump mode (EasyMotion labels)"},
+	}
 
-	// Fixed modal width
-	modalW := helpModalWidth
+	interactive := []helpEntry{
+		{fmtKeys(km.NodeNext), "Next node"},
+		{fmtKeys(km.NodePrev), "Previous node"},
+		{"m", "Cycle sub-mode (all/code/inline/links)"},
+		{fmtKeys(km.JumpHigh) + " / " + fmtKeys(km.JumpMid) + " / " + fmtKeys(km.JumpLow), "Top / mid / bottom visible node"},
+		{fmtKeys(km.ViewCenter) + " / " + fmtKeys(km.ViewTop) + " / " + fmtKeys(km.ViewBottom), "Center / top / bottom in viewport"},
+		{fmtKeys(km.NodeCopy), "Copy to clipboard and exit"},
+		{fmtKeys(km.NodeOpen), "Open link"},
+		{fmtKeys(km.NodeExit), "Exit interactive mode"},
+	}
+
+	// Find max key width across all sections for alignment.
+	maxKeyW := 0
+	for _, entries := range [][]helpEntry{global, sidebar, content, interactive} {
+		for _, e := range entries {
+			if w := len([]rune(e.keys)); w > maxKeyW {
+				maxKeyW = w
+			}
+		}
+	}
+
+	renderSection := func(entries []helpEntry) string {
+		var lines []string
+		for _, e := range entries {
+			pad := maxKeyW - len([]rune(e.keys)) + 2
+			if pad < 2 {
+				pad = 2
+			}
+			lines = append(lines, "    "+e.keys+strings.Repeat(" ", pad)+e.desc)
+		}
+		return strings.Join(lines, "\n")
+	}
+
+	text := fmt.Sprintf("gomd — Keyboard Shortcuts   [%s]\n\n", focusState)
+	text += "  GLOBAL\n" + renderSection(global) + "\n\n"
+	text += "  SIDEBAR  (when focused)\n" + renderSection(sidebar) + "\n\n"
+	text += "  CONTENT  (when focused)\n" + renderSection(content) + "\n\n"
+	text += "  INTERACTIVE  (press i from content)\n" + renderSection(interactive) + "\n\n"
+	text += "  Press any key to dismiss"
+
+	// Compute modal width from content.
+	modalW := 0
+	for _, line := range strings.Split(text, "\n") {
+		if w := lipgloss.Width(line); w > modalW {
+			modalW = w
+		}
+	}
+	modalW += 6 // padding (1 each side) + border (1 each side) + margin
 	if modalW > a.width-4 {
 		modalW = a.width - 4
 	}
@@ -2956,26 +3130,97 @@ func (a *App) overlayHelp(background string) string {
 	return strings.Join(bgLines, "\n")
 }
 
-func (a *App) renderThemePicker() string {
+func (a *App) overlayThemePicker(background string) string {
 	themeNames := []string{"OceanDark", "Nord", "Dracula", "Gruvbox", "TokyoNight"}
+
+	// Header with current resolved theme name.
 	var lines []string
-	lines = append(lines, "  Select Theme (press number):", "")
+	lines = append(lines, fmt.Sprintf("Theme: %s", a.theme.Name), "")
+
+	// Theme selection list.
+	lines = append(lines, "Select Theme (press number):", "")
 	for i, name := range themeNames {
 		marker := "  "
 		if name == a.cfg.UI.Theme {
 			marker = "→ "
 		}
-		lines = append(lines, fmt.Sprintf("  %s%d. %s", marker, i+1, name))
+		lines = append(lines, fmt.Sprintf("%s%d. %s", marker, i+1, name))
 	}
-	lines = append(lines, "", "  Esc / q / T to cancel")
 
-	return lipgloss.NewStyle().
+	// Resolved color swatches.
+	lines = append(lines, "", "Resolved Colors:", "")
+	type colorEntry struct {
+		label string
+		value lipgloss.Color
+	}
+	entries := []colorEntry{
+		{"Border", a.theme.Border},
+		{"Selected", a.theme.Selected},
+		{"Heading1", a.theme.Heading1},
+		{"Heading2", a.theme.Heading2},
+		{"Heading3", a.theme.Heading3},
+		{"HeadingN", a.theme.HeadingN},
+		{"Background", a.theme.Background},
+		{"Foreground", a.theme.Foreground},
+		{"StatusBar", a.theme.StatusBar},
+		{"Highlight", a.theme.Highlight},
+		{"Code", a.theme.Code},
+		{"Search", a.theme.Search},
+		{"NodeSel", a.theme.NodeSel},
+	}
+	for _, e := range entries {
+		hex := string(e.value)
+		swatch := lipgloss.NewStyle().
+			Background(e.value).
+			Foreground(lipgloss.Color("#000000")).
+			Render(fmt.Sprintf(" %-10s ", hex))
+		lines = append(lines, fmt.Sprintf("  %-12s %s", e.label, swatch))
+	}
+
+	lines = append(lines, "", "Esc / q / T to dismiss")
+
+	text := strings.Join(lines, "\n")
+
+	// Responsive modal width.
+	modalW := 50
+	if modalW > a.width-4 {
+		modalW = a.width - 4
+	}
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(a.theme.Border).
 		Background(a.theme.Background).
 		Foreground(a.theme.Foreground).
-		Width(a.width).
-		Height(a.height).
-		Padding(1, 2).
-		Render(strings.Join(lines, "\n"))
+		Width(modalW-2).
+		Padding(0, 1)
+
+	modal := boxStyle.Render(text)
+	modalRenderedLines := strings.Split(modal, "\n")
+	modalH := len(modalRenderedLines)
+
+	startRow := (a.height - modalH) / 2
+	if startRow < 0 {
+		startRow = 0
+	}
+	startCol := (a.width - modalW) / 2
+	if startCol < 0 {
+		startCol = 0
+	}
+
+	bgLines := strings.Split(background, "\n")
+	for i, mLine := range modalRenderedLines {
+		row := startRow + i
+		if row >= len(bgLines) {
+			break
+		}
+		mWidth := lipgloss.Width(mLine)
+		left := ansi.Truncate(bgLines[row], startCol, "")
+		right := ansi.TruncateLeft(bgLines[row], startCol+mWidth, "")
+		bgLines[row] = left + mLine + right
+	}
+
+	return strings.Join(bgLines, "\n")
 }
 
 // ─────────────────────────────────────────────
