@@ -288,8 +288,41 @@ func offsetToLine(lineOffsets []int, offset int) int {
 	return lo // 1-based because lineOffsets[0] = 0 means line 1
 }
 
+// stripFrontmatter removes YAML frontmatter (delimited by "---") from the
+// beginning of a markdown document. Returns the content without frontmatter.
+func stripFrontmatter(content string) string {
+	if !strings.HasPrefix(content, "---") {
+		return content
+	}
+	// Find the closing "---" after the opening one.
+	rest := content[3:]
+	// Skip the remainder of the opening line (e.g. "---\n")
+	nl := strings.Index(rest, "\n")
+	if nl < 0 {
+		return content // no newline after opening ---, not valid frontmatter
+	}
+	rest = rest[nl+1:]
+	closing := strings.Index(rest, "---")
+	if closing < 0 {
+		return content // no closing ---
+	}
+	// Ensure the closing --- is at the start of a line
+	if closing > 0 && rest[closing-1] != '\n' {
+		return content
+	}
+	// Skip past the closing --- line
+	after := rest[closing+3:]
+	if idx := strings.Index(after, "\n"); idx >= 0 {
+		after = after[idx+1:]
+	} else {
+		after = ""
+	}
+	return after
+}
+
 // ParseMarkdown parses markdown content and returns a Document.
 func ParseMarkdown(content string) *Document {
-	headings := parseMarkdownHeadings(content)
-	return NewDocument(content, headings)
+	stripped := stripFrontmatter(content)
+	headings := parseMarkdownHeadings(stripped)
+	return NewDocument(stripped, headings)
 }

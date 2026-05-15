@@ -4,10 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
+	"charm.land/glamour/v2"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/grota/gomd/internal/config"
 	"github.com/grota/gomd/internal/input"
@@ -23,8 +27,9 @@ var (
 	flagOutput    string
 	flagSection   string
 	flagCount     bool
+	flagRender    bool
+	flagDisableBg bool
 	flagTheme     string
-	flagColorMode string
 	flagNoImages  bool
 	flagImages    bool
 )
@@ -44,7 +49,8 @@ Examples:
   gomd -l README.md           # List all headings
   gomd --tree README.md       # Show heading tree
   gomd -s Installation doc.md # Extract section
-  gomd -s Installation doc.md # Extract section`,
+  gomd -s Installation doc.md # Extract section
+  gomd -r README.md            # Render to stdout (pipeable)`,
 		RunE:               runRoot,
 		Args:               cobra.ArbitraryArgs,
 		DisableFlagParsing: false,
@@ -59,8 +65,9 @@ Examples:
 	rootCmd.Flags().StringVarP(&flagOutput, "output", "o", "plain", "Output format: plain, json, tree")
 	rootCmd.Flags().StringVarP(&flagSection, "section", "s", "", "Extract specific section by heading name")
 	rootCmd.Flags().BoolVar(&flagCount, "count", false, "Count headings by level")
-	rootCmd.Flags().StringVar(&flagTheme, "theme", "", "Override TUI theme")
-	rootCmd.Flags().StringVar(&flagColorMode, "color-mode", "auto", "Terminal color mode: auto, rgb, 256")
+	rootCmd.Flags().BoolVarP(&flagRender, "render", "r", false, "Render markdown to stdout (non-interactive)")
+	rootCmd.Flags().BoolVar(&flagDisableBg, "disable-background", false, "Suppress background color in render mode (useful for piping)")
+	rootCmd.Flags().StringVar(&flagTheme, "theme", "", "Override theme (name from config or Ghostty themes directory)")
 	rootCmd.Flags().BoolVar(&flagNoImages, "no-images", false, "Disable image rendering")
 	rootCmd.Flags().BoolVar(&flagImages, "images", false, "Enable image rendering (override config)")
 
@@ -88,10 +95,20 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	if flagRender {
+		return renderToStdout(doc, filePath)
+	}
+
 	// TUI mode
 	cfg := config.Load()
 	if flagTheme != "" {
 		cfg.UI.Theme = flagTheme
+	}
+	if flagImages {
+		cfg.Images.Enabled = true
+	}
+	if flagNoImages {
+		cfg.Images.Enabled = false
 	}
 
 	filename := inp.FilePath
@@ -215,4 +232,160 @@ func extractSection(doc *parser.Document, name string) {
 		os.Exit(1)
 	}
 	fmt.Println(section)
+}
+
+func renderToStdout(doc *parser.Document, mdPath string) error {
+	// Use terminal width if stdout is a terminal, otherwise no wrapping.
+	width := 80
+	if fd := int(os.Stdout.Fd()); term.IsTerminal(fd) {
+		if w, _, err := term.GetSize(fd); err == nil && w > 0 {
+			width = w
+		}
+	}
+
+	// Load config and resolve theme to build a matching glamour style.
+	cfg := config.Load()
+	if flagTheme != "" {
+		cfg.UI.Theme = flagTheme
+	}
+	theme := tui.ResolveTheme(cfg)
+
+	style := tui.StyleConfigFromTheme(theme)
+	if !flagDisableBg {
+		bg := string(theme.Background)
+		style.Document.BackgroundColor = &bg
+	}
+
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStyles(style),
+		glamour.WithWordWrap(width),
+		glamour.WithChromaFormatter("terminal16m"),
+	)
+	if err != nil {
+		return fmt.Errorf("glamour renderer: %w", err)
+	}
+
+	content := tui.PreProcessMarkdown(doc.Content)
+	out, err := r.Render(content)
+	if err != nil {
+		return fmt.Errorf("render: %w", err)
+	}
+	out = tui.PostProcessLinks(out)
+
+	if !flagDisableBg {
+		// Glamour/Chroma emit \x1b[0m resets that strip the background color.
+		// Re-apply the document background after every reset so the whole
+		// output renders on the intended bg, similar to the TUI fix.
+		bg := string(theme.Background)
+		bgOpen := tui.BGOpen(bg)
+		out = strings.ReplaceAll(out, "\x1b[0m", "\x1b[0m"+bgOpen)
+		out = strings.ReplaceAll(out, "\x1b[m", "\x1b[m"+bgOpen)
+	}
+
+	// Image rendering via Kitty graphics protocol.
+	// Outside tmux, auto-detect Kitty-capable terminals.
+	// Inside tmux, require --images (passthrough works but images are "sticky").
+	if imagesEnabled(cfg) && (flagImages || tui.IsKittySupported()) {
+		out = replaceImagePlaceholders(out, content, mdPath)
+	}
+
+	fmt.Print(out)
+	return nil
+}
+
+// imagesEnabled determines if image rendering is active based on flags and config.
+func imagesEnabled(cfg config.Config) bool {
+	if flagNoImages {
+		return false
+	}
+	if flagImages {
+		return true
+	}
+	return cfg.Images.Enabled
+}
+
+// ansiStripRe matches ANSI escape sequences (CSI, OSC, etc.) for stripping.
+var ansiStripRe = regexp.MustCompile(`\x1b(?:\[[0-9;]*[a-zA-Z]|\].*?\x07|_.*?\x1b\\)`)
+
+// replaceImagePlaceholders finds image placeholders in glamour output and replaces
+// them with Kitty graphics escape sequences where possible.
+func replaceImagePlaceholders(rendered, mdContent, mdPath string) string {
+	images := parser.ExtractImages(mdContent)
+	if len(images) == 0 {
+		return rendered
+	}
+
+	// Get terminal width for sizing
+	maxCols := 60
+	if fd := int(os.Stdout.Fd()); term.IsTerminal(fd) {
+		if w, _, err := term.GetSize(fd); err == nil && w > 0 {
+			maxCols = w - 4 // leave some margin
+		}
+	}
+
+	// Resolve mdPath to absolute for consistent path resolution
+	absMdPath := mdPath
+	if mdPath != "" && !filepath.IsAbs(mdPath) {
+		if abs, err := filepath.Abs(mdPath); err == nil {
+			absMdPath = abs
+		}
+	}
+
+	// Build a map from image src → kitty sequence
+	kittyMap := map[string]string{}
+	for _, img := range images {
+		resolved := tui.ResolveImagePath(img.Src, absMdPath)
+		if resolved == "" {
+			continue
+		}
+		if _, done := kittyMap[img.Src]; done {
+			continue
+		}
+		kittySeq, err := tui.RenderKittyImage(resolved, maxCols)
+		if err != nil {
+			continue
+		}
+		kittyMap[img.Src] = kittySeq
+	}
+	if len(kittyMap) == 0 {
+		return rendered
+	}
+
+	// Process line by line.  Glamour renders images as:
+	//   <ANSI>Image: <OSC8 hyperlink>alt text<OSC8 close> →<ANSI>...
+	// We strip ANSI to find lines starting with "Image: ", then match
+	// the image src from the OSC8 URL in the raw line.
+	lines := strings.Split(rendered, "\n")
+	var result []string
+	for _, line := range lines {
+		stripped := ansiStripRe.ReplaceAllString(line, "")
+		stripped = strings.TrimSpace(stripped)
+
+		// Match lines that are image placeholders.
+		// With alt text: "Image: <alt> →"
+		// Without alt text: just the URL path (e.g. "/a.png")
+		replaced := false
+		for src, kittySeq := range kittyMap {
+			if strings.Contains(line, src) {
+				// Check if this is an image placeholder line (not just a random mention).
+				// Glamour renders images as either "Image: alt →" or just the URL path.
+				cleanSrc := strings.TrimPrefix(src, "./")
+				cleanStripped := strings.TrimPrefix(stripped, "/")
+				isImageLine := strings.HasPrefix(stripped, "Image: ") ||
+					stripped == src || stripped == cleanSrc ||
+					cleanStripped == cleanSrc ||
+					stripped == "/"+cleanSrc
+				if isImageLine {
+					result = append(result, kittySeq)
+					replaced = true
+					break
+				}
+			}
+		}
+		if !replaced {
+			result = append(result, line)
+		}
+	}
+
+	return strings.Join(result, "\n")
 }

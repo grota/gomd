@@ -4,7 +4,7 @@
 
 `gomd` is a CLI + interactive TUI markdown viewer. It opens `.md` files in a dual-pane bubbletea interface with vim-style navigation. Also supports non-interactive modes for listing headings, querying markdown structure via a custom `tql` language, and finding the heading at a given line number.
 
-**Tech stack:** Go, Cobra (CLI), Bubbletea (TUI), Glamour (rendering), Chroma (highlighting), TOML config.
+**Tech stack:** Go, Cobra (CLI), Bubbletea (TUI), Glamour v2 (rendering), Chroma (highlighting), Kitty graphics protocol (images), TOML config.
 
 ## Setup
 
@@ -19,22 +19,23 @@ The Go version in `go.mod` is `1.26.2` — use the matching toolchain to avoid t
 
 ## Key Commands
 
-| Task | Command |
-|------|---------|
-| Build | `go build ./cmd/gomd` |
-| Run all tests | `go test ./...` |
+| Task            | Command                                    |
+| --------------- | ------------------------------------------ |
+| Build           | `go build ./cmd/gomd`                      |
+| Run all tests   | `go test ./...`                            |
 | Run single test | `go test ./internal/parser/ -run TestName` |
-| Vet | `go vet ./...` |
-| Format | `gofmt -w .` |
+| Vet             | `go vet ./...`                             |
+| Format          | `gofmt -w .`                               |
 
 Only `internal/parser` and `internal/tui` have tests.
 
 ## Architecture Notes
 
 - Single entrypoint: `cmd/gomd/main.go` — all CLI flags, mode routing.
-- **Two execution modes** selected by flags:
+- **Three execution modes** selected by flags:
   1. TUI (default, no flags): `gomd file.md`
-  2. CLI (`--list`, `--tree`, `--count`, `--section`): non-interactive output
+  2. Render (`-r`/`--render`): non-interactive stdout rendering with `--disable-background` and `--images` options
+  3. CLI (`--list`, `--tree`, `--count`, `--section`): non-interactive structured output
 - Subcommand: none (at-line was removed).
 - Input resolution: explicit arg → stdin → help and exit.
 - Config file: `~/.config/gomd/config.toml` (TOML, sections: `[ui]`, `[terminal]`, `[images]`, `[content]`, `[keys]`).
@@ -44,11 +45,12 @@ Only `internal/parser` and `internal/tui` have tests.
 ## Package Boundaries
 
 ```
-cmd/gomd/main.go         # Cobra entrypoint, all flag handling
+cmd/gomd/main.go         # Cobra entrypoint, all flag handling, renderToStdout()
 internal/config/         # TOML config loader
 internal/input/          # Stdin/file reading
 internal/parser/         # ParseMarkdown(), Heading/Document types, section extraction
 internal/tui/            # Bubbletea TUI (Run() entry)
+internal/tui/kitty.go    # Kitty graphics protocol: image rendering, tmux passthrough
 ```
 
 ## Package Management

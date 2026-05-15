@@ -131,3 +131,33 @@ func TestHeadingAtLine(t *testing.T) {
 		t.Errorf("expected 'Second', got %q", h.Text)
 	}
 }
+
+func TestParseFrontmatterStripped(t *testing.T) {
+	md := "---\nparent: \"[[Bash]]\"\n---\n\n## getopts\n\nSome content\n"
+	doc := parser.ParseMarkdown(md)
+
+	// Frontmatter should be stripped from content
+	if len(doc.Content) > 0 && doc.Content[0] == '-' {
+		t.Errorf("frontmatter not stripped from content: %q", doc.Content[:20])
+	}
+
+	// Should find exactly one heading
+	if len(doc.Headings) != 1 {
+		t.Fatalf("expected 1 heading, got %d", len(doc.Headings))
+	}
+	if doc.Headings[0].Text != "getopts" {
+		t.Errorf("expected heading 'getopts', got %q", doc.Headings[0].Text)
+	}
+}
+
+func TestParseNoFrontmatter(t *testing.T) {
+	md := "# Title\n\nContent\n"
+	doc := parser.ParseMarkdown(md)
+
+	if doc.Content != md {
+		t.Errorf("content should be unchanged without frontmatter")
+	}
+	if len(doc.Headings) != 1 {
+		t.Fatalf("expected 1 heading, got %d", len(doc.Headings))
+	}
+}

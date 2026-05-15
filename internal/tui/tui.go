@@ -16,8 +16,9 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/atotto/clipboard"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/glamour/v2"
+	gansi "charm.land/glamour/v2/ansi"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/fsnotify/fsnotify"
@@ -194,6 +195,7 @@ type codeNode struct {
 	kind      nodeKind
 	lang      string
 	content   string // raw code without fence lines / backticks; for links: URL
+	display   string // for links: the visible text glamour renders (e.g. link text, "Image: alt")
 	startLine int    // 0-based line index in sectionLines
 	endLine   int    // inclusive (== startLine for inline)
 	inline    bool   // true for backtick inline code spans and links
@@ -310,24 +312,171 @@ func NewApp(doc *parser.Document, filename, filePath string, cfg config.Config) 
 // ─────────────────────────────────────────────
 
 // rebuildSection recomputes sectionLines and codeNodes for the selected heading.
-// glamourStyleFor maps a gomd theme name to a glamour standard style name.
-// For built-in themes it uses a hardcoded mapping; for dynamic themes it
-// detects whether the background is light or dark.
-func glamourStyleFor(theme Theme) string {
-	switch theme.Name {
-	case "Dracula":
-		return "dracula"
-	case "TokyoNight":
-		return "tokyo-night"
-	case "OceanDark", "Nord", "Gruvbox":
-		return "dark"
-	default:
-		// Detect light vs dark from background hex.
-		if isLightColor(string(theme.Background)) {
-			return "light"
-		}
-		return "dark"
+
+func boolPtr(b bool) *bool       { return &b }
+func stringPtr(s string) *string { return &s }
+func uintPtr(u uint) *uint       { return &u }
+
+// StyleConfigFromTheme builds a glamour StyleConfig from a gomd Theme,
+// mapping the theme's colors directly into the glamour rendering style.
+// This replaces the old approach of picking a built-in glamour style.
+func StyleConfigFromTheme(theme Theme) gansi.StyleConfig {
+	fg := string(theme.Foreground)
+	h1 := string(theme.Heading1)
+	h2 := string(theme.Heading2)
+	h3 := string(theme.Heading3)
+	hN := string(theme.HeadingN)
+	code := string(theme.Code)
+	bg := string(theme.Background)
+	link := string(theme.Search) // reuse Search color for links
+	border := string(theme.Border)
+
+	// Pick a code block background: slightly offset from the main background.
+	codeBg := "#373737"
+	if isLightColor(bg) {
+		codeBg = "#e8e8e8"
 	}
+
+	return gansi.StyleConfig{
+		Document: gansi.StyleBlock{
+			StylePrimitive: gansi.StylePrimitive{
+				Color:       &fg,
+				BlockPrefix: "\n",
+				BlockSuffix: "\n",
+			},
+			Margin: uintPtr(2),
+		},
+		BlockQuote: gansi.StyleBlock{
+			Indent:      uintPtr(1),
+			IndentToken: stringPtr("│ "),
+		},
+		List: gansi.StyleList{
+			LevelIndent: 2,
+		},
+		Heading: gansi.StyleBlock{
+			StylePrimitive: gansi.StylePrimitive{
+				Color:       &hN,
+				Bold:        boolPtr(true),
+				BlockSuffix: "\n",
+			},
+		},
+		H1: gansi.StyleBlock{
+			StylePrimitive: gansi.StylePrimitive{
+				Prefix: " ",
+				Suffix: " ",
+				Color:  &h1,
+				Bold:   boolPtr(true),
+			},
+		},
+		H2: gansi.StyleBlock{
+			StylePrimitive: gansi.StylePrimitive{
+				Prefix: "## ",
+				Color:  &h2,
+			},
+		},
+		H3: gansi.StyleBlock{
+			StylePrimitive: gansi.StylePrimitive{
+				Prefix: "### ",
+				Color:  &h3,
+			},
+		},
+		H4: gansi.StyleBlock{
+			StylePrimitive: gansi.StylePrimitive{
+				Prefix: "#### ",
+				Color:  &hN,
+			},
+		},
+		H5: gansi.StyleBlock{
+			StylePrimitive: gansi.StylePrimitive{
+				Prefix: "##### ",
+				Color:  &hN,
+			},
+		},
+		H6: gansi.StyleBlock{
+			StylePrimitive: gansi.StylePrimitive{
+				Prefix: "###### ",
+				Color:  &hN,
+				Bold:   boolPtr(false),
+			},
+		},
+		Strikethrough: gansi.StylePrimitive{
+			CrossedOut: boolPtr(true),
+		},
+		Emph: gansi.StylePrimitive{
+			Italic: boolPtr(true),
+		},
+		Strong: gansi.StylePrimitive{
+			Bold: boolPtr(true),
+		},
+		HorizontalRule: gansi.StylePrimitive{
+			Color:  &border,
+			Format: "\n--------\n",
+		},
+		Item: gansi.StylePrimitive{
+			BlockPrefix: "• ",
+		},
+		Enumeration: gansi.StylePrimitive{
+			BlockPrefix: ". ",
+		},
+		Task: gansi.StyleTask{
+			Ticked:   "[✓] ",
+			Unticked: "[ ] ",
+		},
+		Link: gansi.StylePrimitive{
+			Color:     &link,
+			Underline: boolPtr(true),
+		},
+		LinkText: gansi.StylePrimitive{
+			Color: &h3,
+			Bold:  boolPtr(true),
+		},
+		Image: gansi.StylePrimitive{
+			Color:     &link,
+			Underline: boolPtr(true),
+		},
+		ImageText: gansi.StylePrimitive{
+			Color:  &border,
+			Format: "{{.text}} 🖼️",
+		},
+		Code: gansi.StyleBlock{
+			StylePrimitive: gansi.StylePrimitive{
+				Prefix:          " ",
+				Suffix:          " ",
+				Color:           &code,
+				BackgroundColor: &codeBg,
+			},
+		},
+		CodeBlock: gansi.StyleCodeBlock{
+			StyleBlock: gansi.StyleBlock{
+				StylePrimitive: gansi.StylePrimitive{
+					Color: &fg,
+				},
+				Margin: uintPtr(2),
+			},
+			Chroma: chromaForTheme(fg, codeBg, isLightColor(bg)),
+		},
+		Table: gansi.StyleTable{},
+		DefinitionDescription: gansi.StylePrimitive{
+			BlockPrefix: "\n🠶 ",
+		},
+	}
+}
+
+// BGOpen returns the ANSI escape sequence to set a truecolor background from
+// a hex color string like "#ffffff".  Exported for use by the render-mode
+// post-processor.
+func BGOpen(hex string) string {
+	hex = strings.TrimPrefix(hex, "#")
+	if len(hex) != 6 {
+		return ""
+	}
+	r, err1 := strconv.ParseUint(hex[0:2], 16, 8)
+	g, err2 := strconv.ParseUint(hex[2:4], 16, 8)
+	b, err3 := strconv.ParseUint(hex[4:6], 16, 8)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return ""
+	}
+	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r, g, b)
 }
 
 // isLightColor returns true if a hex color string (e.g., "#f7f7f7") is
@@ -348,23 +497,121 @@ func isLightColor(hex string) bool {
 	return lum > 128
 }
 
+// chromaForTheme returns a full Chroma token color config appropriate for light
+// or dark backgrounds.  Colors are taken from glamour's built-in styles.
+func chromaForTheme(fg, codeBg string, light bool) *gansi.Chroma {
+	sp := func(color string) gansi.StylePrimitive {
+		if color == "" {
+			return gansi.StylePrimitive{}
+		}
+		return gansi.StylePrimitive{Color: &color}
+	}
+	spBg := func(fg, bg string) gansi.StylePrimitive {
+		p := gansi.StylePrimitive{}
+		if fg != "" {
+			p.Color = &fg
+		}
+		if bg != "" {
+			p.BackgroundColor = &bg
+		}
+		return p
+	}
+	spStyle := func(color string, bold, italic, underline bool) gansi.StylePrimitive {
+		p := gansi.StylePrimitive{}
+		if color != "" {
+			p.Color = &color
+		}
+		if bold {
+			p.Bold = boolPtr(true)
+		}
+		if italic {
+			p.Italic = boolPtr(true)
+		}
+		if underline {
+			p.Underline = boolPtr(true)
+		}
+		return p
+	}
+
+	if light {
+		return &gansi.Chroma{
+			Text:                sp("#2A2A2A"),
+			Error:               spBg("#F1F1F1", "#FF5555"),
+			Comment:             sp("#8D8D8D"),
+			CommentPreproc:      sp("#FF875F"),
+			Keyword:             sp("#279EFC"),
+			KeywordReserved:     sp("#FF5FD2"),
+			KeywordNamespace:    sp("#FB406F"),
+			KeywordType:         sp("#7049C2"),
+			Operator:            sp("#FF2626"),
+			Punctuation:         sp("#FA7878"),
+			NameBuiltin:         sp("#0A1BB1"),
+			NameTag:             sp("#581290"),
+			NameAttribute:       sp("#8362CB"),
+			NameClass:           spStyle("#212121", true, false, true),
+			NameConstant:        sp("#581290"),
+			NameDecorator:       sp("#A3A322"),
+			NameFunction:        sp("#019F57"),
+			LiteralNumber:       sp("#22CCAE"),
+			LiteralString:       sp("#7E5B38"),
+			LiteralStringEscape: sp("#00AEAE"),
+			GenericDeleted:      sp("#FD5B5B"),
+			GenericEmph:         spStyle("", false, true, false),
+			GenericInserted:     sp("#00D787"),
+			GenericStrong:       spStyle("", true, false, false),
+			GenericSubheading:   sp("#777777"),
+			Background:          spBg("", codeBg),
+		}
+	}
+
+	return &gansi.Chroma{
+		Text:                sp(fg),
+		Error:               spBg("#F1F1F1", "#F05B5B"),
+		Comment:             sp("#676767"),
+		CommentPreproc:      sp("#FF875F"),
+		Keyword:             sp("#00AAFF"),
+		KeywordReserved:     sp("#FF5FD2"),
+		KeywordNamespace:    sp("#FF5F87"),
+		KeywordType:         sp("#6E6ED8"),
+		Operator:            sp("#EF8080"),
+		Punctuation:         sp("#E8E8A8"),
+		Name:                sp(fg),
+		NameBuiltin:         sp("#FF8EC7"),
+		NameTag:             sp("#B083EA"),
+		NameAttribute:       sp("#7A7AE6"),
+		NameClass:           spStyle("#F1F1F1", true, false, true),
+		NameDecorator:       sp("#FFFF87"),
+		NameFunction:        sp("#00D787"),
+		LiteralNumber:       sp("#6EEFC0"),
+		LiteralString:       sp("#C69669"),
+		LiteralStringEscape: sp("#AFFFD7"),
+		GenericDeleted:      sp("#FD5B5B"),
+		GenericEmph:         spStyle("", false, true, false),
+		GenericInserted:     sp("#00D787"),
+		GenericStrong:       spStyle("", true, false, false),
+		GenericSubheading:   sp("#777777"),
+		Background:          spBg("", codeBg),
+	}
+}
+
 // ensureGlamourRenderer returns a cached glamour renderer for the given inner width
 // and current theme, rebuilding it only when those change.
 func (a *App) ensureGlamourRenderer(innerW int) interface{ Render(string) (string, error) } {
-	styleName := glamourStyleFor(a.theme)
-	if a.glamourRenderer != nil && a.glamourWidth == innerW && a.glamourStyleName == styleName {
+	themeName := a.theme.Name
+	if a.glamourRenderer != nil && a.glamourWidth == innerW && a.glamourStyleName == themeName {
 		return a.glamourRenderer
 	}
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(styleName),
+		glamour.WithStyles(StyleConfigFromTheme(a.theme)),
 		glamour.WithWordWrap(innerW),
+		glamour.WithChromaFormatter("terminal16m"),
 	)
 	if err != nil {
 		return nil
 	}
 	a.glamourRenderer = r
 	a.glamourWidth = innerW
-	a.glamourStyleName = styleName
+	a.glamourStyleName = themeName
 	return r
 }
 
@@ -402,6 +649,46 @@ func expandTabs(s string) string {
 	return buf.String()
 }
 
+// imgTagRe matches <img ... /> or <img ...> HTML tags.
+var imgTagRe = regexp.MustCompile(`(?i)<img\s[^>]*>`)
+
+// aTagRe matches <a href="...">text</a> HTML tags.
+var aTagRe = regexp.MustCompile(`(?i)<a\s[^>]*href\s*=\s*["']([^"']*)["'][^>]*>(.*?)</a>`)
+
+// PreProcessMarkdown converts HTML image and anchor tags into their markdown
+// equivalents so that glamour renders them properly. This must be called
+// before passing content to glamour.
+func PreProcessMarkdown(md string) string {
+	// Replace <img ... src="url" alt="text" ... /> with ![text](url)
+	md = imgTagRe.ReplaceAllStringFunc(md, func(tag string) string {
+		src := extractHTMLAttr(tag, "src")
+		if src == "" {
+			return tag
+		}
+		alt := extractHTMLAttr(tag, "alt")
+		return "![" + alt + "](" + src + ")"
+	})
+
+	// Replace <a href="url">text</a> with [text](url)
+	md = aTagRe.ReplaceAllString(md, "[$2]($1)")
+
+	return md
+}
+
+// PostProcessLinks inserts a 🔗 glyph between link text and URL in
+// glamour-rendered output. Glamour renders [text](url) as:
+//
+//	OSC8(url) STYLED_TEXT RESET OSC8_RESET FG_STYLE SPACE RESET LINK_STYLE OSC8(url) URL ...
+//
+// We find the OSC8 reset after the text and insert " 🔗" before the space.
+var linkGlyphRe = regexp.MustCompile(`(\x1b\]8;;\x07)((?:\x1b\[[0-9;]*m)*)([ \t])((?:\x1b\[[0-9;]*m)*\x1b\]8;id=)`)
+
+// PostProcessLinks adds a link glyph between the text and URL portions of
+// rendered links. It should be called on the full rendered output string.
+func PostProcessLinks(s string) string {
+	return linkGlyphRe.ReplaceAllString(s, "${1} 🔗${2}${3}${4}")
+}
+
 // renderGlamour renders a markdown string through glamour and returns the output
 // split into lines, with a trailing empty line stripped.
 func (a *App) renderGlamour(markdown string, innerW int) []string {
@@ -409,10 +696,13 @@ func (a *App) renderGlamour(markdown string, innerW int) []string {
 	if r == nil {
 		return strings.Split(markdown, "\n")
 	}
+	markdown = PreProcessMarkdown(markdown)
 	out, err := r.Render(markdown)
 	if err != nil {
 		return strings.Split(markdown, "\n")
 	}
+	out = PostProcessLinks(out)
+
 	// glamour always ends with a newline; split and drop the trailing empty entry
 	lines := strings.Split(out, "\n")
 	for len(lines) > 0 && lines[len(lines)-1] == "" {
@@ -571,9 +861,50 @@ func extractLinkNodes(line string, lineIdx int) []codeNode {
 	var nodes []codeNode
 	i := 0
 	for i < len(line) {
-		// Check for [text](url)
-		if line[i] == '[' {
-			// Find closing ]
+		// Check for ![alt](url) image link or [text](url) regular link
+		if line[i] == '!' && i+1 < len(line) && line[i+1] == '[' {
+			// Image link ![alt](url)
+			j := i + 2
+			depth := 1
+			for j < len(line) && depth > 0 {
+				if line[j] == '[' {
+					depth++
+				} else if line[j] == ']' {
+					depth--
+				}
+				j++
+			}
+			if depth == 0 && j < len(line) && line[j] == '(' {
+				k := j + 1
+				for k < len(line) && line[k] != ')' {
+					k++
+				}
+				if k < len(line) {
+					url := line[j+1 : k]
+					alt := line[i+2 : j-1]
+					// Glamour renders ![alt](url) as "alt 🖼️ path" (custom format)
+					display := alt + " 🖼️"
+					if alt == "" {
+						display = url
+					}
+					nodes = append(nodes, codeNode{
+						kind:      nodeLink,
+						lang:      "link",
+						content:   url,
+						display:   display,
+						startLine: lineIdx,
+						endLine:   lineIdx,
+						inline:    true,
+						colStart:  i,
+						colEnd:    k + 1,
+					})
+					i = k + 1
+					continue
+				}
+			}
+			i = j
+		} else if line[i] == '[' {
+			// Regular link [text](url)
 			j := i + 1
 			depth := 1
 			for j < len(line) && depth > 0 {
@@ -585,17 +916,19 @@ func extractLinkNodes(line string, lineIdx int) []codeNode {
 				j++
 			}
 			if depth == 0 && j < len(line) && line[j] == '(' {
-				// Find closing )
 				k := j + 1
 				for k < len(line) && line[k] != ')' {
 					k++
 				}
 				if k < len(line) {
 					url := line[j+1 : k]
+					text := line[i+1 : j-1]
+					// Glamour renders [text](url) as "text" (with OSC8 hyperlink)
 					nodes = append(nodes, codeNode{
 						kind:      nodeLink,
 						lang:      "link",
 						content:   url,
+						display:   text,
 						startLine: lineIdx,
 						endLine:   lineIdx,
 						inline:    true,
@@ -608,6 +941,60 @@ func extractLinkNodes(line string, lineIdx int) []codeNode {
 			}
 			i = j
 		} else if line[i] == '<' && i+1 < len(line) {
+			// Check for <img ... src="url" ... /> HTML tag
+			if i+4 < len(line) && strings.ToLower(line[i+1:i+4]) == "img" && (line[i+4] == ' ' || line[i+4] == '\t') {
+				// Find the closing >
+				closeIdx := strings.Index(line[i:], ">")
+				if closeIdx >= 0 {
+					tag := line[i : i+closeIdx+1]
+					// Extract src attribute
+					src := extractHTMLAttr(tag, "src")
+					alt := extractHTMLAttr(tag, "alt")
+					if src != "" {
+						display := alt + " 🖼️"
+						if alt == "" {
+							display = src
+						}
+						nodes = append(nodes, codeNode{
+							kind:      nodeLink,
+							lang:      "link",
+							content:   src,
+							display:   display,
+							startLine: lineIdx,
+							endLine:   lineIdx,
+							inline:    true,
+							colStart:  i,
+							colEnd:    i + closeIdx + 1,
+						})
+					}
+					i = i + closeIdx + 1
+					continue
+				}
+			}
+			// Check for <a href="url">text</a> HTML tag
+			if i+2 < len(line) && strings.ToLower(line[i+1:i+2]) == "a" && i+2 < len(line) && (line[i+2] == ' ' || line[i+2] == '\t') {
+				m := aTagRe.FindStringIndex(line[i:])
+				if m != nil {
+					sm := aTagRe.FindStringSubmatch(line[i:])
+					if sm != nil {
+						href := sm[1]
+						text := sm[2]
+						nodes = append(nodes, codeNode{
+							kind:      nodeLink,
+							lang:      "link",
+							content:   href,
+							display:   text,
+							startLine: lineIdx,
+							endLine:   lineIdx,
+							inline:    true,
+							colStart:  i,
+							colEnd:    i + m[1],
+						})
+						i = i + m[1]
+						continue
+					}
+				}
+			}
 			// Check for autolink <url>
 			j := i + 1
 			for j < len(line) && line[j] != '>' && line[j] != ' ' {
@@ -621,6 +1008,7 @@ func extractLinkNodes(line string, lineIdx int) []codeNode {
 						kind:      nodeLink,
 						lang:      "link",
 						content:   url,
+						display:   url,
 						startLine: lineIdx,
 						endLine:   lineIdx,
 						inline:    true,
@@ -647,6 +1035,7 @@ func extractLinkNodes(line string, lineIdx int) []codeNode {
 				kind:      nodeLink,
 				lang:      "link",
 				content:   url,
+				display:   url,
 				startLine: lineIdx,
 				endLine:   lineIdx,
 				inline:    true,
@@ -659,6 +1048,36 @@ func extractLinkNodes(line string, lineIdx int) []codeNode {
 		}
 	}
 	return nodes
+}
+
+// extractHTMLAttr extracts the value of an HTML attribute from a tag string.
+// Returns empty string if the attribute is not found.
+func extractHTMLAttr(tag, attr string) string {
+	// Search for attr= (case-insensitive)
+	lower := strings.ToLower(tag)
+	key := strings.ToLower(attr) + "="
+	idx := strings.Index(lower, key)
+	if idx < 0 {
+		return ""
+	}
+	rest := tag[idx+len(key):]
+	if len(rest) == 0 {
+		return ""
+	}
+	if rest[0] == '"' || rest[0] == '\'' {
+		quote := rest[0]
+		end := strings.IndexByte(rest[1:], quote)
+		if end < 0 {
+			return ""
+		}
+		return rest[1 : 1+end]
+	}
+	// Unquoted: read until space or >
+	end := strings.IndexAny(rest, " \t>")
+	if end < 0 {
+		return rest
+	}
+	return rest[:end]
 }
 
 // filteredNodeIndices returns the indices into a.codeNodes for each node
@@ -795,11 +1214,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, a.startWatcher()
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return a.handleKey(msg)
 
-	case tea.MouseMsg:
-		return a.handleMouse(msg)
+	case tea.MouseWheelMsg:
+		return a.handleMouseWheel(msg)
+	case tea.MouseClickMsg:
+		return a.handleMouseClick(msg)
 	}
 
 	return a, nil
@@ -809,7 +1230,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // Key handling — dispatched by mode then focus
 // ─────────────────────────────────────────────
 
-func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 
 	// Global keys that work in any mode
@@ -905,41 +1326,49 @@ func (a *App) toggleFocus() {
 	}
 }
 
-// handleMouse handles mouse events for sidebar clicks and content scrolling.
-func (a *App) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+// handleMouseWheel handles mouse wheel events for content scrolling.
+func (a *App) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	if a.mode != ModeNormal {
 		return a, nil
 	}
 
 	switch msg.Button {
-	case tea.MouseButtonWheelUp:
+	case tea.MouseWheelUp:
 		if a.focus == FocusContent || a.sidebarHidden {
 			a.contentOffset -= 3
 			if a.contentOffset < 0 {
 				a.contentOffset = 0
 			}
 		}
-	case tea.MouseButtonWheelDown:
+	case tea.MouseWheelDown:
 		if a.focus == FocusContent || a.sidebarHidden {
 			a.contentOffset += 3
 			a.clampContentOffset()
 		}
-	case tea.MouseButtonLeft:
-		if msg.Action != tea.MouseActionPress {
-			break
-		}
+	}
+	return a, nil
+}
+
+// handleMouseClick handles mouse click events for sidebar clicks.
+func (a *App) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
+	if a.mode != ModeNormal {
+		return a, nil
+	}
+
+	if msg.Button == tea.MouseLeft {
+		mouse := msg.Mouse()
 		// Check if click is in the sidebar
 		sw := a.sidebarWidth()
-		if !a.sidebarHidden && msg.X < sw && msg.Y >= 2 && msg.Y < a.height-1 {
+		if !a.sidebarHidden && mouse.X < sw && mouse.Y >= 2 && mouse.Y < a.height-1 {
 			// Click in sidebar — determine which entry was clicked
-			row := msg.Y - 2 // subtract title(1) + border-top(1)
+			row := mouse.Y - 2 // subtract title(1) + border-top(1)
 			entryIdx := a.outlineOffset + row
 			if entryIdx >= 0 && entryIdx < a.totalEntries() {
 				newIdx := entryIdx - 1 // entryIdx 0 = root (-1)
 				a.navigateTo(newIdx)
 				a.focus = FocusSidebar
 			}
-		} else if msg.X >= sw {
+		} else if mouse.X >= sw {
 			a.focus = FocusContent
 		}
 	}
@@ -950,7 +1379,7 @@ func (a *App) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 // Sidebar keys
 // ─────────────────────────────────────────────
 
-func (a *App) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *App) handleSidebarKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 	km := a.cfg.Keys
 
@@ -1214,7 +1643,7 @@ func (a *App) scrollOutlineToSelected() {
 // Content keys
 // ─────────────────────────────────────────────
 
-func (a *App) handleContentKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *App) handleContentKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 	km := a.cfg.Keys
 
@@ -1409,7 +1838,7 @@ func generateLabels(n int) []string {
 }
 
 // handleJumpKey processes input during jump mode.
-func (a *App) handleJumpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *App) handleJumpKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 	switch k {
 	case "esc":
@@ -1418,11 +1847,11 @@ func (a *App) handleJumpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
-	if len(msg.Runes) == 0 {
+	if len(msg.Text) == 0 {
 		return a, nil
 	}
 
-	a.jumpInput += string(msg.Runes)
+	a.jumpInput += string(msg.Text)
 
 	// Check for exact match
 	if idx, ok := a.jumpLabels[a.jumpInput]; ok {
@@ -1479,7 +1908,7 @@ func (a *App) jumpLabelForNode(nodeIdx int) string {
 // Node selection mode keys
 // ─────────────────────────────────────────────
 
-func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *App) handleNodeSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 	km := a.cfg.Keys
 	filtered := a.filteredNodes()
@@ -1550,7 +1979,7 @@ func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.copyMsg = ""
 			a.mode = ModeNormal
 		}
-	case config.KeyMatches(k, km.NodeOpen) && a.nodeSubMode == nodeLink:
+	case config.KeyMatches(k, km.NodeOpen) && (a.nodeSubMode == nodeLink || (a.nodeSubMode == nodeAll && len(filtered) > 0 && filtered[a.nodeSelIdx].kind == nodeLink)):
 		if len(filtered) > 0 {
 			node := filtered[a.nodeSelIdx]
 			url := node.content
@@ -1578,7 +2007,6 @@ func (a *App) handleNodeSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				cmd.Stderr = nil
 				_ = cmd.Start()
 				a.statusMsg = fmt.Sprintf("Opened: %s", url)
-				a.mode = ModeNormal
 			}
 		}
 	case k == "pgdown" || config.KeyMatches(k, km.ScrollHalfDown):
@@ -1777,7 +2205,7 @@ func (a *App) scrollToFilteredNode(filteredIdx int) {
 // Search mode
 // ─────────────────────────────────────────────
 
-func (a *App) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *App) handleSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		a.searchMatches = nil
@@ -1803,8 +2231,8 @@ func (a *App) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	default:
-		if len(msg.Runes) > 0 {
-			a.searchQuery += string(msg.Runes)
+		if len(msg.Text) > 0 {
+			a.searchQuery += string(msg.Text)
 		}
 	}
 	return a, nil
@@ -1854,7 +2282,7 @@ func (a *App) prevSearchMatch() {
 // Content search
 // ─────────────────────────────────────────────
 
-func (a *App) handleContentSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *App) handleContentSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		a.mode = ModeNormal
@@ -1871,8 +2299,8 @@ func (a *App) handleContentSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		a.updateContentSearchMatches()
 	default:
-		if len(msg.Runes) > 0 {
-			a.contentSearchQuery += string(msg.Runes)
+		if len(msg.Text) > 0 {
+			a.contentSearchQuery += string(msg.Text)
 		}
 		a.updateContentSearchMatches()
 	}
@@ -1953,7 +2381,7 @@ func (a *App) prevContentSearchMatch() {
 // Theme picker
 // ─────────────────────────────────────────────
 
-func (a *App) handleThemeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *App) handleThemeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	themeNames := []string{"OceanDark", "Nord", "Dracula", "Gruvbox", "TokyoNight"}
 	switch msg.String() {
 	case "esc", "q", "T":
@@ -2040,9 +2468,12 @@ func (a *App) contentHeight() int { return a.paneInnerHeight() }
 // View
 // ─────────────────────────────────────────────
 
-func (a *App) View() string {
+func (a *App) View() tea.View {
 	if a.width == 0 {
-		return "Loading..."
+		v := tea.NewView("Loading...")
+		v.AltScreen = true
+		v.MouseMode = tea.MouseModeCellMotion
+		return v
 	}
 
 	switch a.mode {
@@ -2074,7 +2505,10 @@ func (a *App) View() string {
 		view = a.overlayThemePicker(view)
 	}
 
-	return view
+	v := tea.NewView(view)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
 }
 
 // ─────────────────────────────────────────────
@@ -2184,8 +2618,10 @@ func (a *App) drawBox(lines []string, outerW int, focused bool, title string) st
 		line = ansi.Truncate(line, innerW, "")
 		visW := lipgloss.Width(line)
 
-		// Replace ANSI full resets with resets that re-apply our background,
+		// Replace ANSI resets with resets that re-apply our background,
 		// so glamour's internal resets don't clear the theme background.
+		// Glamour v2 uses \x1b[m (short reset); normalise to \x1b[0m first.
+		line = strings.ReplaceAll(line, "\x1b[m", "\x1b[0m")
 		line = strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+bgOpen)
 
 		// Paint the entire line with the theme background.
@@ -2470,8 +2906,39 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 					loc.spanColEnd = loc.spanCol + lipgloss.Width(headingSearch)
 					break
 				}
+			} else if n.kind == nodeLink {
+				// Link nodes: use n.display (the visible text glamour renders)
+				// as the search needle. Links don't have the double-space padding
+				// that inline code spans get.
+				needle := n.display
+				if needle == "" {
+					needle = n.content // fallback
+				}
+				for ri := inlineSearchFromLine; ri < len(stripped); ri++ {
+					s := stripped[ri]
+					colOffset := 0
+					if ri == inlineSearchFromLine && inlineSearchFromCol >= 0 {
+						colOffset = inlineSearchFromCol + 1
+						if colOffset > len(s) {
+							continue
+						}
+						s = s[colOffset:]
+					}
+					idx := strings.Index(s, needle)
+					if idx >= 0 {
+						bestCol := colOffset + idx
+						bestColEnd := bestCol + len(needle)
+						loc.firstLine = ri
+						loc.lastLine = ri
+						loc.spanColByte = bestCol
+						loc.spanColEndByte = bestColEnd
+						fullLine := stripped[ri]
+						loc.spanCol = byteColToDisplayCol(fullLine, bestCol)
+						loc.spanColEnd = loc.spanCol + lipgloss.Width(fullLine[bestCol:bestColEnd])
+						break
+					}
+				}
 			} else {
-				// Glamour renders inline code spans with two spaces on each side
 				// when mid-sentence, e.g. `useCallback` → "  useCallback  ".
 				// When at end-of-sentence before punctuation only one trailing
 				// space may appear, e.g. `Object.is`. → "  Object.is .".
@@ -2484,6 +2951,7 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 				// On inlineSearchFromLine, respect inlineSearchFromCol to handle multiple spans
 				// on the same rendered line (same source line).
 				padded := "  " + n.content + "  "
+				paddedNBSP := "\u00a0" + n.content + "\u00a0"
 				needle := n.content
 				for ri := inlineSearchFromLine; ri < len(stripped); ri++ {
 					s := stripped[ri]
@@ -2498,9 +2966,13 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 					bestCol := -1    // byte offset
 					bestColEnd := -1 // byte offset
 
-					// Check padded form
+					// Check padded form (double-space in glamour v1, NBSP in v2)
 					if paddedIdx := strings.Index(s, padded); paddedIdx != -1 {
 						col := colOffset + paddedIdx + 2
+						bestCol = col
+						bestColEnd = col + len(n.content)
+					} else if nbspIdx := strings.Index(s, paddedNBSP); nbspIdx != -1 {
+						col := colOffset + nbspIdx + len("\u00a0")
 						bestCol = col
 						bestColEnd = col + len(n.content)
 					}
@@ -2990,7 +3462,7 @@ func (a *App) overlayHelp(background string) string {
 				k = "PgUp"
 			case "pgdown":
 				k = "PgDn"
-			case " ":
+			case "space":
 				k = "Space"
 			default:
 				if strings.HasPrefix(k, "ctrl+") {
@@ -3264,7 +3736,7 @@ func highlightCode(code, lang string) string {
 
 func Run(doc *parser.Document, filename, filePath string, cfg config.Config) error {
 	app := NewApp(doc, filename, filePath, cfg)
-	p := tea.NewProgram(app, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(app)
 	_, err := p.Run()
 	return err
 }

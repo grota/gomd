@@ -137,7 +137,7 @@ func DefaultKeys() KeysConfig {
 		PrevMatch:        "N",
 		ScrollDown:       "j,down",
 		ScrollUp:         "k,up",
-		ScrollHalfDown:   "ctrl+d,ctrl+f,pgdown, ",
+		ScrollHalfDown:   "ctrl+d,ctrl+f,pgdown,space",
 		ScrollHalfUp:     "ctrl+u,ctrl+b,pgup",
 		ContentTop:       "gg",
 		ContentBottom:    "G",
