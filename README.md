@@ -38,7 +38,7 @@ interactive mode:
 - **Vim-style navigation** — `j`/`k`, `gg`/`G`, `/` search
 - **Fuzzy search** — sidebar heading search uses fuzzy matching (characters in order)
 - **Breadcrumb bar** — title shows current heading path (e.g., `gomd — file.md > Section > Subsection`)
-- **Interactive mode** (`i`) — cycle through code blocks, inline code spans, and links; copy with `y`, open links with `Enter`
+- **Interactive mode** (`i`) — cycle through code blocks, inline code spans, and links; copy with `y`, open links with `Enter` (works in any sub-mode)
 - **Jump mode** (`f`) — EasyMotion-style labels to quickly jump to any selectable element
 - **Navigation history** — `Ctrl+O` / `Ctrl+I` for back/forward heading navigation
 - **Internal link following** — `Enter` on `#anchor` links jumps to the referenced heading
@@ -50,6 +50,7 @@ interactive mode:
 - **Editor integration** — `e` opens the source file in `$EDITOR`
 - **Configurable link opener** — set `opener` in config to customize how URLs are opened
 - **Image rendering** — inline images via Kitty graphics protocol (Ghostty, Kitty, WezTerm)
+- **HTML tag support** — `<img>` and `<a>` HTML tags are rendered as images and links alongside native markdown syntax
 
 ## Installation
 
@@ -94,6 +95,8 @@ gomd file.md -r --images               # render with inline images
 
 Background color is emitted by default so the output looks correct in the terminal. Use `--disable-background` when piping to other tools or files, since ANSI background sequences can interfere with downstream processing.
 
+Images are rendered as `alt 🖼️ path` and links as `text 🔗 url`. HTML `<img>` and `<a>` tags are converted to their markdown equivalents before rendering.
+
 #### Key bindings
 
 | Key                | Action                                      |
@@ -128,7 +131,7 @@ Cycles through selectable nodes in the current section: fenced code blocks, inli
 | `H` / `M` / `L`    | Jump to top / mid / bottom visible node                   |
 | `zz` / `zt` / `zb` | Center / top / bottom node in viewport                    |
 | `y`                | Copy node content to clipboard and exit                   |
-| `Enter`            | Open link (external: browser; `#anchor`: jump to heading) |
+| `Enter`            | Open link (any sub-mode; external: browser; `#anchor`: jump to heading) |
 | `Esc`              | Exit interactive mode                                     |
 
 #### Jump mode (`f`)

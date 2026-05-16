@@ -53,6 +53,20 @@ internal/tui/            # Bubbletea TUI (Run() entry)
 internal/tui/kitty.go    # Kitty graphics protocol: image rendering, tmux passthrough
 ```
 
+### Rendering Pipeline
+
+Markdown content goes through a three-stage pipeline before display:
+
+1. **Pre-process** (`PreProcessMarkdown()`): converts HTML tags to markdown equivalents before glamour.
+   - `<img src="url" alt="text">` → `![text](url)`
+   - `<a href="url">text</a>` → `[text](url)`
+2. **Glamour render**: renders markdown to ANSI-styled text. Custom `ImageText.Format` renders images as `alt 🖼️ path` instead of glamour's default `Image: alt → path`.
+3. **Post-process** (`PostProcessLinks()`): inserts 🔗 glyph between link text and URL in the ANSI output.
+
+Both `renderGlamour()` (TUI) and `renderToStdout()` (CLI render mode) apply this pipeline.
+
+Node extraction (`extractCodeNodes`/`extractLinkNodes`) works on **raw** markdown lines (before pre-processing), so it must handle both markdown and HTML syntax (`<img>`, `<a>` tags). This ordering is intentional: the extracted `colStart`/`colEnd` byte offsets must match the raw source lines so that `highlightSpanInLine` can highlight the correct column range in rendered output. Running extraction after pre-processing would break these offsets because `PreProcessMarkdown` changes line content and length (e.g. a long `<img>` tag becomes a shorter `![alt](url)`). The `display` field on `codeNode` bridges the gap by storing the visible text glamour renders, enabling mapping from nodes to rendered lines without relying on column offsets for line-level identification.
+
 ## Package Management
 
 No task runner wrapper — use Go toolchain directly.

@@ -723,7 +723,17 @@ func (a *App) rebuildSection() {
 	a.nodeRenderInfo = nil
 	a.renderedLines = nil
 
-	// selectedIdx == -1 means the root (Document) node: show entire file
+	// selectedIdx == -1 means the root (Document) node: show entire file.
+	//
+	// Node extraction (extractCodeNodes → extractLinkNodes) runs on the raw
+	// markdown lines, *before* PreProcessMarkdown converts HTML tags to
+	// markdown equivalents. This is intentional: the extracted colStart/colEnd
+	// byte offsets must match the raw source so that highlightSpanInLine can
+	// highlight the correct column range in the rendered output. Running
+	// extraction after pre-processing would shift those offsets because
+	// PreProcessMarkdown changes line content and length (e.g. a long <img>
+	// tag becomes a shorter ![alt](url)). The trade-off is that extraction
+	// must handle both markdown and HTML syntax for links/images.
 	if a.selectedIdx < 0 || len(a.doc.Headings) == 0 {
 		content := strings.TrimRight(a.doc.Content, "\n")
 		a.sectionLines = strings.Split(content, "\n")
@@ -1977,7 +1987,9 @@ func (a *App) handleNodeSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			a.statusMsg = a.copyMsg
 			a.copyMsg = ""
-			a.mode = ModeNormal
+			if a.nodeSubMode != nodeAll && a.nodeSubMode != nodeLink {
+				a.mode = ModeNormal
+			}
 		}
 	case config.KeyMatches(k, km.NodeOpen) && (a.nodeSubMode == nodeLink || (a.nodeSubMode == nodeAll && len(filtered) > 0 && filtered[a.nodeSelIdx].kind == nodeLink)):
 		if len(filtered) > 0 {
@@ -3517,7 +3529,7 @@ func (a *App) overlayHelp(background string) string {
 		{"m", "Cycle sub-mode (all/code/inline/links)"},
 		{fmtKeys(km.JumpHigh) + " / " + fmtKeys(km.JumpMid) + " / " + fmtKeys(km.JumpLow), "Top / mid / bottom visible node"},
 		{fmtKeys(km.ViewCenter) + " / " + fmtKeys(km.ViewTop) + " / " + fmtKeys(km.ViewBottom), "Center / top / bottom in viewport"},
-		{fmtKeys(km.NodeCopy), "Copy to clipboard and exit"},
+		{fmtKeys(km.NodeCopy), "Copy to clipboard"},
 		{fmtKeys(km.NodeOpen), "Open link"},
 		{fmtKeys(km.NodeExit), "Exit interactive mode"},
 	}
