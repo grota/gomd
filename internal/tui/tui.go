@@ -11,14 +11,14 @@ import (
 	"strconv"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/glamour/v2"
+	gansi "charm.land/glamour/v2/ansi"
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/atotto/clipboard"
-	tea "charm.land/bubbletea/v2"
-	"charm.land/glamour/v2"
-	gansi "charm.land/glamour/v2/ansi"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/fsnotify/fsnotify"
@@ -803,6 +803,17 @@ func extractCodeNodes(lines []string) []codeNode {
 			}
 		}
 	}
+	// Sort nodes by source position (line, then column) so that
+	// mapNodesToRenderedLines processes them in document order. Without this,
+	// inline code spans (extracted first) and link nodes (extracted second) on
+	// the same line may be out of column order, causing the forward-scanning
+	// mapper to skip earlier occurrences.
+	sort.SliceStable(nodes, func(i, j int) bool {
+		if nodes[i].startLine != nodes[j].startLine {
+			return nodes[i].startLine < nodes[j].startLine
+		}
+		return nodes[i].colStart < nodes[j].colStart
+	})
 	return nodes
 }
 
@@ -3008,9 +3019,20 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 							// For longer needles (>=3 chars), require 2 spaces before to
 							// distinguish code spans from prose. For short needles (1-2 chars),
 							// 1 space suffices since they can't be confused with prose words.
+							// Exception: also accept 1 space before when preceded by punctuation
+							// (glamour places single space after opening parens/commas/pipes).
 							var hasPre bool
 							if len(needle) >= 3 {
 								hasPre = absIdx > 1 && fullLine[absIdx-1] == ' ' && fullLine[absIdx-2] == ' '
+								if !hasPre && absIdx > 0 && fullLine[absIdx-1] == ' ' {
+									// Accept single space when preceded by punctuation or at position 1
+									if absIdx == 1 {
+										hasPre = true
+									} else if absIdx > 1 {
+										pre := fullLine[absIdx-2]
+										hasPre = pre == '(' || pre == ',' || pre == '|' || pre == '/' || pre == ';'
+									}
+								}
 							} else {
 								hasPre = absIdx > 0 && fullLine[absIdx-1] == ' '
 							}

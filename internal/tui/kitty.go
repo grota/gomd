@@ -212,18 +212,25 @@ func (a *App) replaceImagePlaceholders(rendered, mdContent string, maxCols int) 
 
 		replaced := false
 		for src, kittySeq := range kittyMap {
-			if strings.Contains(line, src) {
-				cleanSrc := strings.TrimPrefix(src, "./")
-				cleanStripped := strings.TrimPrefix(stripped, "/")
-				isImageLine := strings.HasPrefix(stripped, "Image: ") ||
-					stripped == src || stripped == cleanSrc ||
-					cleanStripped == cleanSrc ||
-					stripped == "/"+cleanSrc
-				if isImageLine {
-					result = append(result, kittySeq)
-					replaced = true
-					break
-				}
+			if !strings.Contains(line, src) {
+				continue
+			}
+			// Compute what glamour shows as visible text for this src.
+			glamourPath := src
+			glamourPath = strings.TrimPrefix(glamourPath, "./")
+			for strings.HasPrefix(glamourPath, "../") {
+				glamourPath = strings.TrimPrefix(glamourPath, "../")
+			}
+			cleanStripped := strings.TrimPrefix(stripped, "/")
+			isImageLine := strings.HasPrefix(stripped, "Image: ") ||
+				stripped == src ||
+				stripped == "/"+glamourPath ||
+				cleanStripped == glamourPath ||
+				strings.Contains(stripped, "🖼️")
+			if isImageLine {
+				result = append(result, kittySeq)
+				replaced = true
+				break
 			}
 		}
 		if !replaced {

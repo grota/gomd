@@ -362,24 +362,34 @@ func replaceImagePlaceholders(rendered, mdContent, mdPath string) string {
 		stripped = strings.TrimSpace(stripped)
 
 		// Match lines that are image placeholders.
-		// With alt text: "Image: <alt> →"
-		// Without alt text: just the URL path (e.g. "/a.png")
+		// Glamour renders images with an OSC8 hyperlink whose URL is the original
+		// image src. We detect image lines by:
+		//   1. The raw line contains the src (inside the OSC8 URL).
+		//   2. The visible text matches what glamour produces for images:
+		//      - With alt text: "alt 🖼️ /path" or "Image: alt →"
+		//      - Without alt text: just the path (with "./" and "../" stripped).
 		replaced := false
 		for src, kittySeq := range kittyMap {
-			if strings.Contains(line, src) {
-				// Check if this is an image placeholder line (not just a random mention).
-				// Glamour renders images as either "Image: alt →" or just the URL path.
-				cleanSrc := strings.TrimPrefix(src, "./")
-				cleanStripped := strings.TrimPrefix(stripped, "/")
-				isImageLine := strings.HasPrefix(stripped, "Image: ") ||
-					stripped == src || stripped == cleanSrc ||
-					cleanStripped == cleanSrc ||
-					stripped == "/"+cleanSrc
-				if isImageLine {
-					result = append(result, kittySeq)
-					replaced = true
-					break
-				}
+			if !strings.Contains(line, src) {
+				continue
+			}
+			// Compute what glamour shows as visible text for this src.
+			// Glamour strips leading "./" and all leading "../" segments.
+			glamourPath := src
+			glamourPath = strings.TrimPrefix(glamourPath, "./")
+			for strings.HasPrefix(glamourPath, "../") {
+				glamourPath = strings.TrimPrefix(glamourPath, "../")
+			}
+			cleanStripped := strings.TrimPrefix(stripped, "/")
+			isImageLine := strings.HasPrefix(stripped, "Image: ") ||
+				stripped == src ||
+				stripped == "/"+glamourPath ||
+				cleanStripped == glamourPath ||
+				strings.Contains(stripped, "🖼️")
+			if isImageLine {
+				result = append(result, kittySeq)
+				replaced = true
+				break
 			}
 		}
 		if !replaced {
