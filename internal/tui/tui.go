@@ -120,6 +120,10 @@ type App struct {
 	glamourWidth     int    // innerW for which renderer was built
 	glamourStyleName string // gomd theme name for which renderer was built
 
+	// Images (Kitty Unicode placeholders)
+	images         imageCache // uploaded images, freed on exit
+	pendingUploads []string   // uploads produced by the last render, sent by Update
+
 	// rendered lines cache — rebuilt when section or width changes
 	renderedLinesWidth int // innerW for which renderedLines was built
 	renderedLinesIdx   int // selectedIdx for which renderedLines was built
@@ -175,6 +179,7 @@ func NewApp(doc *parser.Document, filename, filePath string, cfg config.Config) 
 		focus:         FocusContent,
 		selectedIdx:   -1, // start on the root (Document) node
 		sidebarHidden: cfg.UI.SidebarHidden,
+		images:        imageCache{},
 	}
 	a.rebuildSection()
 	return a
@@ -305,6 +310,20 @@ func (a *App) Init() tea.Cmd {
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m, cmd := a.update(msg)
+	// Render here rather than lazily in View, because only Update can send
+	// the image uploads (View cannot return commands).
+	if a.cfg.Images.Enabled && a.width > 0 {
+		a.ensureRenderedLines()
+		if len(a.pendingUploads) > 0 {
+			cmd = tea.Batch(cmd, tea.Raw(strings.Join(a.pendingUploads, "")))
+			a.pendingUploads = nil
+		}
+	}
+	return m, cmd
+}
+
+func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
@@ -338,5 +357,8 @@ func Run(doc *parser.Document, filename, filePath string, cfg config.Config) err
 	app := NewApp(doc, filename, filePath, cfg)
 	p := tea.NewProgram(app)
 	_, err := p.Run()
+	for _, k := range app.images {
+		os.Stdout.WriteString(k.deleteSeq())
+	}
 	return err
 }

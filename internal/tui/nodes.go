@@ -132,6 +132,11 @@ func (a *App) renderGlamour(markdown string, innerW int) []string {
 	for i, l := range lines {
 		lines[i] = expandTabs(l)
 	}
+	if a.cfg.Images.Enabled {
+		var uploads []string
+		lines, uploads = placeImages(lines, markdown, a.filepath, innerW-4, true, a.images)
+		a.pendingUploads = append(a.pendingUploads, uploads...)
+	}
 	return lines
 }
 

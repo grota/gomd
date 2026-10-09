@@ -8,31 +8,36 @@ import (
 	_ "image/jpeg"
 	"image/png"
 	"math"
+	"math/rand/v2"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/x/ansi/kitty"
+
 	"github.com/grota/gomd/internal/parser"
 )
 
-// IsKittySupported checks if the terminal supports the Kitty graphics protocol.
+// IsKittySupported reports whether the terminal can show Kitty Unicode
+// placeholder images (Kitty, Ghostty). Inside tmux it asks tmux for the
+// attached client's terminal and whether passthrough (needed to upload the
+// image) is allowed.
 func IsKittySupported() bool {
-	if os.Getenv("KITTY_WINDOW_ID") != "" {
-		return true
+	if inTmux() {
+		out, err := exec.Command("tmux", "display", "-p", "#{client_termname} #{allow-passthrough}").Output()
+		f := strings.Fields(string(out))
+		return err == nil && len(f) == 2 && isKittyTerm(f[0]) && (f[1] == "on" || f[1] == "all")
 	}
-	tp := os.Getenv("TERM_PROGRAM")
-	switch strings.ToLower(tp) {
-	case "kitty", "ghostty", "wezterm":
-		return true
-	}
-	term := os.Getenv("TERM")
-	if strings.Contains(strings.ToLower(term), "kitty") {
-		return true
-	}
-	return false
+	return os.Getenv("KITTY_WINDOW_ID") != "" || isKittyTerm(os.Getenv("TERM_PROGRAM")) || isKittyTerm(os.Getenv("TERM"))
+}
+
+func isKittyTerm(s string) bool {
+	s = strings.ToLower(s)
+	return strings.Contains(s, "kitty") || strings.Contains(s, "ghostty")
 }
 
 // ResolveImagePath resolves an image src relative to the markdown file's directory.
@@ -83,102 +88,121 @@ func wrapTmuxPassthrough(seq string) string {
 	return "\x1bPtmux;" + doubled + "\x1b\\"
 }
 
-// RenderKittyImage loads an image file and returns Kitty graphics protocol escape
-// sequences to display it. maxCols limits the display width in terminal cells.
-func RenderKittyImage(path string, maxCols int) (string, error) {
+// kittyImage is an image uploaded to the terminal once and then drawn as
+// Unicode placeholder cells, which are ordinary text: bubbletea diffs them and
+// tmux scrolls them like any other character.
+type kittyImage struct {
+	id         uint32 // 24-bit, encoded in the placeholders' foreground colour
+	cols, rows int
+	upload     string // escape sequences that transmit the image; send once
+}
+
+// loadKittyImage decodes path and prepares its upload, sized to at most
+// maxCols cells wide.
+func loadKittyImage(path string, maxCols int) (kittyImage, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", fmt.Errorf("open image: %w", err)
+		return kittyImage{}, fmt.Errorf("open image: %w", err)
 	}
 	defer f.Close()
-
 	img, _, err := image.Decode(f)
 	if err != nil {
-		return "", fmt.Errorf("decode image: %w", err)
+		return kittyImage{}, fmt.Errorf("decode image: %w", err)
 	}
-
-	bounds := img.Bounds()
-	imgW := bounds.Dx()
-	imgH := bounds.Dy()
-
+	imgW, imgH := img.Bounds().Dx(), img.Bounds().Dy()
 	if imgW == 0 || imgH == 0 {
-		return "", fmt.Errorf("image has zero dimensions")
+		return kittyImage{}, fmt.Errorf("image has zero dimensions")
 	}
 
-	// Calculate display columns. Assume ~8px per cell width, ~16px per cell height.
-	// Limit to maxCols width.
-	cellW := 8
-	cellH := 16
-	displayCols := int(math.Ceil(float64(imgW) / float64(cellW)))
-	if displayCols > maxCols {
-		displayCols = maxCols
-	}
-	// Calculate rows maintaining aspect ratio
-	displayRows := int(math.Ceil(float64(imgH) / float64(cellH) * float64(displayCols) * float64(cellW) / float64(imgW)))
-	if displayRows < 1 {
-		displayRows = 1
-	}
+	// shortcut: assumes ~8x16 px cells; query the cell size (CSI 16 t) if
+	// images look stretched on unusual fonts.
+	const cellW, cellH = 8, 16
+	cols := max(min(int(math.Ceil(float64(imgW)/cellW)), maxCols), 1)
+	rows := max(int(math.Ceil(float64(imgH)/cellH*float64(cols)*cellW/float64(imgW))), 1)
 
-	// Re-encode to PNG for transmission
-	var pngBuf strings.Builder
-	if err := png.Encode(&pngBuf, img); err != nil {
-		return "", fmt.Errorf("encode png: %w", err)
+	var buf strings.Builder
+	if err := png.Encode(&buf, img); err != nil {
+		return kittyImage{}, fmt.Errorf("encode png: %w", err)
 	}
+	b64 := base64.StdEncoding.EncodeToString([]byte(buf.String()))
 
-	// Base64 encode
-	b64Data := base64.StdEncoding.EncodeToString([]byte(pngBuf.String()))
-
-	// Build Kitty escape sequences with chunking (max 4096 bytes per chunk)
+	// Random ids keep two gomd instances (e.g. tmux panes) from overwriting
+	// each other's images in the shared outer terminal.
+	id := rand.Uint32N(1<<24-1) + 1
 	const chunkSize = 4096
-	tmux := inTmux()
 	var sb strings.Builder
-
-	for i := 0; i < len(b64Data); i += chunkSize {
-		end := i + chunkSize
-		if end > len(b64Data) {
-			end = len(b64Data)
+	for i := 0; i < len(b64); i += chunkSize {
+		end := min(i+chunkSize, len(b64))
+		more := 0
+		if end < len(b64) {
+			more = 1
 		}
-		chunk := b64Data[i:end]
-
-		var seq string
+		// a=T,U=1: transmit and create a virtual placement for placeholders.
+		// q=2: no replies, which would otherwise arrive as keyboard input.
+		seq := fmt.Sprintf("\x1b_Gm=%d;%s\x1b\\", more, b64[i:end])
 		if i == 0 {
-			// First chunk: include all parameters
-			more := 1
-			if end >= len(b64Data) {
-				more = 0
-			}
-			seq = fmt.Sprintf("\x1b_Gf=100,a=T,t=d,c=%d,r=%d,m=%d;%s\x1b\\", displayCols, displayRows, more, chunk)
-		} else {
-			// Subsequent chunks
-			more := 1
-			if end >= len(b64Data) {
-				more = 0
-			}
-			seq = fmt.Sprintf("\x1b_Gm=%d;%s\x1b\\", more, chunk)
+			seq = fmt.Sprintf("\x1b_Ga=T,U=1,q=2,f=100,t=d,i=%d,c=%d,r=%d,m=%d;%s\x1b\\", id, cols, rows, more, b64[i:end])
 		}
-
-		if tmux {
+		if inTmux() {
 			seq = wrapTmuxPassthrough(seq)
 		}
 		sb.WriteString(seq)
 	}
+	return kittyImage{id: id, cols: cols, rows: rows, upload: sb.String()}, nil
+}
 
-	return sb.String(), nil
+// placeholderRows returns the text rows that display the image.
+func (k kittyImage) placeholderRows() []string {
+	fg := fmt.Sprintf("\x1b[38;2;%d;%d;%dm", k.id>>16&0xff, k.id>>8&0xff, k.id&0xff)
+	rows := make([]string, k.rows)
+	for r := range rows {
+		var sb strings.Builder
+		sb.WriteString(fg)
+		for c := 0; c < k.cols; c++ {
+			sb.WriteRune(kitty.Placeholder)
+			sb.WriteRune(kitty.Diacritic(r))
+			sb.WriteRune(kitty.Diacritic(c))
+		}
+		sb.WriteString("\x1b[39m")
+		rows[r] = sb.String()
+	}
+	return rows
+}
+
+// indentedRows returns placeholderRows aligned with glamour's 2-column margin.
+func (k kittyImage) indentedRows() []string {
+	rows := k.placeholderRows()
+	for i := range rows {
+		rows[i] = "  " + rows[i]
+	}
+	return rows
+}
+
+// deleteSeq returns the sequence that frees the image in the terminal.
+func (k kittyImage) deleteSeq() string {
+	seq := fmt.Sprintf("\x1b_Ga=d,d=I,q=2,i=%d\x1b\\", k.id)
+	if inTmux() {
+		seq = wrapTmuxPassthrough(seq)
+	}
+	return seq
 }
 
 // ansiStripRe matches ANSI escape sequences for stripping when identifying image lines.
 var ansiStripRe = regexp.MustCompile(`\x1b(?:\[[0-9;]*[a-zA-Z]|\].*?\x07|_.*?\x1b\\)`)
 
-// ReplaceImagePlaceholders swaps glamour image placeholders ("alt 🖼️ /path")
-// in rendered output for Kitty graphics sequences. A line holding only the
-// placeholder is replaced; a line with other text keeps it and gets the image
-// on the next line. Used by render mode (-r); the TUI does not draw images.
-func ReplaceImagePlaceholders(rendered, mdContent, mdPath string, maxCols int) string {
-	images := parser.ExtractImages(mdContent)
-	if len(images) == 0 {
-		return rendered
-	}
+// imageCache maps a resolved path and width to an image already uploaded.
+type imageCache map[string]kittyImage
 
+// placeImages inserts placeholder rows after glamour's image captions
+// ("alt 🖼️ /path") in rendered lines. With keepCaption false, a line holding
+// only a caption is replaced by the image; a line with other text always
+// keeps it. Images missing from cache are loaded and added, and their upload
+// sequences are returned for the caller to send before the rows are shown.
+func placeImages(lines []string, mdContent, mdPath string, maxCols int, keepCaption bool, cache imageCache) ([]string, []string) {
+	images := parser.ExtractImages(mdContent)
+	if len(images) == 0 || maxCols < 1 {
+		return lines, nil
+	}
 	absMdPath := mdPath
 	if mdPath != "" && !filepath.IsAbs(mdPath) {
 		if abs, err := filepath.Abs(mdPath); err == nil {
@@ -188,73 +212,89 @@ func ReplaceImagePlaceholders(rendered, mdContent, mdPath string, maxCols int) s
 
 	// Key by the path glamour displays, so "./a.png" and "a.png" share an entry.
 	type entry struct {
-		seq  string
+		img  kittyImage
 		alts []string
 	}
 	entries := map[string]*entry{}
 	var order []string
-	for _, img := range images {
-		gp := displayedImagePath(img.Src)
+	var uploads []string
+	for _, im := range images {
+		gp := displayedImagePath(im.Src)
 		if e, ok := entries[gp]; ok {
-			e.alts = append(e.alts, img.Alt)
+			e.alts = append(e.alts, im.Alt)
 			continue
 		}
-		resolved := ResolveImagePath(img.Src, absMdPath)
+		resolved := ResolveImagePath(im.Src, absMdPath)
 		if resolved == "" {
 			continue
 		}
-		seq, err := RenderKittyImage(resolved, maxCols)
-		if err != nil {
-			continue
+		key := fmt.Sprintf("%s@%d", resolved, maxCols)
+		k, ok := cache[key]
+		if !ok {
+			var err error
+			if k, err = loadKittyImage(resolved, maxCols); err != nil {
+				continue
+			}
+			cache[key] = k
+			uploads = append(uploads, k.upload)
 		}
-		entries[gp] = &entry{seq: seq, alts: []string{img.Alt}}
+		entries[gp] = &entry{img: k, alts: []string{im.Alt}}
 		order = append(order, gp)
 	}
 	if len(entries) == 0 {
-		return rendered
+		return lines, uploads
 	}
 
-	var result []string
-	for _, line := range strings.Split(rendered, "\n") {
+	var out []string
+	for _, line := range lines {
 		stripped := strings.TrimSpace(ansiStripRe.ReplaceAllString(line, ""))
-		// A line holding only one image's caption is replaced by the image.
-		standalone := ""
+		// A line holding only one image's caption.
+		var standalone *entry
 		for gp, e := range entries {
 			if stripped == gp || stripped == "/"+gp {
-				standalone = e.seq
+				standalone = e
 			}
 			for _, alt := range e.alts {
 				if stripped == strings.TrimSpace(alt+" 🖼️ /"+gp) {
-					standalone = e.seq
+					standalone = e
 				}
 			}
 		}
-		if standalone != "" {
-			result = append(result, standalone)
+		if standalone != nil {
+			if keepCaption {
+				out = append(out, line)
+			}
+			out = append(out, standalone.img.indentedRows()...)
 			continue
 		}
-		result = append(result, line)
+		out = append(out, line)
 		if !strings.Contains(stripped, "🖼️") {
 			continue
 		}
-		// Inline images: keep the text, put each image on the following lines
-		// in the order they appear.
+		// Inline images: keep the text, add each image below in reading order.
 		type hit struct {
 			at  int
-			seq string
+			img kittyImage
 		}
 		var hits []hit
 		for _, gp := range order {
 			if at := strings.Index(stripped, "🖼️ /"+gp); at >= 0 {
-				hits = append(hits, hit{at, entries[gp].seq})
+				hits = append(hits, hit{at, entries[gp].img})
 			}
 		}
 		sort.Slice(hits, func(i, j int) bool { return hits[i].at < hits[j].at })
 		for _, h := range hits {
-			result = append(result, h.seq)
+			out = append(out, h.img.indentedRows()...)
 		}
 	}
-	return strings.Join(result, "\n")
+	return out, uploads
+}
+
+// RenderImages places images into render-mode output and returns the text to
+// print: the uploads first, then the rendered lines with placeholder rows.
+func RenderImages(rendered, mdContent, mdPath string, maxCols int) string {
+	lines, uploads := placeImages(strings.Split(rendered, "\n"), mdContent, mdPath, maxCols, false, imageCache{})
+	return strings.Join(uploads, "") + strings.Join(lines, "\n")
 }
 
 // displayedImagePath is the path glamour shows for an image src: leading "./"

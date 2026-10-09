@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	gansi "charm.land/glamour/v2/ansi"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/grota/gomd/internal/config"
 )
@@ -16,22 +16,29 @@ import (
 // Themes
 // ─────────────────────────────────────────────
 
+// Color is a "#rrggbb" theme color. It keeps the hex string (glamour styles
+// need it) and satisfies color.Color, so it can be passed to lipgloss directly.
+type Color string
+
+// RGBA implements color.Color.
+func (c Color) RGBA() (r, g, b, a uint32) { return lipgloss.Color(string(c)).RGBA() }
+
 // Theme holds color settings for the TUI.
 type Theme struct {
 	Name       string
-	Border     lipgloss.Color
-	Selected   lipgloss.Color
-	Heading1   lipgloss.Color
-	Heading2   lipgloss.Color
-	Heading3   lipgloss.Color
-	HeadingN   lipgloss.Color
-	Background lipgloss.Color
-	Foreground lipgloss.Color
-	StatusBar  lipgloss.Color
-	Highlight  lipgloss.Color
-	Code       lipgloss.Color
-	Search     lipgloss.Color
-	NodeSel    lipgloss.Color // selected node in interactive mode
+	Border     Color
+	Selected   Color
+	Heading1   Color
+	Heading2   Color
+	Heading3   Color
+	HeadingN   Color
+	Background Color
+	Foreground Color
+	StatusBar  Color
+	Highlight  Color
+	Code       Color
+	Search     Color
+	NodeSel    Color // selected node in interactive mode
 }
 
 var themes = map[string]Theme{
@@ -86,9 +93,9 @@ func ResolveTheme(cfg config.Config) Theme {
 
 	// Apply per-color overrides from config.
 	ov := cfg.UI.ThemeOverride
-	applyOverride := func(dst *lipgloss.Color, src string) {
+	applyOverride := func(dst *Color, src string) {
 		if src != "" {
-			*dst = lipgloss.Color(src)
+			*dst = Color(src)
 		}
 	}
 	applyOverride(&theme.Border, ov.Border)

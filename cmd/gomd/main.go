@@ -66,7 +66,7 @@ Examples:
 	rootCmd.Flags().BoolVar(&flagDisableBg, "disable-background", false, "Suppress background color in render mode (useful for piping)")
 	rootCmd.Flags().StringVar(&flagTheme, "theme", "", "Override theme (name from config or Ghostty themes directory)")
 	rootCmd.Flags().BoolVar(&flagNoImages, "no-images", false, "Disable image rendering")
-	rootCmd.Flags().BoolVar(&flagImages, "images", false, "Enable image rendering (override config)")
+	rootCmd.Flags().BoolVar(&flagImages, "images", false, "Enable image rendering without terminal detection")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -95,6 +95,8 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	if flagNoImages {
 		cfg.Images.Enabled = false
 	}
+	// --images skips terminal detection (e.g. tmux with an unrecognised client).
+	cfg.Images.Enabled = cfg.Images.Enabled && (flagImages || tui.IsKittySupported())
 
 	doc := parser.ParseMarkdown(inp.Content)
 
@@ -244,11 +246,8 @@ func renderToStdout(doc *parser.Document, mdPath string, cfg config.Config) erro
 		out = strings.ReplaceAll(out, "\x1b[m", "\x1b[m"+bgOpen)
 	}
 
-	// Image rendering via Kitty graphics protocol.
-	// Outside tmux, auto-detect Kitty-capable terminals.
-	// Inside tmux, require --images (passthrough works but images are "sticky").
-	if cfg.Images.Enabled && (flagImages || tui.IsKittySupported()) {
-		out = tui.ReplaceImagePlaceholders(out, content, mdPath, max(width-4, 1))
+	if cfg.Images.Enabled {
+		out = tui.RenderImages(out, content, mdPath, max(width-4, 1))
 	}
 
 	fmt.Print(out)

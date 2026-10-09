@@ -49,7 +49,7 @@ interactive mode:
 - **File watcher** — auto-reloads on change
 - **Editor integration** — `e` opens the source file in `$EDITOR`
 - **Configurable link opener** — set `opener` in config to customize how URLs are opened
-- **Image rendering** — in render mode (`-r`), inline images via Kitty graphics protocol (Ghostty, Kitty, WezTerm)
+- **Image rendering** — local images in the TUI and render mode via Kitty Unicode placeholders (Kitty, Ghostty), including inside tmux
 - **HTML tag support** — `<img>` and `<a>` HTML tags are rendered as images and links alongside native markdown syntax
 
 ## Installation
@@ -268,12 +268,12 @@ When no file argument is given, `gomd` reads from stdin if piped, otherwise prin
 
 ### Images
 
-In render mode (`-r`), gomd can render inline images using the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). This works in terminals that support it: **Ghostty**, **Kitty**, and **WezTerm**.
+gomd shows local images in the TUI and in render mode (`-r`) on terminals with [Kitty Unicode placeholder](https://sw.kovidgoyal.net/kitty/graphics-protocol/#unicode-placeholders) support: **Kitty** and **Ghostty**. In the TUI, the caption line (`alt 🖼️ path`) stays selectable and the image is drawn below it.
 
 Image rendering is controlled by three settings, evaluated in this order:
 
 1. **`--no-images`** flag: always disables images (highest priority).
-2. **`--images`** flag: always enables images, even if the terminal can't be auto-detected (e.g. inside tmux).
+2. **`--images`** flag: enables images without terminal detection.
 3. **Config file**: the `[images]` section sets the default.
 
 ```toml
@@ -281,11 +281,11 @@ Image rendering is controlled by three settings, evaluated in this order:
 enabled = true   # default
 ```
 
-When none of the flags are passed, `enabled` from the config is used. If `enabled = true`, gomd auto-detects whether the terminal supports Kitty graphics (by checking `TERM_PROGRAM` and related env vars). If detection succeeds, images are rendered automatically.
+With `enabled = true`, gomd detects Kitty or Ghostty from `KITTY_WINDOW_ID`, `TERM_PROGRAM` and `TERM`.
 
-**tmux**: inside tmux, terminal detection fails because `TERM_PROGRAM` is `tmux`. Use `--images` to force image rendering. Images are sent via tmux's DCS passthrough (requires `allow-passthrough on` in your tmux config). Note: images rendered inside tmux are "sticky" — they remain painted on screen even when scrolling or switching tmux windows, because tmux manages text cells but not graphics placements. Run `reset` in the terminal to clear them. This is a known limitation of tmux's passthrough mechanism.
+**tmux**: gomd asks tmux which terminal the client uses and shows images when it is Kitty or Ghostty and `allow-passthrough` is `on` (needed to upload the image). Images scroll and survive window switches like text. tmux must pass 24-bit colour to the terminal (`terminal-features` with `RGB`, the default for most setups), because the image id is encoded in the text colour.
 
-Only local image files are supported (relative or absolute paths). URLs are not fetched — they display as text placeholders.
+Only local image files are supported (relative or absolute paths). URLs are not fetched; they display as text.
 
 ## License
 

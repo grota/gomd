@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 // ghosttyTheme holds the parsed colors from a Ghostty theme file.
@@ -82,11 +80,11 @@ func parseGhosttyFile(path string) (ghosttyTheme, error) {
 //   - Search      → palette 1  (red)
 //   - NodeSel     → palette 6  (cyan)
 func ghosttyToTheme(name string, gt ghosttyTheme) Theme {
-	c := func(hex string, fallback string) lipgloss.Color {
+	c := func(hex string, fallback string) Color {
 		if hex != "" {
-			return lipgloss.Color(hex)
+			return Color(hex)
 		}
-		return lipgloss.Color(fallback)
+		return Color(fallback)
 	}
 
 	// Selected: prefer selection-background, fallback to palette 0.

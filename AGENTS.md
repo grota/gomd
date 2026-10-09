@@ -4,7 +4,7 @@
 
 `gomd` is a CLI + interactive TUI markdown viewer. It opens `.md` files in a dual-pane bubbletea interface with vim-style navigation. Also supports non-interactive modes: rendering to stdout and listing, filtering, counting or extracting headings and sections.
 
-**Tech stack:** Go, Cobra (CLI), Bubbletea (TUI), Glamour v2 (rendering), Chroma (highlighting), Kitty graphics protocol (images), TOML config.
+**Tech stack:** Go, Cobra (CLI), Bubbletea (TUI), Glamour v2 (rendering), Chroma (highlighting), Kitty graphics protocol with Unicode placeholders (images), TOML config.
 
 ## Setup
 
@@ -56,7 +56,7 @@ internal/tui/nodes.go    # Section building, glamour pre/post-processing, node e
 internal/tui/keys.go     # Key handling per mode/focus, navigation, search
 internal/tui/view.go     # Layout, panes, node-to-line mapping, highlights, overlays
 internal/tui/ghostty.go  # Ghostty theme file loader
-internal/tui/kitty.go    # Kitty graphics: image rendering, tmux passthrough, -r image placement
+internal/tui/kitty.go    # Images: Kitty Unicode placeholders, terminal/tmux detection, caption matching
 ```
 
 ### Rendering Pipeline
@@ -70,6 +70,8 @@ Markdown content goes through a three-stage pipeline before display:
 3. **Post-process** (`PostProcessLinks()`): inserts 🔗 glyph between link text and URL in the ANSI output.
 
 Both `renderGlamour()` (TUI) and `renderToStdout()` (CLI render mode) apply this pipeline.
+
+4. **Images** (`placeImages()` in `kitty.go`): finds caption lines (`alt 🖼️ /path`) and inserts Kitty Unicode placeholder rows. Each image is uploaded once (`a=T,U=1,q=2`, random 24-bit id in the foreground colour) and then drawn as plain text cells, so bubbletea diffs it and tmux scrolls it. The TUI sends uploads from `Update` via `tea.Raw` (View cannot return commands) and frees images on exit. Do not write raw image escape sequences into the view: bubbletea v2's cell renderer drops them, and tmux cannot track them.
 
 Node extraction (`extractCodeNodes`/`extractLinkNodes`) works on **raw** markdown lines (before pre-processing), so it must handle both markdown and HTML syntax (`<img>`, `<a>` tags). This ordering is intentional: the extracted `colStart`/`colEnd` byte offsets must match the raw source lines so that `highlightSpanInLine` can highlight the correct column range in rendered output. Running extraction after pre-processing would break these offsets because `PreProcessMarkdown` changes line content and length (e.g. a long `<img>` tag becomes a shorter `![alt](url)`). The `display` field on `codeNode` bridges the gap by storing the visible text glamour renders, enabling mapping from nodes to rendered lines without relying on column offsets for line-level identification.
 

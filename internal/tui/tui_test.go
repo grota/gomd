@@ -7,7 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/grota/gomd/internal/config"
@@ -459,5 +459,23 @@ func TestApplyJumpLabelsAfterWideChar(t *testing.T) {
 	got := ansi.Strip(a.applyJumpLabels([]string{"🔗 ab x cd"}, 40)[0])
 	if want := "🔗 ab qx cd"; got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestViewLinesFillTerminalWidth(t *testing.T) {
+	src, err := os.ReadFile("testdata/readme.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, hidden := range []bool{true, false} {
+		cfg := config.Default()
+		cfg.UI.SidebarHidden = hidden
+		a := NewApp(parser.ParseMarkdown(string(src)), "r.md", "", cfg)
+		a.Update(tea.WindowSizeMsg{Width: 120, Height: 35})
+		for i, l := range strings.Split(a.View().Content, "\n") {
+			if w := ansi.StringWidth(l); w != 120 {
+				t.Errorf("sidebarHidden=%v line %d: width %d, want 120: %q", hidden, i, w, ansi.Strip(l))
+			}
+		}
 	}
 }

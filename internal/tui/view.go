@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/grota/gomd/internal/config"
@@ -212,9 +212,9 @@ func (a *App) drawBox(lines []string, outerW int, focused bool, title string) st
 	bgStyle := lipgloss.NewStyle().
 		Background(a.theme.Background).
 		Foreground(a.theme.Foreground)
-	// Build the ANSI opening sequence for our theme background so we can
-	// inject it after any resets in glamour output.
-	bgOpen := strings.TrimSuffix(bgStyle.Render(" "), " \x1b[0m")
+	// ANSI opening sequence for the theme colors, injected after every reset
+	// in glamour output so the pane background survives.
+	bgOpen := ansi.Style{}.ForegroundColor(a.theme.Foreground).BackgroundColor(a.theme.Background).String()
 
 	for _, line := range lines {
 		// Normalize line to exactly innerW display columns so the right
@@ -292,7 +292,7 @@ func (a *App) renderBorderedOutline(outerW int, focused bool) string {
 				Width(innerW).
 				Render(text))
 		} else {
-			var fg lipgloss.Color
+			var fg Color
 			switch headingLevel {
 			case 0:
 				fg = a.theme.Foreground
@@ -1126,7 +1126,7 @@ func (a *App) overlayThemePicker(background string) string {
 	lines = append(lines, "", "Resolved Colors:", "")
 	type colorEntry struct {
 		label string
-		value lipgloss.Color
+		value Color
 	}
 	entries := []colorEntry{
 		{"Border", a.theme.Border},
@@ -1172,7 +1172,7 @@ func (a *App) overlayModal(background, text string, modalW int) string {
 		BorderForeground(a.theme.Border).
 		Background(a.theme.Background).
 		Foreground(a.theme.Foreground).
-		Width(modalW-2). // inner width
+		Width(modalW). // lipgloss v2: width includes the border
 		Padding(0, 1).
 		Render(text)
 	modalLines := strings.Split(modal, "\n")

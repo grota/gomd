@@ -8,6 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/ansi/kitty"
+
 	"github.com/grota/gomd/internal/config"
 	"github.com/grota/gomd/internal/parser"
 )
@@ -284,7 +288,7 @@ func TestJumpModeEnterAndCancel(t *testing.T) {
 	}
 }
 
-func TestReplaceImagePlaceholders_KeepsSurroundingText(t *testing.T) {
+func TestPlaceImages_KeepsSurroundingText(t *testing.T) {
 	dir := t.TempDir()
 	f, err := os.Create(filepath.Join(dir, "logo.png"))
 	if err != nil {
@@ -298,22 +302,25 @@ func TestReplaceImagePlaceholders_KeepsSurroundingText(t *testing.T) {
 	src := "![logo](logo.png)\n\nBefore ![logo](logo.png) after\n"
 	rendered := "  logo 🖼️ /logo.png  \n  Before logo 🖼️ /logo.png after\n  plain line"
 
-	out := strings.Split(ReplaceImagePlaceholders(rendered, src, md, 40), "\n")
+	out, uploads := placeImages(strings.Split(rendered, "\n"), src, md, 40, false, imageCache{})
+	if len(uploads) != 1 {
+		t.Errorf("want 1 upload for one image used twice, got %d", len(uploads))
+	}
 	if len(out) != 4 {
 		t.Fatalf("want 4 lines, got %d: %q", len(out), out)
 	}
-	if !strings.HasPrefix(out[0], "\x1b") {
+	if !isImageRow(out[0]) {
 		t.Errorf("standalone image line not replaced: %q", out[0])
 	}
 	if !strings.Contains(out[1], "Before") || !strings.Contains(out[1], "after") {
 		t.Errorf("inline image line lost its text: %q", out[1])
 	}
-	if !strings.HasPrefix(out[2], "\x1b") || out[3] != "  plain line" {
+	if !isImageRow(out[2]) || out[3] != "  plain line" {
 		t.Errorf("image not placed after inline line, or plain line changed: %q", out[2:])
 	}
 }
 
-func TestReplaceImagePlaceholders_SharedPathDifferentForms(t *testing.T) {
+func TestPlaceImages_SharedPathDifferentForms(t *testing.T) {
 	dir := t.TempDir()
 	f, err := os.Create(filepath.Join(dir, "a.png"))
 	if err != nil {
@@ -327,9 +334,73 @@ func TestReplaceImagePlaceholders_SharedPathDifferentForms(t *testing.T) {
 	// part of another caption.
 	src := "![one](./a.png)\n\n![](a.png)\n\n![two](a.png \"title\")\n"
 	rendered := "  one 🖼️ /a.png\n  /a.png\n  two 🖼️ /a.png"
-	for i, l := range strings.Split(ReplaceImagePlaceholders(rendered, src, filepath.Join(dir, "d.md"), 40), "\n") {
-		if !strings.HasPrefix(l, "\x1b") {
+	out, _ := placeImages(strings.Split(rendered, "\n"), src, filepath.Join(dir, "d.md"), 40, false, imageCache{})
+	for i, l := range out {
+		if !isImageRow(l) {
 			t.Errorf("line %d not replaced by an image: %q", i, l)
+		}
+	}
+}
+
+func TestPlaceImages_KeepCaptionAndCache(t *testing.T) {
+	dir := t.TempDir()
+	f, err := os.Create(filepath.Join(dir, "a.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewRGBA(image.Rect(0, 0, 32, 32))); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	cache := imageCache{}
+	lines := []string{"  pic 🖼️ /a.png"}
+	out, uploads := placeImages(lines, "![pic](a.png)", filepath.Join(dir, "d.md"), 40, true, cache)
+	if out[0] != lines[0] || len(out) != 3 || len(uploads) != 1 {
+		t.Fatalf("keepCaption: want caption + 2 rows and 1 upload, got %q, %d uploads", out, len(uploads))
+	}
+	if w := ansi.StringWidth(out[1]); w != 6 {
+		t.Errorf("placeholder row width %d, want 2 margin + 4 cells", w)
+	}
+	if _, again := placeImages(lines, "![pic](a.png)", filepath.Join(dir, "d.md"), 40, true, cache); len(again) != 0 {
+		t.Errorf("cached image uploaded again")
+	}
+}
+
+func isImageRow(l string) bool { return strings.ContainsRune(l, kitty.Placeholder) }
+
+func TestTUIImagesUploadOnceAndFitWidth(t *testing.T) {
+	dir := t.TempDir()
+	f, err := os.Create(filepath.Join(dir, "a.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewRGBA(image.Rect(0, 0, 400, 100))); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	md := filepath.Join(dir, "d.md")
+	cfg := config.Default()
+	cfg.Images.Enabled = true
+	a := NewApp(parser.ParseMarkdown("# T\n\n![pic](a.png)\n\ntext\n"), "d.md", md, cfg)
+
+	_, cmd := a.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	if cmd == nil {
+		t.Fatal("expected an upload command after the first render")
+	}
+	view := a.View().Content
+	if !strings.ContainsRune(view, kitty.Placeholder) {
+		t.Error("no placeholder rows in the view")
+	}
+	for i, l := range strings.Split(view, "\n") {
+		if w := ansi.StringWidth(l); w != 60 {
+			t.Errorf("line %d width %d, want 60", i, w)
+		}
+	}
+	if _, cmd := a.Update(tea.KeyPressMsg{Code: 'j', Text: "j"}); cmd != nil {
+		if msg := cmd(); msg != nil {
+			if _, isRaw := msg.(tea.RawMsg); isRaw {
+				t.Error("image uploaded again without a size change")
+			}
 		}
 	}
 }
