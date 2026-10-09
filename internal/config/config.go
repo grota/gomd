@@ -20,12 +20,11 @@ type Config struct {
 
 // UIConfig holds UI-related settings.
 type UIConfig struct {
-	Theme           string              `toml:"theme"`
-	CompactTree     bool                `toml:"compact_tree"`
-	Opener          string              `toml:"opener"` // command to open URLs, may include arguments (default: xdg-open on Linux, open on macOS)
-	GhosttyThemeDir string              `toml:"ghostty_theme_directory"`
-	SidebarHidden   bool                `toml:"sidebar_hidden"`
-	ThemeOverride   ThemeOverrideConfig `toml:"theme_override"`
+	Theme         string              `toml:"theme"`
+	CompactTree   bool                `toml:"compact_tree"`
+	Opener        string              `toml:"opener"` // command to open URLs, may include arguments (default: xdg-open on Linux, open on macOS)
+	SidebarHidden bool                `toml:"sidebar_hidden"`
+	ThemeOverride ThemeOverrideConfig `toml:"theme_override"`
 }
 
 // ThemeOverrideConfig allows overriding individual colors of the active theme.
@@ -206,7 +205,7 @@ func splitKeys(s string) []string {
 func Default() Config {
 	return Config{
 		UI: UIConfig{
-			Theme:         "OceanDark",
+			Theme:         "light:OceanLight,dark:OceanDark",
 			CompactTree:   false,
 			SidebarHidden: true,
 		},

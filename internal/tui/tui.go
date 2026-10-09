@@ -2,6 +2,8 @@
 package tui
 
 import (
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -101,6 +103,13 @@ type App struct {
 	cfg      config.Config
 	theme    Theme
 
+	// Theme selection: the light/dark pair, the system appearance it follows
+	// (mode 2031), and the picker while it is open.
+	themeSetting ThemeSetting
+	dark         bool
+	picker       *themePicker
+	themeLists   [2][]pickerEntry
+
 	width  int
 	height int
 
@@ -175,12 +184,17 @@ func NewApp(doc *parser.Document, filename, filePath string, cfg config.Config) 
 		filename:      filename,
 		filepath:      filePath,
 		cfg:           cfg,
-		theme:         ResolveTheme(cfg),
 		focus:         FocusContent,
 		selectedIdx:   -1, // start on the root (Document) node
 		sidebarHidden: cfg.UI.SidebarHidden,
 		images:        imageCache{},
+		dark:          true,
 	}
+	var err error
+	if a.themeSetting, err = ParseThemeSetting(cfg.UI.Theme); err != nil {
+		a.themeSetting, _ = ParseThemeSetting("")
+	}
+	a.applyTheme()
 	a.rebuildSection()
 	return a
 }
@@ -306,7 +320,37 @@ func (a *App) reloadFromDisk(status string) {
 }
 
 func (a *App) Init() tea.Cmd {
-	return a.startWatcher()
+	// Follow the system appearance: report it now and on every change.
+	return tea.Batch(a.startWatcher(), tea.Raw(ansi.SetModeLightDark+ansi.RequestLightDarkReport))
+}
+
+// setTheme shows t and drops everything rendered with the previous theme.
+func (a *App) setTheme(t Theme) {
+	a.theme = t
+	a.glamourRenderer = nil
+	a.renderedLines = nil
+	a.nodeRenderInfo = nil
+}
+
+// applyTheme shows the configured theme for the current system mode.
+func (a *App) applyTheme() {
+	t, err := ThemeFor(a.cfg, a.dark)
+	if err != nil {
+		a.statusMsg = "Theme: " + err.Error()
+	}
+	a.setTheme(t)
+}
+
+// setDark follows a system appearance report; while the picker is open the
+// switch waits until it closes.
+func (a *App) setDark(dark bool) {
+	if a.dark == dark {
+		return
+	}
+	a.dark = dark
+	if a.mode != ModeThemePicker {
+		a.applyTheme()
+	}
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -333,6 +377,13 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.reload(msg.doc, "Reloaded")
 		return a, waitForFileChange(a.watcher, a.filepath)
 
+	case uv.DarkColorSchemeEvent:
+		a.setDark(true)
+	case uv.LightColorSchemeEvent:
+		a.setDark(false)
+	case themesDownloadedMsg:
+		a.handleThemesDownloaded(msg)
+
 	case editorDoneMsg:
 		a.reloadFromDisk("Reloaded after edit")
 		return a, nil
@@ -353,10 +404,14 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // Entry point
 // ─────────────────────────────────────────────
 
-func Run(doc *parser.Document, filename, filePath string, cfg config.Config) error {
+// Run starts the TUI; dark is the system appearance found at startup.
+func Run(doc *parser.Document, filename, filePath string, cfg config.Config, dark bool) error {
 	app := NewApp(doc, filename, filePath, cfg)
+	app.dark = dark
+	app.applyTheme()
 	p := tea.NewProgram(app)
 	_, err := p.Run()
+	os.Stdout.WriteString(ansi.ResetModeLightDark)
 	for _, k := range app.images {
 		os.Stdout.WriteString(k.deleteSeq())
 	}

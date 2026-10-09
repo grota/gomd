@@ -59,8 +59,7 @@ func (a *App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		a.mode = ModeHelp
 		return a, nil
 	case config.KeyMatches(k, km.ThemePicker):
-		a.mode = ModeThemePicker
-		return a, nil
+		return a, a.openThemePicker()
 	case config.KeyMatches(k, km.ToggleFocus):
 		a.toggleFocus()
 		return a, nil
@@ -1013,28 +1012,3 @@ func (a *App) prevContentSearchMatch() {
 // ─────────────────────────────────────────────
 // Theme picker
 // ─────────────────────────────────────────────
-
-func (a *App) handleThemeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	km := a.cfg.Keys
-	switch k := msg.String(); {
-	case k == "esc" || config.KeyMatches(k, km.Quit) || config.KeyMatches(k, km.ThemePicker):
-		a.mode = ModeNormal
-	default:
-		for i, name := range themeNames {
-			if msg.String() == fmt.Sprintf("%d", i+1) {
-				a.cfg.UI.Theme = name
-				a.theme = ResolveTheme(a.cfg)
-				if err := config.SaveTheme(name); err != nil {
-					a.statusMsg = "Theme not saved: " + err.Error()
-				}
-				// Invalidate glamour renderer and rendered lines cache
-				a.glamourRenderer = nil
-				a.renderedLines = nil
-				a.nodeRenderInfo = nil
-				a.mode = ModeNormal
-				return a, nil
-			}
-		}
-	}
-	return a, nil
-}

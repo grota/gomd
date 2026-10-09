@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"charm.land/glamour/v2"
 	"github.com/spf13/cobra"
@@ -97,14 +99,59 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagRender {
-		return renderToStdout(doc, filePath, cfg)
+		dark, err := prepareThemes(cfg, term.IsTerminal(int(os.Stdout.Fd())))
+		if err != nil {
+			return err
+		}
+		return renderToStdout(doc, filePath, cfg, dark)
+	}
+	dark, err := prepareThemes(cfg, true)
+	if err != nil {
+		return err
 	}
 
 	filename := inp.FilePath
 	if filename == "" {
 		filename = "stdin"
 	}
-	return tui.Run(doc, filename, filePath, cfg)
+	return tui.Run(doc, filename, filePath, cfg, dark)
+}
+
+// prepareThemes rejects unknown theme names, downloads the pinned Ghostty
+// themes when a configured theme needs them, and returns the system
+// appearance (dark when the terminal is not asked or does not answer).
+func prepareThemes(cfg config.Config, askTerminal bool) (bool, error) {
+	source := "ui.theme"
+	if flagTheme != "" {
+		source = "--theme"
+	}
+	setting, err := tui.ParseThemeSetting(cfg.UI.Theme)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", source, err)
+	}
+	names := []string{setting.Light, setting.Dark}
+	needDownload := !tui.IsBuiltinTheme(names[0]) || !tui.IsBuiltinTheme(names[1])
+	if needDownload && !tui.RemoteThemesCached() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := tui.EnsureRemoteThemes(ctx)
+		cancel()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Warning: using the Ocean themes:", err)
+			names = nil // cannot tell unknown names from missing downloads
+		}
+	}
+	for _, name := range names {
+		if _, err := tui.LoadTheme(name, cfg.UI.ThemeOverride); err != nil {
+			return false, fmt.Errorf("%w (%s)", err, source)
+		}
+	}
+	dark := true
+	if askTerminal {
+		if d, ok := tui.QuerySystemDark(200 * time.Millisecond); ok {
+			dark = d
+		}
+	}
+	return dark, nil
 }
 
 func loadInput(args []string) (*input.Input, string, error) {
@@ -194,7 +241,7 @@ func printHeadingCounts(doc *parser.Document) {
 	fmt.Printf("\nTotal: %d\n", len(doc.Headings))
 }
 
-func renderToStdout(doc *parser.Document, mdPath string, cfg config.Config) error {
+func renderToStdout(doc *parser.Document, mdPath string, cfg config.Config, dark bool) error {
 	// Use terminal width if stdout is a terminal, otherwise no wrapping.
 	width := 80
 	if fd := int(os.Stdout.Fd()); term.IsTerminal(fd) {
@@ -203,7 +250,7 @@ func renderToStdout(doc *parser.Document, mdPath string, cfg config.Config) erro
 		}
 	}
 
-	theme := tui.ResolveTheme(cfg)
+	theme, _ := tui.ThemeFor(cfg, dark) // prepareThemes already warned
 
 	style := tui.StyleConfigFromTheme(theme)
 	if !flagDisableBg {

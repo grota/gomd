@@ -1113,65 +1113,6 @@ func (a *App) overlayHelp(background string) string {
 	return a.overlayModal(background, text, modalW)
 }
 
-func (a *App) overlayThemePicker(background string) string {
-
-	// Header with current resolved theme name.
-	var lines []string
-	lines = append(lines, fmt.Sprintf("Theme: %s", a.theme.Name), "")
-
-	// Theme selection list.
-	lines = append(lines, "Select Theme (press number):", "")
-	for i, name := range themeNames {
-		marker := "  "
-		if name == a.cfg.UI.Theme {
-			marker = "→ "
-		}
-		lines = append(lines, fmt.Sprintf("%s%d. %s", marker, i+1, name))
-	}
-
-	// Resolved color swatches.
-	lines = append(lines, "", "Resolved Colors:", "")
-	type colorEntry struct {
-		label string
-		value Color
-	}
-	entries := []colorEntry{
-		{"Border", a.theme.Border},
-		{"Selected", a.theme.Selected},
-		{"Heading1", a.theme.Heading1},
-		{"Heading2", a.theme.Heading2},
-		{"Heading3", a.theme.Heading3},
-		{"HeadingN", a.theme.HeadingN},
-		{"Background", a.theme.Background},
-		{"Foreground", a.theme.Foreground},
-		{"StatusBar", a.theme.StatusBar},
-		{"Highlight", a.theme.Highlight},
-		{"Code", a.theme.Code},
-		{"Search", a.theme.Search},
-		{"NodeSel", a.theme.NodeSel},
-	}
-	for _, e := range entries {
-		hex := string(e.value)
-		swatch := lipgloss.NewStyle().
-			Background(e.value).
-			Foreground(lipgloss.Color("#000000")).
-			Render(fmt.Sprintf(" %-10s ", hex))
-		lines = append(lines, fmt.Sprintf("  %-12s %s", e.label, swatch))
-	}
-
-	lines = append(lines, "", "Esc / "+config.FirstKey(a.cfg.Keys.ThemePicker)+" to dismiss")
-
-	text := strings.Join(lines, "\n")
-
-	// Responsive modal width.
-	modalW := 50
-	if modalW > a.width-4 {
-		modalW = a.width - 4
-	}
-
-	return a.overlayModal(background, text, modalW)
-}
-
 // overlayModal draws text in a bordered box of width modalW centered over background.
 func (a *App) overlayModal(background, text string, modalW int) string {
 	modal := lipgloss.NewStyle().

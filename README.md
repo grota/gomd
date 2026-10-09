@@ -44,7 +44,7 @@ interactive mode:
 - **Internal link following** — `Enter` on `#anchor` links jumps to the referenced heading
 - **Mouse support** — click sidebar headings, scroll content with mouse wheel
 - **Responsive sidebar** — width auto-adjusts based on heading text length
-- **Multiple themes** — `T` opens the theme picker (OceanDark, Nord, Dracula, Gruvbox, TokyoNight, or any Ghostty theme)
+- **Themes** — 700+ Ghostty themes with a live-preview picker (`T`), and separate light and dark themes that follow the system appearance
 - **CLI mode** — list, tree, count, extract sections non-interactively
 - **File watcher** — auto-reloads on change
 - **Editor integration** — `e` opens the source file in `$EDITOR`
@@ -163,11 +163,10 @@ All settings are optional — only specify what you want to override.
 
 ```toml
 [ui]
-theme = "OceanDark"       # OceanDark | Nord | Dracula | Gruvbox | TokyoNight (or a Ghostty theme name)
+theme = "light:OceanLight,dark:OceanDark"   # or a single name; see Themes
 compact_tree = false      # compact --tree output
 sidebar_hidden = true     # start with the sidebar hidden
 opener = "xdg-open"       # command to open URLs, may include arguments (macOS default: "open")
-ghostty_theme_directory = ""  # path to Ghostty themes (e.g., "/usr/share/ghostty/themes/")
 
 [ui.theme_override]
 # Override individual colors of the active theme (hex values).
@@ -242,25 +241,34 @@ node_exit = "esc,q,i"
 
 Key bindings use comma-separated values for multiple keys mapped to the same action. Key names follow bubbletea conventions (e.g., `ctrl+d`, `shift+tab`, `pgdown`, `space`, `esc`). A two-character entry such as `gg` is a key sequence. `Esc` always cancels search, jump mode and the theme picker.
 
-## Theme resolution
+## Themes
 
-gomd resolves the active theme in three steps:
+gomd ships two built-in themes, **OceanDark** and **OceanLight**, and can use the 700+ themes of [iTerm2-Color-Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes) (MIT) in Ghostty format.
 
-1. **Built-in lookup** — if `theme` matches a built-in name (OceanDark, Nord, Dracula, Gruvbox, TokyoNight), that theme is used.
-2. **Ghostty fallback** — if the name doesn't match a built-in theme and `ghostty_theme_directory` is set, gomd looks for a file with that name in the directory and converts the Ghostty color palette to a gomd theme. The mapping is:
-   - `background` / `foreground` → direct
-   - `selection-background` → Selected (fallback: palette 0)
-   - palette 0 → Code
-   - palette 1 → Search (red)
-   - palette 2 → Heading2 (green)
-   - palette 3 → Heading1 (yellow)
-   - palette 4 → Heading3 (blue)
-   - palette 6 → NodeSel (cyan)
-   - palette 8 → Border, StatusBar, HeadingN (bright black)
-   - palette 11 → Highlight (bright yellow)
-3. **Color overrides** — any non-empty field in `[ui.theme_override]` replaces the corresponding color, regardless of whether the base theme is built-in or loaded from Ghostty.
+`theme` uses Ghostty's format: `"light:A,dark:B"` picks a theme for each system appearance, and a single name is used in both. The default is `"light:OceanLight,dark:OceanDark"`.
 
-If the theme name doesn't match a built-in and no Ghostty directory is configured (or the file isn't found), gomd falls back to OceanDark.
+gomd follows the system's light or dark setting as reported by the terminal (mode 2031; Ghostty, and tmux 3.6+). It asks once at startup and switches live when the setting changes. Without an answer it uses the dark theme. Render mode (`-r`) asks only when its output is a terminal.
+
+### Theme picker
+
+`T` opens the picker with a **Dark** and a **Light** tab (`Tab` switches). Dark lists the darkest backgrounds first, Light the lightest first, with the built-in theme at the top. Typing filters the list (fuzzy, like the heading search), and the screen previews the highlighted theme live.
+
+| Key                            | Action                                           |
+| ------------------------------ | ------------------------------------------------ |
+| `↑` / `↓`, `Ctrl+P` / `Ctrl+N` | Move                                             |
+| `PgUp` / `PgDn`                | Move a page                                      |
+| `Backspace` / `Ctrl+U`         | Delete a character / clear the filter            |
+| `Tab`                          | Switch between Dark and Light                    |
+| `Enter`                        | Save the theme for that tab's mode to the config |
+| `Esc`                          | Cancel and restore the theme                     |
+
+These keys are fixed, since every other key goes into the filter.
+
+### Downloads
+
+The Ghostty themes come from a pinned release, verified by SHA-256 and cached in the user cache directory (`~/.cache/gomd/themes/` on Linux). gomd downloads it the first time the picker opens, and at startup when `theme` names a theme that is not cached yet (waiting at most 5 seconds; on failure it uses the Ocean themes and prints a warning). A name that is neither built-in nor in the pinned set is an error.
+
+`[ui.theme_override]` colours apply to every theme.
 
 ## Input resolution
 

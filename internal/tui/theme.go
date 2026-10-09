@@ -48,51 +48,101 @@ var themes = map[string]Theme{
 		Background: "#1a2332", Foreground: "#c5d4e8", StatusBar: "#253545",
 		Highlight: "#ffd700", Code: "#1e2a3a", Search: "#ff6b6b", NodeSel: "#ff9f43",
 	},
-	"Nord": {
-		Name: "Nord", Border: "#4c566a", Selected: "#3b4252",
-		Heading1: "#88c0d0", Heading2: "#81a1c1", Heading3: "#5e81ac", HeadingN: "#616e88",
-		Background: "#2e3440", Foreground: "#d8dee9", StatusBar: "#3b4252",
-		Highlight: "#ebcb8b", Code: "#272c36", Search: "#bf616a", NodeSel: "#a3be8c",
-	},
-	"Dracula": {
-		Name: "Dracula", Border: "#6272a4", Selected: "#44475a",
-		Heading1: "#bd93f9", Heading2: "#ff79c6", Heading3: "#8be9fd", HeadingN: "#6272a4",
-		Background: "#282a36", Foreground: "#f8f8f2", StatusBar: "#44475a",
-		Highlight: "#f1fa8c", Code: "#21222c", Search: "#ff5555", NodeSel: "#50fa7b",
-	},
-	"Gruvbox": {
-		Name: "Gruvbox", Border: "#504945", Selected: "#3c3836",
-		Heading1: "#fabd2f", Heading2: "#b8bb26", Heading3: "#83a598", HeadingN: "#928374",
-		Background: "#282828", Foreground: "#ebdbb2", StatusBar: "#3c3836",
-		Highlight: "#fe8019", Code: "#1d2021", Search: "#fb4934", NodeSel: "#8ec07c",
-	},
-	"TokyoNight": {
-		Name: "TokyoNight", Border: "#3b4261", Selected: "#283457",
-		Heading1: "#7aa2f7", Heading2: "#7dcfff", Heading3: "#bb9af7", HeadingN: "#565f89",
-		Background: "#1a1b26", Foreground: "#c0caf5", StatusBar: "#1f2335",
-		Highlight: "#e0af68", Code: "#16161e", Search: "#f7768e", NodeSel: "#9ece6a",
+	// OceanLight is OceanDark's light companion; it exists in no remote set.
+	"OceanLight": {
+		Name: "OceanLight", Border: "#7593bb", Selected: "#cddcef",
+		Heading1: "#1f5f99", Heading2: "#17735f", Heading3: "#5146b8", HeadingN: "#536781",
+		Background: "#f3f6fa", Foreground: "#1e2b3a", StatusBar: "#dde6f0",
+		Highlight: "#2f6fb0", Code: "#e6edf5", Search: "#b42318", NodeSel: "#1f5f99",
 	},
 }
 
-// themeNames lists the built-in themes in theme-picker order.
-var themeNames = []string{"OceanDark", "Nord", "Dracula", "Gruvbox", "TokyoNight"}
+// builtinNames lists the built-in themes, dark first.
+var builtinNames = []string{"OceanDark", "OceanLight"}
 
-// ResolveTheme returns the active theme, applying ghostty loading and config overrides.
-// It first checks built-in themes, then tries loading from the ghostty theme directory,
-// and finally applies any color overrides from the config.
-func ResolveTheme(cfg config.Config) Theme {
-	theme, ok := themes[cfg.UI.Theme]
-	if !ok {
-		theme = themes["OceanDark"]
-		if cfg.UI.GhosttyThemeDir != "" {
-			if t, err := LoadGhosttyTheme(cfg.UI.GhosttyThemeDir, cfg.UI.Theme); err == nil {
-				theme = t
-			}
+// ThemeSetting is a parsed ui.theme value: Ghostty's "light:A,dark:B" form,
+// or a single name used in both modes.
+type ThemeSetting struct{ Light, Dark string }
+
+// ParseThemeSetting parses "light:A,dark:B" (either order) or a single name.
+func ParseThemeSetting(s string) (ThemeSetting, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		s = config.Default().UI.Theme
+	}
+	if !strings.Contains(s, "light:") && !strings.Contains(s, "dark:") {
+		return ThemeSetting{Light: s, Dark: s}, nil
+	}
+	var t ThemeSetting
+	for _, part := range strings.Split(s, ",") {
+		mode, name, ok := strings.Cut(strings.TrimSpace(part), ":")
+		name = strings.TrimSpace(name)
+		switch {
+		case !ok || name == "":
+			return ThemeSetting{}, fmt.Errorf("invalid theme %q: want \"light:A,dark:B\" or a single name", s)
+		case mode == "light":
+			t.Light = name
+		case mode == "dark":
+			t.Dark = name
+		default:
+			return ThemeSetting{}, fmt.Errorf("invalid theme %q: unknown mode %q", s, mode)
 		}
 	}
+	if t.Light == "" || t.Dark == "" {
+		return ThemeSetting{}, fmt.Errorf("invalid theme %q: both light: and dark: are required", s)
+	}
+	return t, nil
+}
 
-	// Apply per-color overrides from config.
-	ov := cfg.UI.ThemeOverride
+// String formats the setting the way ParseThemeSetting reads it.
+func (t ThemeSetting) String() string {
+	if t.Light == t.Dark {
+		return t.Light
+	}
+	return "light:" + t.Light + ",dark:" + t.Dark
+}
+
+// For returns the theme name for the given mode.
+func (t ThemeSetting) For(dark bool) string {
+	if dark {
+		return t.Dark
+	}
+	return t.Light
+}
+
+// LoadTheme resolves a theme name, built-in or from the downloaded set, and
+// applies the config's colour overrides.
+func LoadTheme(name string, ov config.ThemeOverrideConfig) (Theme, error) {
+	theme, ok := themes[name]
+	if !ok {
+		var err error
+		if theme, err = loadRemoteTheme(name); err != nil {
+			return Theme{}, err
+		}
+	}
+	return applyOverrides(theme, ov), nil
+}
+
+// ThemeFor returns the configured theme for the mode. When it cannot be
+// loaded (e.g. the Ghostty themes are not downloaded) it returns the Ocean
+// built-in for the mode together with the error.
+func ThemeFor(cfg config.Config, dark bool) (Theme, error) {
+	setting, err := ParseThemeSetting(cfg.UI.Theme)
+	if err == nil {
+		var t Theme
+		if t, err = LoadTheme(setting.For(dark), cfg.UI.ThemeOverride); err == nil {
+			return t, nil
+		}
+	}
+	fallback := "OceanLight"
+	if dark {
+		fallback = "OceanDark"
+	}
+	return applyOverrides(themes[fallback], cfg.UI.ThemeOverride), err
+}
+
+// applyOverrides replaces the theme colours set in [ui.theme_override].
+func applyOverrides(theme Theme, ov config.ThemeOverrideConfig) Theme {
 	applyOverride := func(dst *Color, src string) {
 		if src != "" {
 			*dst = Color(src)
@@ -111,8 +161,17 @@ func ResolveTheme(cfg config.Config) Theme {
 	applyOverride(&theme.Code, ov.Code)
 	applyOverride(&theme.Search, ov.Search)
 	applyOverride(&theme.NodeSel, ov.NodeSel)
-
 	return theme
+}
+
+// luminance is the relative luminance of a "#rrggbb" colour, as Ghostty uses
+// to sort themes into dark (< 0.5) and light.
+func luminance(hex Color) float64 {
+	r, g, b, ok := parseHex(string(hex))
+	if !ok {
+		return 0
+	}
+	return (0.2126*float64(r) + 0.7152*float64(g) + 0.0722*float64(b)) / 255
 }
 
 // ─────────────────────────────────────────────

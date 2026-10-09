@@ -2,9 +2,7 @@ package tui
 
 import (
 	"bufio"
-	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -109,15 +107,4 @@ func ghosttyToTheme(name string, gt ghosttyTheme) Theme {
 		Search:     c(gt.Palette[1], "#b87a7a"),
 		NodeSel:    c(gt.Palette[6], "#7ab8b8"),
 	}
-}
-
-// LoadGhosttyTheme loads a named Ghostty theme from a directory and converts it
-// to a gomd Theme. The theme name should match the filename in the directory.
-func LoadGhosttyTheme(dir, name string) (Theme, error) {
-	path := filepath.Join(dir, name)
-	gt, err := parseGhosttyFile(path)
-	if err != nil {
-		return Theme{}, fmt.Errorf("loading ghostty theme %q: %w", name, err)
-	}
-	return ghosttyToTheme(name, gt), nil
 }
