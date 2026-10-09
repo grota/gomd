@@ -300,7 +300,7 @@ func TestPlaceImages_KeepsSurroundingText(t *testing.T) {
 	f.Close()
 	md := filepath.Join(dir, "doc.md")
 	src := "![logo](logo.png)\n\nBefore ![logo](logo.png) after\n"
-	rendered := "  logo 🖼️ /logo.png  \n  Before logo 🖼️ /logo.png after\n  plain line"
+	rendered := "  logo 📷 /logo.png  \n  Before logo 📷 /logo.png after\n  plain line"
 
 	out, uploads := placeImages(strings.Split(rendered, "\n"), src, md, 40, false, imageCache{})
 	if len(uploads) != 1 {
@@ -333,7 +333,7 @@ func TestPlaceImages_SharedPathDifferentForms(t *testing.T) {
 	// "./a.png" and "a.png" render the same path; an empty alt must not eat
 	// part of another caption.
 	src := "![one](./a.png)\n\n![](a.png)\n\n![two](a.png \"title\")\n"
-	rendered := "  one 🖼️ /a.png\n  /a.png\n  two 🖼️ /a.png"
+	rendered := "  one 📷 /a.png\n  /a.png\n  two 📷 /a.png"
 	out, _ := placeImages(strings.Split(rendered, "\n"), src, filepath.Join(dir, "d.md"), 40, false, imageCache{})
 	for i, l := range out {
 		if !isImageRow(l) {
@@ -353,7 +353,7 @@ func TestPlaceImages_KeepCaptionAndCache(t *testing.T) {
 	}
 	f.Close()
 	cache := imageCache{}
-	lines := []string{"  pic 🖼️ /a.png"}
+	lines := []string{"  pic 📷 /a.png"}
 	out, uploads := placeImages(lines, "![pic](a.png)", filepath.Join(dir, "d.md"), 40, true, cache)
 	if out[0] != lines[0] || len(out) != 3 || len(uploads) != 1 {
 		t.Fatalf("keepCaption: want caption + 2 rows and 1 upload, got %q, %d uploads", out, len(uploads))
@@ -401,6 +401,37 @@ func TestTUIImagesUploadOnceAndFitWidth(t *testing.T) {
 			if _, isRaw := msg.(tea.RawMsg); isRaw {
 				t.Error("image uploaded again without a size change")
 			}
+		}
+	}
+}
+
+func TestImageNodesMapToTheirOwnCaption(t *testing.T) {
+	md := "# T\n\n<img src=\"c.png\" alt=\"checker\">\n\n## U\n\n![](c.png)\n\n![t](c.png \"A title\")\n"
+	a := NewApp(parser.ParseMarkdown(md), "t.md", "", config.Default())
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	a.ensureRenderedLines()
+	if len(a.codeNodes) != 3 {
+		t.Fatalf("want 3 image nodes, got %d", len(a.codeNodes))
+	}
+	seen := map[int]bool{}
+	for i, loc := range a.nodeRenderInfo {
+		if loc.firstLine < 0 || seen[loc.firstLine] {
+			t.Errorf("node %d (%q) mapped to line %d, want its own caption line", i, a.codeNodes[i].display, loc.firstLine)
+		}
+		seen[loc.firstLine] = true
+	}
+	if got := a.codeNodes[2].content; got != "c.png" {
+		t.Errorf("title kept in destination: %q", got)
+	}
+}
+
+// The layout measures graphemes, but bubbletea falls back to wcwidth when the
+// terminal (e.g. tmux) does not answer the Unicode-core query. Glyphs that the
+// two disagree on leave stale cells on screen.
+func TestCaptionGlyphWidthsAgree(t *testing.T) {
+	for _, g := range []string{"📷", "🔗"} {
+		if ansi.StringWidth(g) != ansi.StringWidthWc(g) {
+			t.Errorf("%q: grapheme width %d, wcwidth %d", g, ansi.StringWidth(g), ansi.StringWidthWc(g))
 		}
 	}
 }

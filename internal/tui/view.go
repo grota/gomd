@@ -466,10 +466,17 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 						}
 						s = s[colOffset:]
 					}
-					idx := strings.Index(s, needle)
+					idx, found := strings.Index(s, needle), needle
+					if idx < 0 {
+						// A long image caption may wrap: fall back to "alt 📷".
+						if cut := strings.Index(needle, " 📷 "); cut > 0 {
+							found = needle[:cut+len(" 📷")]
+							idx = strings.Index(s, found)
+						}
+					}
 					if idx >= 0 {
 						bestCol := colOffset + idx
-						bestColEnd := bestCol + len(needle)
+						bestColEnd := bestCol + len(found)
 						loc.firstLine = ri
 						loc.lastLine = ri
 						loc.spanColByte = bestCol

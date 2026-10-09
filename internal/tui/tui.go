@@ -69,7 +69,7 @@ type codeNode struct {
 	kind      nodeKind
 	lang      string
 	content   string // raw code without fence lines / backticks; for links: URL
-	display   string // for links: the visible text glamour renders (e.g. link text, "alt 🖼️ path")
+	display   string // for links: the visible text glamour renders (e.g. link text, "alt 📷 path")
 	startLine int    // 0-based line index in sectionLines
 	endLine   int    // inclusive (== startLine for inline)
 	inline    bool   // true for backtick inline code spans and links

@@ -241,7 +241,7 @@ func StyleConfigFromTheme(theme Theme) gansi.StyleConfig {
 		},
 		ImageText: gansi.StylePrimitive{
 			Color:  &border,
-			Format: "{{.text}} 🖼️",
+			Format: "{{.text}} 📷",
 		},
 		Code: gansi.StyleBlock{
 			StylePrimitive: gansi.StylePrimitive{

@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -194,7 +195,7 @@ var ansiStripRe = regexp.MustCompile(`\x1b(?:\[[0-9;]*[a-zA-Z]|\].*?\x07|_.*?\x1
 type imageCache map[string]kittyImage
 
 // placeImages inserts placeholder rows after glamour's image captions
-// ("alt 🖼️ /path") in rendered lines. With keepCaption false, a line holding
+// ("alt 📷 /path") in rendered lines. With keepCaption false, a line holding
 // only a caption is replaced by the image; a line with other text always
 // keeps it. Images missing from cache are loaded and added, and their upload
 // sequences are returned for the caller to send before the rows are shown.
@@ -212,16 +213,16 @@ func placeImages(lines []string, mdContent, mdPath string, maxCols int, keepCapt
 
 	// Key by the path glamour displays, so "./a.png" and "a.png" share an entry.
 	type entry struct {
-		img  kittyImage
-		alts []string
+		img      kittyImage
+		captions []string
 	}
 	entries := map[string]*entry{}
 	var order []string
 	var uploads []string
 	for _, im := range images {
-		gp := displayedImagePath(im.Src)
-		if e, ok := entries[gp]; ok {
-			e.alts = append(e.alts, im.Alt)
+		cp := imageCaptionPath(im.Src)
+		if e, ok := entries[cp]; ok {
+			e.captions = append(e.captions, imageCaption(im.Alt, im.Src))
 			continue
 		}
 		resolved := ResolveImagePath(im.Src, absMdPath)
@@ -238,8 +239,8 @@ func placeImages(lines []string, mdContent, mdPath string, maxCols int, keepCapt
 			cache[key] = k
 			uploads = append(uploads, k.upload)
 		}
-		entries[gp] = &entry{img: k, alts: []string{im.Alt}}
-		order = append(order, gp)
+		entries[cp] = &entry{img: k, captions: []string{imageCaption(im.Alt, im.Src)}}
+		order = append(order, cp)
 	}
 	if len(entries) == 0 {
 		return lines, uploads
@@ -250,12 +251,12 @@ func placeImages(lines []string, mdContent, mdPath string, maxCols int, keepCapt
 		stripped := strings.TrimSpace(ansiStripRe.ReplaceAllString(line, ""))
 		// A line holding only one image's caption.
 		var standalone *entry
-		for gp, e := range entries {
-			if stripped == gp || stripped == "/"+gp {
+		for cp, e := range entries {
+			if stripped == cp {
 				standalone = e
 			}
-			for _, alt := range e.alts {
-				if stripped == strings.TrimSpace(alt+" 🖼️ /"+gp) {
+			for _, c := range e.captions {
+				if stripped == c {
 					standalone = e
 				}
 			}
@@ -268,7 +269,7 @@ func placeImages(lines []string, mdContent, mdPath string, maxCols int, keepCapt
 			continue
 		}
 		out = append(out, line)
-		if !strings.Contains(stripped, "🖼️") {
+		if !strings.Contains(stripped, "📷") {
 			continue
 		}
 		// Inline images: keep the text, add each image below in reading order.
@@ -277,9 +278,9 @@ func placeImages(lines []string, mdContent, mdPath string, maxCols int, keepCapt
 			img kittyImage
 		}
 		var hits []hit
-		for _, gp := range order {
-			if at := strings.Index(stripped, "🖼️ /"+gp); at >= 0 {
-				hits = append(hits, hit{at, entries[gp].img})
+		for _, cp := range order {
+			if at := strings.Index(stripped, "📷 "+cp); at >= 0 {
+				hits = append(hits, hit{at, entries[cp].img})
 			}
 		}
 		sort.Slice(hits, func(i, j int) bool { return hits[i].at < hits[j].at })
@@ -297,12 +298,21 @@ func RenderImages(rendered, mdContent, mdPath string, maxCols int) string {
 	return strings.Join(uploads, "") + strings.Join(lines, "\n")
 }
 
-// displayedImagePath is the path glamour shows for an image src: leading "./"
-// and "../" segments stripped, URL escapes kept as written.
-func displayedImagePath(src string) string {
-	gp := strings.TrimPrefix(src, "./")
-	for strings.HasPrefix(gp, "../") {
-		gp = strings.TrimPrefix(gp, "../")
+// imageCaptionPath is the path glamour shows for an image src: URLs as
+// written, local paths cleaned and rooted ("./a/../b.png" -> "/b.png"), URL
+// escapes kept.
+func imageCaptionPath(src string) string {
+	if strings.Contains(src, "://") {
+		return src
 	}
-	return gp
+	return path.Clean("/" + src)
+}
+
+// imageCaption is the full text glamour renders for an image: "alt 📷 /path",
+// or the path alone when alt is empty.
+func imageCaption(alt, src string) string {
+	if alt == "" {
+		return imageCaptionPath(src)
+	}
+	return alt + " 📷 " + imageCaptionPath(src)
 }

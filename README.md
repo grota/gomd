@@ -90,12 +90,12 @@ Render mode (`-r` / `--render`) outputs rendered markdown to stdout without laun
 ```
 gomd file.md -r                        # render to stdout with background
 gomd file.md -r --disable-background   # render without background (for piping)
-gomd file.md -r --images               # render with inline images
+gomd file.md -r --no-images            # render without images
 ```
 
 Background color is emitted by default so the output looks correct in the terminal. Use `--disable-background` when piping to other tools or files, since ANSI background sequences can interfere with downstream processing.
 
-Images are rendered as `alt 🖼️ path` and links as `text 🔗 url`. HTML `<img>` and `<a>` tags are converted to their markdown equivalents before rendering.
+Images are rendered as `alt 📷 path` and links as `text 🔗 url`. HTML `<img>` and `<a>` tags are converted to their markdown equivalents before rendering.
 
 #### Key bindings
 
@@ -268,20 +268,16 @@ When no file argument is given, `gomd` reads from stdin if piped, otherwise prin
 
 ### Images
 
-gomd shows local images in the TUI and in render mode (`-r`) on terminals with [Kitty Unicode placeholder](https://sw.kovidgoyal.net/kitty/graphics-protocol/#unicode-placeholders) support: **Kitty** and **Ghostty**. In the TUI, the caption line (`alt 🖼️ path`) stays selectable and the image is drawn below it.
+gomd shows local images in the TUI and in render mode (`-r`) on terminals with [Kitty Unicode placeholder](https://sw.kovidgoyal.net/kitty/graphics-protocol/#unicode-placeholders) support: **Kitty** and **Ghostty**. In the TUI, the caption line (`alt 📷 path`) stays selectable and the image is drawn below it.
 
-Image rendering is controlled by three settings, evaluated in this order:
-
-1. **`--no-images`** flag: always disables images (highest priority).
-2. **`--images`** flag: enables images without terminal detection.
-3. **Config file**: the `[images]` section sets the default.
+Images are on when the terminal is detected as Kitty or Ghostty, unless turned off with the **`--no-images`** flag or in the config file:
 
 ```toml
 [images]
 enabled = true   # default
 ```
 
-With `enabled = true`, gomd detects Kitty or Ghostty from `KITTY_WINDOW_ID`, `TERM_PROGRAM` and `TERM`.
+gomd detects Kitty or Ghostty from `KITTY_WINDOW_ID`, `TERM_PROGRAM` and `TERM`.
 
 **tmux**: gomd asks tmux which terminal the client uses and shows images when it is Kitty or Ghostty and `allow-passthrough` is `on` (needed to upload the image). Images scroll and survive window switches like text. tmux must pass 24-bit colour to the terminal (`terminal-features` with `RGB`, the default for most setups), because the image id is encoded in the text colour.
 

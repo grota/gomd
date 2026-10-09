@@ -30,7 +30,6 @@ var (
 	flagDisableBg bool
 	flagTheme     string
 	flagNoImages  bool
-	flagImages    bool
 )
 
 func main() {
@@ -66,7 +65,6 @@ Examples:
 	rootCmd.Flags().BoolVar(&flagDisableBg, "disable-background", false, "Suppress background color in render mode (useful for piping)")
 	rootCmd.Flags().StringVar(&flagTheme, "theme", "", "Override theme (name from config or Ghostty themes directory)")
 	rootCmd.Flags().BoolVar(&flagNoImages, "no-images", false, "Disable image rendering")
-	rootCmd.Flags().BoolVar(&flagImages, "images", false, "Enable image rendering without terminal detection")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -89,14 +87,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	if flagTheme != "" {
 		cfg.UI.Theme = flagTheme
 	}
-	if flagImages {
-		cfg.Images.Enabled = true
-	}
-	if flagNoImages {
-		cfg.Images.Enabled = false
-	}
-	// --images skips terminal detection (e.g. tmux with an unrecognised client).
-	cfg.Images.Enabled = cfg.Images.Enabled && (flagImages || tui.IsKittySupported())
+	cfg.Images.Enabled = cfg.Images.Enabled && !flagNoImages && tui.IsKittySupported()
 
 	doc := parser.ParseMarkdown(inp.Content)
 

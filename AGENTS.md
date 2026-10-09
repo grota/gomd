@@ -34,7 +34,7 @@ The Go version in `go.mod` is `1.26.2` — use the matching toolchain to avoid t
 - Single entrypoint: `cmd/gomd/main.go` — all CLI flags, mode routing.
 - **Three execution modes** selected by flags:
   1. TUI (default, no flags): `gomd file.md`
-  2. Render (`-r`/`--render`): non-interactive stdout rendering with `--disable-background` and `--images` options
+  2. Render (`-r`/`--render`): non-interactive stdout rendering with `--disable-background` and `--no-images` options
   3. CLI (`--list`, `--tree`, `--count`, `--section`): non-interactive structured output
 - Subcommands: none. At most one positional argument (file, directory, or `-`).
 - Input resolution: explicit arg → stdin → help and exit.
@@ -66,12 +66,12 @@ Markdown content goes through a three-stage pipeline before display:
 1. **Pre-process** (`PreProcessMarkdown()`): converts HTML tags to markdown equivalents before glamour.
    - `<img src="url" alt="text">` → `![text](url)`
    - `<a href="url">text</a>` → `[text](url)`
-2. **Glamour render**: renders markdown to ANSI-styled text. Custom `ImageText.Format` renders images as `alt 🖼️ path` instead of glamour's default `Image: alt → path`.
+2. **Glamour render**: renders markdown to ANSI-styled text. Custom `ImageText.Format` renders images as `alt 📷 path` instead of glamour's default `Image: alt → path`.
 3. **Post-process** (`PostProcessLinks()`): inserts 🔗 glyph between link text and URL in the ANSI output.
 
 Both `renderGlamour()` (TUI) and `renderToStdout()` (CLI render mode) apply this pipeline.
 
-4. **Images** (`placeImages()` in `kitty.go`): finds caption lines (`alt 🖼️ /path`) and inserts Kitty Unicode placeholder rows. Each image is uploaded once (`a=T,U=1,q=2`, random 24-bit id in the foreground colour) and then drawn as plain text cells, so bubbletea diffs it and tmux scrolls it. The TUI sends uploads from `Update` via `tea.Raw` (View cannot return commands) and frees images on exit. Do not write raw image escape sequences into the view: bubbletea v2's cell renderer drops them, and tmux cannot track them.
+4. **Images** (`placeImages()` in `kitty.go`): finds caption lines (`alt 📷 /path`) and inserts Kitty Unicode placeholder rows. Each image is uploaded once (`a=T,U=1,q=2`, random 24-bit id in the foreground colour) and then drawn as plain text cells, so bubbletea diffs it and tmux scrolls it. The TUI sends uploads from `Update` via `tea.Raw` (View cannot return commands) and frees images on exit. Do not write raw image escape sequences into the view: bubbletea v2's cell renderer drops them, and tmux cannot track them.
 
 Node extraction (`extractCodeNodes`/`extractLinkNodes`) works on **raw** markdown lines (before pre-processing), so it must handle both markdown and HTML syntax (`<img>`, `<a>` tags). This ordering is intentional: the extracted `colStart`/`colEnd` byte offsets must match the raw source lines so that `highlightSpanInLine` can highlight the correct column range in rendered output. Running extraction after pre-processing would break these offsets because `PreProcessMarkdown` changes line content and length (e.g. a long `<img>` tag becomes a shorter `![alt](url)`). The `display` field on `codeNode` bridges the gap by storing the visible text glamour renders, enabling mapping from nodes to rendered lines without relying on column offsets for line-level identification.
 

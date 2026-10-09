@@ -302,6 +302,15 @@ func extractInlineNodes(line string, lineIdx int) []codeNode {
 	return nodes
 }
 
+// linkDestination drops an optional title from a link's parenthesised part:
+// `x.png "A title"` -> `x.png`.
+func linkDestination(dest string) string {
+	if i := strings.IndexAny(dest, " \t"); i >= 0 {
+		return dest[:i]
+	}
+	return dest
+}
+
 // extractLinkNodes finds markdown links [text](url) and autolinks <url> in a line.
 func extractLinkNodes(line string, lineIdx int) []codeNode {
 	var nodes []codeNode
@@ -326,13 +335,9 @@ func extractLinkNodes(line string, lineIdx int) []codeNode {
 					k++
 				}
 				if k < len(line) {
-					url := line[j+1 : k]
+					url := linkDestination(line[j+1 : k])
 					alt := line[i+2 : j-1]
-					// Glamour renders ![alt](url) as "alt 🖼️ path" (custom format)
-					display := alt + " 🖼️"
-					if alt == "" {
-						display = url
-					}
+					display := imageCaption(alt, url)
 					nodes = append(nodes, codeNode{
 						kind:      nodeLink,
 						lang:      "link",
@@ -367,7 +372,7 @@ func extractLinkNodes(line string, lineIdx int) []codeNode {
 					k++
 				}
 				if k < len(line) {
-					url := line[j+1 : k]
+					url := linkDestination(line[j+1 : k])
 					text := line[i+1 : j-1]
 					// Glamour renders [text](url) as "text" (with OSC8 hyperlink)
 					nodes = append(nodes, codeNode{
@@ -397,10 +402,7 @@ func extractLinkNodes(line string, lineIdx int) []codeNode {
 					src := extractHTMLAttr(tag, "src")
 					alt := extractHTMLAttr(tag, "alt")
 					if src != "" {
-						display := alt + " 🖼️"
-						if alt == "" {
-							display = src
-						}
+						display := imageCaption(alt, src)
 						nodes = append(nodes, codeNode{
 							kind:      nodeLink,
 							lang:      "link",
