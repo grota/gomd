@@ -44,12 +44,12 @@ interactive mode:
 - **Internal link following** — `Enter` on `#anchor` links jumps to the referenced heading
 - **Mouse support** — click sidebar headings, scroll content with mouse wheel
 - **Responsive sidebar** — width auto-adjusts based on heading text length
-- **Multiple themes** — `T` to cycle (OceanDark, Dracula, Nord, Solarized, …)
+- **Multiple themes** — `T` opens the theme picker (OceanDark, Nord, Dracula, Gruvbox, TokyoNight, or any Ghostty theme)
 - **CLI mode** — list, tree, count, extract sections non-interactively
 - **File watcher** — auto-reloads on change
 - **Editor integration** — `e` opens the source file in `$EDITOR`
 - **Configurable link opener** — set `opener` in config to customize how URLs are opened
-- **Image rendering** — inline images via Kitty graphics protocol (Ghostty, Kitty, WezTerm)
+- **Image rendering** — in render mode (`-r`), inline images via Kitty graphics protocol (Ghostty, Kitty, WezTerm)
 - **HTML tag support** — `<img>` and `<a>` HTML tags are rendered as images and links alongside native markdown syntax
 
 ## Installation
@@ -70,7 +70,7 @@ cd gomd
 go build ./cmd/gomd
 ```
 
-Requires Go 1.22+.
+Requires Go 1.26+.
 
 ## Usage
 
@@ -78,7 +78,7 @@ Requires Go 1.22+.
 
 ```
 gomd file.md          # open a file
-gomd some/dir/        # open first .md in directory
+gomd some/dir/        # open first .md in directory (alphabetical)
 cat file.md | gomd    # read from stdin
 gomd                  # print help
 ```
@@ -99,40 +99,45 @@ Images are rendered as `alt 🖼️ path` and links as `text 🔗 url`. HTML `<i
 
 #### Key bindings
 
-| Key                | Action                                      |
-| ------------------ | ------------------------------------------- |
-| `j` / `↓`          | Next heading                                |
-| `k` / `↑`          | Previous heading                            |
-| `gg` / `G`         | Jump to root / last heading                 |
-| `H` / `M` / `L`    | Jump to top / mid / bottom of visible area  |
-| `zz` / `zt` / `zb` | Center / top / bottom selection in viewport |
-| `/`                | Search headings (fuzzy)                     |
-| `Tab`              | Switch focus (sidebar ↔ content)            |
-| `w`                | Toggle sidebar                              |
-| `i`                | Enter interactive mode                      |
-| `f`                | Jump mode (EasyMotion labels)               |
-| `Ctrl+O`           | Navigate back                               |
-| `Ctrl+I`           | Navigate forward                            |
-| `e`                | Open in `$EDITOR`                           |
-| `T`                | Cycle theme                                 |
-| `?`                | Help                                        |
-| `q` / `Ctrl+C`     | Quit                                        |
-| Mouse click        | Select sidebar heading                      |
-| Scroll wheel       | Scroll content                              |
+| Key                 | Action                                      |
+| ------------------- | ------------------------------------------- |
+| `j` / `↓`           | Next heading                                |
+| `k` / `↑`           | Previous heading                            |
+| `gg` / `G`          | Jump to root / last heading                 |
+| `H` / `M` / `L`     | Jump to top / mid / bottom of visible area  |
+| `zz` / `zt` / `zb`  | Center / top / bottom selection in viewport |
+| `Ctrl+D` / `Ctrl+U` | Half page down / up                         |
+| `/`                 | Search headings (fuzzy) or content          |
+| `n` / `N`           | Next / previous search match                |
+| `Tab`               | Switch focus (sidebar ↔ content)            |
+| `w`                 | Toggle sidebar                              |
+| `i`                 | Enter interactive mode                      |
+| `f`                 | Jump mode (EasyMotion labels)               |
+| `Ctrl+O`            | Navigate back                               |
+| `Ctrl+I`            | Navigate forward                            |
+| `e`                 | Open in `$EDITOR`                           |
+| `r`                 | Reload file                                 |
+| `T`                 | Theme picker (selection is saved to config) |
+| `?`                 | Help                                        |
+| `q` / `Ctrl+C`      | Quit                                        |
+| Mouse click         | Select sidebar heading                      |
+| Scroll wheel        | Scroll content                              |
+
+`Ctrl+I` is indistinguishable from `Tab` on terminals without the Kitty keyboard protocol, so there it toggles focus instead of navigating forward. Rebind `nav_forward` if that matters to you.
 
 #### Interactive mode (`i`)
 
 Cycles through selectable nodes in the current section: fenced code blocks, inline code spans, and links. Press `m` to cycle sub-modes.
 
-| Key                | Action                                                    |
-| ------------------ | --------------------------------------------------------- |
-| `j` / `k`          | Next / previous node                                      |
-| `m`                | Cycle sub-mode (ALL → CODE → INLINE → LINKS)              |
-| `H` / `M` / `L`    | Jump to top / mid / bottom visible node                   |
-| `zz` / `zt` / `zb` | Center / top / bottom node in viewport                    |
-| `y`                | Copy node content to clipboard and exit                   |
+| Key                | Action                                                                  |
+| ------------------ | ----------------------------------------------------------------------- |
+| `j` / `k`          | Next / previous node                                                    |
+| `m`                | Cycle sub-mode (ALL → CODE → INLINE → LINKS)                            |
+| `H` / `M` / `L`    | Jump to top / mid / bottom visible node                                 |
+| `zz` / `zt` / `zb` | Center / top / bottom node in viewport                                  |
+| `y`                | Copy node content (exits in CODE and INLINE sub-modes)                  |
 | `Enter`            | Open link (any sub-mode; external: browser; `#anchor`: jump to heading) |
-| `Esc`              | Exit interactive mode                                     |
+| `Esc`              | Exit interactive mode                                                   |
 
 #### Jump mode (`f`)
 
@@ -143,23 +148,25 @@ Shows short labels next to all selectable elements. Type a label to jump directl
 ```bash
 gomd -l file.md                  # list headings
 gomd --tree file.md              # heading tree
-gomd -L 2 file.md                # only h2 headings
-gomd --filter "install" file.md  # filter by text
+gomd -l -L 2 file.md             # only h2 headings
+gomd -l --filter "install" file.md  # filter by text (combines with -L)
+gomd -l -o json file.md          # headings as JSON
 gomd --count file.md             # count by level
 gomd -s "Installation" file.md   # extract section
 ```
 
 ## Configuration
 
-Config file: `~/.config/gomd/config.toml`
+Config file: `~/.config/gomd/config.toml` on Linux, `~/Library/Application Support/gomd/config.toml` on macOS. An invalid file is ignored with a warning.
 
 All settings are optional — only specify what you want to override.
 
 ```toml
 [ui]
-theme = "OceanDark"       # OceanDark | Dracula | Nord | Gruvbox | TokyoNight (or a Ghostty theme name)
-compact_tree = false      # compact sidebar tree
-opener = "xdg-open"       # command to open URLs (macOS: "open")
+theme = "OceanDark"       # OceanDark | Nord | Dracula | Gruvbox | TokyoNight (or a Ghostty theme name)
+compact_tree = false      # compact --tree output
+sidebar_hidden = true     # start with the sidebar hidden
+opener = "xdg-open"       # command to open URLs, may include arguments (macOS default: "open")
 ghostty_theme_directory = ""  # path to Ghostty themes (e.g., "/usr/share/ghostty/themes/")
 
 [ui.theme_override]
@@ -179,29 +186,25 @@ ghostty_theme_directory = ""  # path to Ghostty themes (e.g., "/usr/share/ghostt
 # search = "#fb4934"
 # nodesel = "#8ec07c"
 
-[terminal]
-color_mode = "auto"       # auto | truecolor | 256 | ansi | none
-
 [images]
 enabled = true
 
-[content]
-syntax_highlighting = true
-
 [keys]
 # Shared
-quit = "q"
+quit = "q,esc"
 help = "?"
 theme_picker = "T"
 toggle_focus = "tab"
 toggle_sidebar = "w"
 reload = "r"
 edit = "e"
+nav_back = "ctrl+o"
+nav_forward = "ctrl+i"
 
 # Sidebar navigation
 sidebar_down = "j,down"
 sidebar_up = "k,up"
-sidebar_top = "g"
+sidebar_top = "gg"
 sidebar_bottom = "G"
 sidebar_search = "/"
 next_match = "n"
@@ -210,27 +213,34 @@ prev_match = "N"
 # Content navigation
 scroll_down = "j,down"
 scroll_up = "k,up"
-scroll_half_down = "ctrl+d,ctrl+f,pgdown, "
+scroll_half_down = "ctrl+d,ctrl+f,pgdown,space"
 scroll_half_up = "ctrl+u,ctrl+b,pgup"
-content_top = "g"
+content_top = "gg"
 content_bottom = "G"
 content_search = "/"
 content_next_match = "n"
 content_prev_match = "N"
 jump = "f"
-nav_back = "ctrl+o"
-nav_forward = "ctrl+i"
 
-# Node-select mode
+# Viewport (sidebar and interactive mode)
+view_center = "zz"
+view_top = "zt"
+view_bottom = "zb"
+jump_high = "H"
+jump_mid = "M"
+jump_low = "L"
+
+# Interactive (node-select) mode
 node_select = "i"
 node_next = "j,down,tab"
 node_prev = "k,up,shift+tab"
+node_mode = "m"
 node_copy = "y"
 node_open = "enter"
 node_exit = "esc,q,i"
 ```
 
-Key bindings use comma-separated values for multiple keys mapped to the same action. Key names follow bubbletea conventions (e.g., `ctrl+d`, `shift+tab`, `pgdown`, `esc`).
+Key bindings use comma-separated values for multiple keys mapped to the same action. Key names follow bubbletea conventions (e.g., `ctrl+d`, `shift+tab`, `pgdown`, `space`, `esc`). A two-character entry such as `gg` is a key sequence. `Esc` always cancels search, jump mode and the theme picker.
 
 ## Theme resolution
 
@@ -239,13 +249,14 @@ gomd resolves the active theme in three steps:
 1. **Built-in lookup** — if `theme` matches a built-in name (OceanDark, Nord, Dracula, Gruvbox, TokyoNight), that theme is used.
 2. **Ghostty fallback** — if the name doesn't match a built-in theme and `ghostty_theme_directory` is set, gomd looks for a file with that name in the directory and converts the Ghostty color palette to a gomd theme. The mapping is:
    - `background` / `foreground` → direct
-   - palette 0 → Selected, StatusBar, Code
+   - `selection-background` → Selected (fallback: palette 0)
+   - palette 0 → Code
    - palette 1 → Search (red)
    - palette 2 → Heading2 (green)
    - palette 3 → Heading1 (yellow)
    - palette 4 → Heading3 (blue)
    - palette 6 → NodeSel (cyan)
-   - palette 8 → Border, HeadingN (bright black)
+   - palette 8 → Border, StatusBar, HeadingN (bright black)
    - palette 11 → Highlight (bright yellow)
 3. **Color overrides** — any non-empty field in `[ui.theme_override]` replaces the corresponding color, regardless of whether the base theme is built-in or loaded from Ghostty.
 
@@ -257,13 +268,13 @@ When no file argument is given, `gomd` reads from stdin if piped, otherwise prin
 
 ### Images
 
-gomd can render inline images using the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). This works in terminals that support it: **Ghostty**, **Kitty**, and **WezTerm**.
+In render mode (`-r`), gomd can render inline images using the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). This works in terminals that support it: **Ghostty**, **Kitty**, and **WezTerm**.
 
 Image rendering is controlled by three settings, evaluated in this order:
 
 1. **`--no-images`** flag: always disables images (highest priority).
 2. **`--images`** flag: always enables images, even if the terminal can't be auto-detected (e.g. inside tmux).
-3. **Config file** (`~/.config/gomd/config.toml`): the `[images]` section sets the default.
+3. **Config file**: the `[images]` section sets the default.
 
 ```toml
 [images]

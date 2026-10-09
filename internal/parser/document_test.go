@@ -119,19 +119,6 @@ func TestIgnoreHeadingsInCodeBlock(t *testing.T) {
 	}
 }
 
-func TestHeadingAtLine(t *testing.T) {
-	md := "# First\n\nsome text\n\n## Second\n\nmore text"
-	doc := parser.ParseMarkdown(md)
-
-	h := doc.HeadingAtLine(6)
-	if h == nil {
-		t.Fatal("expected a heading at line 6")
-	}
-	if h.Text != "Second" {
-		t.Errorf("expected 'Second', got %q", h.Text)
-	}
-}
-
 func TestParseFrontmatterStripped(t *testing.T) {
 	md := "---\nparent: \"[[Bash]]\"\n---\n\n## getopts\n\nSome content\n"
 	doc := parser.ParseMarkdown(md)

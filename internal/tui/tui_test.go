@@ -5,9 +5,13 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/grota/gomd/internal/config"
+	"github.com/grota/gomd/internal/parser"
 )
 
 // ─────────────────────────────────────────
@@ -102,7 +106,7 @@ func TestExtractCodeNodes_NoNodes(t *testing.T) {
 func TestHighlightSpanInLine_Basic(t *testing.T) {
 	line := "hello world foo"
 	// Highlight "world" (cols 6-11)
-	theme := GetTheme("OceanDark")
+	theme := themes["OceanDark"]
 	style := lipgloss.NewStyle().Background(theme.NodeSel).Foreground(theme.Background).Bold(true)
 	result := highlightSpanInLine(line, 6, 11, style)
 	plain := ansi.Strip(result)
@@ -123,7 +127,7 @@ func TestHighlightSpanInLine_BulletLine(t *testing.T) {
 	// "• foo bar" — bullet is 3 bytes, 1 display col.
 	// Span "bar" starts at display col 6.
 	line := "• foo bar"
-	theme := GetTheme("OceanDark")
+	theme := themes["OceanDark"]
 	style := lipgloss.NewStyle().Background(theme.NodeSel).Foreground(theme.Background).Bold(true)
 	result := highlightSpanInLine(line, 6, 9, style)
 	plain := ansi.Strip(result)
@@ -134,7 +138,7 @@ func TestHighlightSpanInLine_BulletLine(t *testing.T) {
 
 func TestHighlightSpanInLine_NoOpOnInvalidRange(t *testing.T) {
 	line := "some text"
-	theme := GetTheme("OceanDark")
+	theme := themes["OceanDark"]
 	style := lipgloss.NewStyle().Background(theme.NodeSel).Foreground(theme.Background).Bold(true)
 	// colStart < 0
 	if got := highlightSpanInLine(line, -1, 5, style); got != line {
@@ -326,12 +330,12 @@ func TestMapNodes_InlineNotInsideFencedBlock(t *testing.T) {
 	}
 }
 
-// TestMapNodes_FullREADME verifies that all inline code spans in the project README
-// are correctly mapped to their rendered positions.
+// TestMapNodes_FullREADME verifies that all inline code spans in a real-world
+// document (a frozen copy of the project README) map to their rendered positions.
 func TestMapNodes_FullREADME(t *testing.T) {
-	content, err := os.ReadFile("../../README.md")
+	content, err := os.ReadFile("testdata/readme.md")
 	if err != nil {
-		t.Skip("README.md not found")
+		t.Fatal(err)
 	}
 	src := string(content)
 	lines := strings.Split(src, "\n")
@@ -342,7 +346,7 @@ func TestMapNodes_FullREADME(t *testing.T) {
 
 	var failures int
 	for i, n := range nodes {
-		if !n.inline || n.lang == "heading" {
+		if !n.inline {
 			continue
 		}
 		// Single-char inline codes in headings can't be reliably mapped (known limitation)
@@ -382,5 +386,78 @@ func TestMapNodes_FullREADME(t *testing.T) {
 	}
 	if failures > 0 {
 		t.Logf("%d failures out of %d nodes", failures, len(nodes))
+	}
+}
+
+func TestViewTinyTerminalDoesNotPanic(t *testing.T) {
+	doc := parser.ParseMarkdown("# A\n\ntext\n\n## B\n\n```go\nx\n```\n")
+	for _, hidden := range []bool{true, false} {
+		for w := 1; w <= 12; w++ {
+			for h := 1; h <= 8; h++ {
+				cfg := config.Default()
+				cfg.UI.SidebarHidden = hidden
+				a := NewApp(doc, "f.md", "", cfg)
+				a.Update(tea.WindowSizeMsg{Width: w, Height: h})
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							t.Errorf("sidebarHidden=%v %dx%d: panic: %v", hidden, w, h, r)
+						}
+					}()
+					a.View()
+				}()
+			}
+		}
+	}
+}
+
+func TestReloadDroppingAllHeadings(t *testing.T) {
+	a := NewApp(parser.ParseMarkdown("# A\n\n## B\n\ntext\n"), "f.md", "", config.Default())
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	a.navigateTo(1)
+	a.reload(parser.ParseMarkdown("no headings any more\n"), "Reloaded")
+	if a.selectedIdx != -1 || a.navHistory != nil {
+		t.Fatalf("stale state after reload: selectedIdx=%d navHistory=%v", a.selectedIdx, a.navHistory)
+	}
+	a.View()
+	a.navGoBack()
+	a.View()
+}
+
+func TestSidebarJumpsUseDisplayRows(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < 40; i++ {
+		sb.WriteString("# H" + string(rune('a'+i%26)) + "\n\n")
+	}
+	cfg := config.Default()
+	cfg.UI.SidebarHidden = false
+	a := NewApp(parser.ParseMarkdown(sb.String()), "f.md", "", cfg)
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 16})
+	h := a.outlineHeight()
+
+	a.outlineOffset = 0
+	a.sidebarJumpHigh()
+	if a.selectedIdx != -1 {
+		t.Errorf("H at top: want root (-1), got %d", a.selectedIdx)
+	}
+	a.sidebarJumpLow()
+	if a.selectedIdx != h-2 {
+		t.Errorf("L: want last visible heading %d, got %d", h-2, a.selectedIdx)
+	}
+	a.selectedIdx = len(a.doc.Headings) - 1
+	a.sidebarViewBottom()
+	if last := a.displayIdx(); last < a.outlineOffset || last >= a.outlineOffset+h {
+		t.Errorf("zb: last heading row %d not in window [%d,%d)", last, a.outlineOffset, a.outlineOffset+h)
+	}
+}
+
+func TestApplyJumpLabelsAfterWideChar(t *testing.T) {
+	a := NewApp(parser.ParseMarkdown("x\n"), "f.md", "", config.Default())
+	a.codeNodes = []codeNode{{inline: true}}
+	a.nodeRenderInfo = []nodeRenderLoc{{firstLine: 0, lastLine: 0, spanCol: 6, spanColEnd: 7}}
+	a.jumpLabels = map[string]int{"q": 0}
+	got := ansi.Strip(a.applyJumpLabels([]string{"🔗 ab x cd"}, 40)[0])
+	if want := "🔗 ab qx cd"; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

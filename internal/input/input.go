@@ -14,18 +14,9 @@ const (
 	maxLineBytes  = 1 * 1024 * 1024  // 1 MB per line
 )
 
-// Source describes an input source.
-type Source int
-
-const (
-	SourceFile Source = iota
-	SourceStdin
-)
-
 // Input holds the resolved markdown content.
 type Input struct {
 	Content  string
-	Source   Source
 	FilePath string // empty for stdin
 }
 
@@ -40,7 +31,6 @@ func ReadFile(path string) (*Input, error) {
 	}
 	return &Input{
 		Content:  string(data),
-		Source:   SourceFile,
 		FilePath: path,
 	}, nil
 }
@@ -69,16 +59,7 @@ func ReadStdin() (*Input, error) {
 		}
 	}
 
-	content := sb.String()
-	// If it doesn't look like markdown, wrap it
-	if !looksLikeMarkdown(content) {
-		content = "# Input\n\n" + content
-	}
-
-	return &Input{
-		Content: content,
-		Source:  SourceStdin,
-	}, nil
+	return &Input{Content: sb.String()}, nil
 }
 
 // IsStdinPiped returns true if stdin is being piped (not a terminal).
@@ -88,17 +69,4 @@ func IsStdinPiped() bool {
 		return false
 	}
 	return (fi.Mode() & os.ModeCharDevice) == 0
-}
-
-// looksLikeMarkdown returns true if the content appears to be markdown.
-func looksLikeMarkdown(content string) bool {
-	lines := strings.SplitN(content, "\n", 20)
-	for _, line := range lines {
-		if strings.HasPrefix(line, "#") || strings.HasPrefix(line, "```") ||
-			strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") ||
-			strings.Contains(line, "**") || strings.Contains(line, "](") {
-			return true
-		}
-	}
-	return false
 }

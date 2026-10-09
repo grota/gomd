@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -36,7 +35,7 @@ var (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "gomd [OPTIONS] [FILE...]",
+		Use:   "gomd [OPTIONS] [FILE|DIR|-]",
 		Short: "A markdown navigator with tree-based structural navigation",
 		Long: `gomd - A modern markdown viewer combining tree-based navigation with interactive TUI.
 
@@ -49,12 +48,10 @@ Examples:
   gomd -l README.md           # List all headings
   gomd --tree README.md       # Show heading tree
   gomd -s Installation doc.md # Extract section
-  gomd -s Installation doc.md # Extract section
-  gomd -r README.md            # Render to stdout (pipeable)`,
-		RunE:               runRoot,
-		Args:               cobra.ArbitraryArgs,
-		DisableFlagParsing: false,
-		TraverseChildren:   true,
+  gomd -r README.md           # Render to stdout (pipeable)`,
+		RunE:         runRoot,
+		Args:         cobra.MaximumNArgs(1),
+		SilenceUsage: true,
 	}
 
 	// Flags
@@ -62,7 +59,7 @@ Examples:
 	rootCmd.Flags().BoolVar(&flagTree, "tree", false, "Show heading tree with box-drawing characters")
 	rootCmd.Flags().StringVar(&flagFilter, "filter", "", "Filter headings by text pattern (case-insensitive)")
 	rootCmd.Flags().IntVarP(&flagLevel, "level", "L", 0, "Show only headings at specific level (1-6)")
-	rootCmd.Flags().StringVarP(&flagOutput, "output", "o", "plain", "Output format: plain, json, tree")
+	rootCmd.Flags().StringVarP(&flagOutput, "output", "o", "plain", "Output format for --list: plain, json")
 	rootCmd.Flags().StringVarP(&flagSection, "section", "s", "", "Extract specific section by heading name")
 	rootCmd.Flags().BoolVar(&flagCount, "count", false, "Count headings by level")
 	rootCmd.Flags().BoolVarP(&flagRender, "render", "r", false, "Render markdown to stdout (non-interactive)")
@@ -77,30 +74,18 @@ Examples:
 }
 
 func runRoot(cmd *cobra.Command, args []string) error {
-	// Load input
+	if len(args) == 0 && !input.IsStdinPiped() {
+		return cmd.Help()
+	}
 	inp, filePath, err := loadInput(args)
 	if err != nil {
-		if len(args) == 0 && !input.IsStdinPiped() {
-			return cmd.Help()
-		}
-		fmt.Fprintln(os.Stderr, "Error:", err)
-		os.Exit(1)
+		return err
 	}
 
-	doc := parser.ParseMarkdown(inp.Content)
-
-	// CLI mode if any non-TUI flags are set
-	if flagList || flagTree || flagCount || flagSection != "" {
-		handleCLIMode(doc)
-		return nil
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Warning: ignoring config:", err)
 	}
-
-	if flagRender {
-		return renderToStdout(doc, filePath)
-	}
-
-	// TUI mode
-	cfg := config.Load()
 	if flagTheme != "" {
 		cfg.UI.Theme = flagTheme
 	}
@@ -111,100 +96,91 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		cfg.Images.Enabled = false
 	}
 
+	doc := parser.ParseMarkdown(inp.Content)
+
+	// CLI mode if any non-TUI flags are set
+	if flagList || flagTree || flagCount || flagSection != "" {
+		return handleCLIMode(doc, cfg)
+	}
+
+	if flagRender {
+		return renderToStdout(doc, filePath, cfg)
+	}
+
 	filename := inp.FilePath
 	if filename == "" {
 		filename = "stdin"
 	}
-
 	return tui.Run(doc, filename, filePath, cfg)
 }
 
 func loadInput(args []string) (*input.Input, string, error) {
-	switch len(args) {
-	case 0:
-		if input.IsStdinPiped() {
-			inp, err := input.ReadStdin()
-			return inp, "", err
-		}
-		// No args, no stdin: print help and exit
-		return nil, "", fmt.Errorf("no file specified")
-	case 1:
-		path := args[0]
-		if path == "-" {
-			inp, err := input.ReadStdin()
-			return inp, "", err
-		}
-		info, err := os.Stat(path)
-		if err != nil {
-			return nil, "", fmt.Errorf("cannot open %q: %w", path, err)
-		}
-		if info.IsDir() {
-			// Find markdown files in directory
-			entries, _ := os.ReadDir(path)
-			for _, e := range entries {
-				name := e.Name()
-				if strings.HasSuffix(name, ".md") || strings.HasSuffix(name, ".markdown") {
-					fullPath := path + "/" + name
-					inp, err := input.ReadFile(fullPath)
-					return inp, fullPath, err
-				}
-			}
-			return nil, "", fmt.Errorf("no markdown files in %q", path)
-		}
-		inp, err := input.ReadFile(path)
-		return inp, path, err
-	default:
-		// Multiple files: open first
-		inp, err := input.ReadFile(args[0])
-		return inp, args[0], err
+	if len(args) == 0 || args[0] == "-" {
+		inp, err := input.ReadStdin()
+		return inp, "", err
 	}
+	path := args[0]
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, "", fmt.Errorf("cannot open %q: %w", path, err)
+	}
+	if info.IsDir() {
+		// Find markdown files in directory
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			return nil, "", err
+		}
+		for _, e := range entries {
+			name := e.Name()
+			if strings.HasSuffix(name, ".md") || strings.HasSuffix(name, ".markdown") {
+				fullPath := filepath.Join(path, name)
+				inp, err := input.ReadFile(fullPath)
+				return inp, fullPath, err
+			}
+		}
+		return nil, "", fmt.Errorf("no markdown files in %q", path)
+	}
+	inp, err := input.ReadFile(path)
+	return inp, path, err
 }
 
-func handleCLIMode(doc *parser.Document) {
-	// Apply filters
-	var headings []parser.Heading
-	switch {
-	case flagLevel > 0:
-		headings = doc.HeadingsAtLevel(flagLevel)
-	case flagFilter != "":
-		headings = doc.FilterHeadings(flagFilter)
-	default:
-		headings = doc.Headings
-	}
-
+func handleCLIMode(doc *parser.Document, cfg config.Config) error {
 	switch {
 	case flagCount:
 		printHeadingCounts(doc)
 	case flagTree:
-		printTree(doc)
+		tree := doc.BuildTree()
+		for i, node := range tree {
+			fmt.Print(node.RenderBoxTree("", i == len(tree)-1, cfg.UI.CompactTree))
+		}
 	case flagSection != "":
-		extractSection(doc, flagSection)
+		section, ok := doc.ExtractSection(flagSection)
+		if !ok {
+			return fmt.Errorf("section %q not found", flagSection)
+		}
+		fmt.Println(section)
 	case flagList:
-		printHeadings(headings)
+		return printHeadings(doc.FilterHeadings(flagLevel, flagFilter))
 	}
+	return nil
 }
 
-func printHeadings(headings []parser.Heading) {
+func printHeadings(filtered []parser.Heading) error {
 	switch strings.ToLower(flagOutput) {
 	case "json":
-		b, _ := json.MarshalIndent(headings, "", "  ")
+		b, err := json.MarshalIndent(filtered, "", "  ")
+		if err != nil {
+			return err
+		}
 		fmt.Println(string(b))
-	default:
-		for _, h := range headings {
+	case "plain":
+		for _, h := range filtered {
 			fmt.Printf("%s %s\n", strings.Repeat("#", h.Level), h.Text)
 		}
+	default:
+		return fmt.Errorf("unknown output format %q (want plain or json)", flagOutput)
 	}
-}
-
-func printTree(doc *parser.Document) {
-	tree := doc.BuildTree()
-	cfg := config.Load()
-	compact := cfg.IsCompactTree()
-
-	for i, node := range tree {
-		isLast := i == len(tree)-1
-		fmt.Print(node.RenderBoxTree("", isLast, compact))
-	}
+	return nil
 }
 
 func printHeadingCounts(doc *parser.Document) {
@@ -225,16 +201,7 @@ func printHeadingCounts(doc *parser.Document) {
 	fmt.Printf("\nTotal: %d\n", len(doc.Headings))
 }
 
-func extractSection(doc *parser.Document, name string) {
-	section, ok := doc.ExtractSection(name)
-	if !ok {
-		fmt.Fprintf(os.Stderr, "Section %q not found\n", name)
-		os.Exit(1)
-	}
-	fmt.Println(section)
-}
-
-func renderToStdout(doc *parser.Document, mdPath string) error {
+func renderToStdout(doc *parser.Document, mdPath string, cfg config.Config) error {
 	// Use terminal width if stdout is a terminal, otherwise no wrapping.
 	width := 80
 	if fd := int(os.Stdout.Fd()); term.IsTerminal(fd) {
@@ -243,11 +210,6 @@ func renderToStdout(doc *parser.Document, mdPath string) error {
 		}
 	}
 
-	// Load config and resolve theme to build a matching glamour style.
-	cfg := config.Load()
-	if flagTheme != "" {
-		cfg.UI.Theme = flagTheme
-	}
 	theme := tui.ResolveTheme(cfg)
 
 	style := tui.StyleConfigFromTheme(theme)
@@ -285,117 +247,10 @@ func renderToStdout(doc *parser.Document, mdPath string) error {
 	// Image rendering via Kitty graphics protocol.
 	// Outside tmux, auto-detect Kitty-capable terminals.
 	// Inside tmux, require --images (passthrough works but images are "sticky").
-	if imagesEnabled(cfg) && (flagImages || tui.IsKittySupported()) {
-		out = replaceImagePlaceholders(out, content, mdPath)
+	if cfg.Images.Enabled && (flagImages || tui.IsKittySupported()) {
+		out = tui.ReplaceImagePlaceholders(out, content, mdPath, max(width-4, 1))
 	}
 
 	fmt.Print(out)
 	return nil
-}
-
-// imagesEnabled determines if image rendering is active based on flags and config.
-func imagesEnabled(cfg config.Config) bool {
-	if flagNoImages {
-		return false
-	}
-	if flagImages {
-		return true
-	}
-	return cfg.Images.Enabled
-}
-
-// ansiStripRe matches ANSI escape sequences (CSI, OSC, etc.) for stripping.
-var ansiStripRe = regexp.MustCompile(`\x1b(?:\[[0-9;]*[a-zA-Z]|\].*?\x07|_.*?\x1b\\)`)
-
-// replaceImagePlaceholders finds image placeholders in glamour output and replaces
-// them with Kitty graphics escape sequences where possible.
-func replaceImagePlaceholders(rendered, mdContent, mdPath string) string {
-	images := parser.ExtractImages(mdContent)
-	if len(images) == 0 {
-		return rendered
-	}
-
-	// Get terminal width for sizing
-	maxCols := 60
-	if fd := int(os.Stdout.Fd()); term.IsTerminal(fd) {
-		if w, _, err := term.GetSize(fd); err == nil && w > 0 {
-			maxCols = w - 4 // leave some margin
-		}
-	}
-
-	// Resolve mdPath to absolute for consistent path resolution
-	absMdPath := mdPath
-	if mdPath != "" && !filepath.IsAbs(mdPath) {
-		if abs, err := filepath.Abs(mdPath); err == nil {
-			absMdPath = abs
-		}
-	}
-
-	// Build a map from image src → kitty sequence
-	kittyMap := map[string]string{}
-	for _, img := range images {
-		resolved := tui.ResolveImagePath(img.Src, absMdPath)
-		if resolved == "" {
-			continue
-		}
-		if _, done := kittyMap[img.Src]; done {
-			continue
-		}
-		kittySeq, err := tui.RenderKittyImage(resolved, maxCols)
-		if err != nil {
-			continue
-		}
-		kittyMap[img.Src] = kittySeq
-	}
-	if len(kittyMap) == 0 {
-		return rendered
-	}
-
-	// Process line by line.  Glamour renders images as:
-	//   <ANSI>Image: <OSC8 hyperlink>alt text<OSC8 close> →<ANSI>...
-	// We strip ANSI to find lines starting with "Image: ", then match
-	// the image src from the OSC8 URL in the raw line.
-	lines := strings.Split(rendered, "\n")
-	var result []string
-	for _, line := range lines {
-		stripped := ansiStripRe.ReplaceAllString(line, "")
-		stripped = strings.TrimSpace(stripped)
-
-		// Match lines that are image placeholders.
-		// Glamour renders images with an OSC8 hyperlink whose URL is the original
-		// image src. We detect image lines by:
-		//   1. The raw line contains the src (inside the OSC8 URL).
-		//   2. The visible text matches what glamour produces for images:
-		//      - With alt text: "alt 🖼️ /path" or "Image: alt →"
-		//      - Without alt text: just the path (with "./" and "../" stripped).
-		replaced := false
-		for src, kittySeq := range kittyMap {
-			if !strings.Contains(line, src) {
-				continue
-			}
-			// Compute what glamour shows as visible text for this src.
-			// Glamour strips leading "./" and all leading "../" segments.
-			glamourPath := src
-			glamourPath = strings.TrimPrefix(glamourPath, "./")
-			for strings.HasPrefix(glamourPath, "../") {
-				glamourPath = strings.TrimPrefix(glamourPath, "../")
-			}
-			cleanStripped := strings.TrimPrefix(stripped, "/")
-			isImageLine := strings.HasPrefix(stripped, "Image: ") ||
-				stripped == src ||
-				stripped == "/"+glamourPath ||
-				cleanStripped == glamourPath ||
-				strings.Contains(stripped, "🖼️")
-			if isImageLine {
-				result = append(result, kittySeq)
-				replaced = true
-				break
-			}
-		}
-		if !replaced {
-			result = append(result, line)
-		}
-	}
-
-	return strings.Join(result, "\n")
 }

@@ -35,11 +35,6 @@ type Document struct {
 	Headings []Heading
 }
 
-// NewDocument creates a new document from content and headings.
-func NewDocument(content string, headings []Heading) *Document {
-	return &Document{Content: content, Headings: headings}
-}
-
 // BuildTree builds a hierarchical tree from the flat heading list.
 func (d *Document) BuildTree() []*HeadingNode {
 	type stackEntry struct {
@@ -71,34 +66,13 @@ func (d *Document) BuildTree() []*HeadingNode {
 	return roots
 }
 
-// HeadingsAtLevel returns all headings at a specific level.
-func (d *Document) HeadingsAtLevel(level int) []Heading {
-	var result []Heading
-	for _, h := range d.Headings {
-		if h.Level == level {
-			result = append(result, h)
-		}
-	}
-	return result
-}
-
-// FindHeading finds a heading by text (case-insensitive).
-func (d *Document) FindHeading(text string) *Heading {
-	search := strings.ToLower(text)
-	for i, h := range d.Headings {
-		if strings.ToLower(h.Text) == search {
-			return &d.Headings[i]
-		}
-	}
-	return nil
-}
-
-// FilterHeadings returns all headings matching a filter (case-insensitive substring).
-func (d *Document) FilterHeadings(filter string) []Heading {
+// FilterHeadings returns the headings at the given level (0 = any) whose text
+// contains filter (case-insensitive).
+func (d *Document) FilterHeadings(level int, filter string) []Heading {
 	search := strings.ToLower(filter)
 	var result []Heading
 	for _, h := range d.Headings {
-		if strings.Contains(strings.ToLower(h.Text), search) {
+		if (level == 0 || h.Level == level) && strings.Contains(strings.ToLower(h.Text), search) {
 			result = append(result, h)
 		}
 	}
@@ -140,19 +114,6 @@ func (d *Document) ExtractSection(headingText string) (string, bool) {
 
 	section := strings.TrimSpace(d.Content[contentStart:end])
 	return section, true
-}
-
-// HeadingAtLine returns the heading at or before the given line number.
-func (d *Document) HeadingAtLine(line int) *Heading {
-	var result *Heading
-	for i, h := range d.Headings {
-		if h.Line <= line {
-			result = &d.Headings[i]
-		} else {
-			break
-		}
-	}
-	return result
 }
 
 // RenderBoxTree renders a HeadingNode as a tree with box-drawing characters.
@@ -324,5 +285,5 @@ func stripFrontmatter(content string) string {
 func ParseMarkdown(content string) *Document {
 	stripped := stripFrontmatter(content)
 	headings := parseMarkdownHeadings(stripped)
-	return NewDocument(stripped, headings)
+	return &Document{Content: stripped, Headings: headings}
 }

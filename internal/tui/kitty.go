@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/grota/gomd/internal/parser"
@@ -168,75 +169,100 @@ func RenderKittyImage(path string, maxCols int) (string, error) {
 // ansiStripRe matches ANSI escape sequences for stripping when identifying image lines.
 var ansiStripRe = regexp.MustCompile(`\x1b(?:\[[0-9;]*[a-zA-Z]|\].*?\x07|_.*?\x1b\\)`)
 
-// replaceImagePlaceholders finds glamour image placeholders in rendered output
-// and replaces them with Kitty graphics escape sequences.
-// Used in render mode (-r) only; TUI mode does not support inline images.
-func (a *App) replaceImagePlaceholders(rendered, mdContent string, maxCols int) string {
+// ReplaceImagePlaceholders swaps glamour image placeholders ("alt 🖼️ /path")
+// in rendered output for Kitty graphics sequences. A line holding only the
+// placeholder is replaced; a line with other text keeps it and gets the image
+// on the next line. Used by render mode (-r); the TUI does not draw images.
+func ReplaceImagePlaceholders(rendered, mdContent, mdPath string, maxCols int) string {
 	images := parser.ExtractImages(mdContent)
 	if len(images) == 0 {
 		return rendered
 	}
 
-	absMdPath := a.filepath
-	if !filepath.IsAbs(absMdPath) {
-		if abs, err := filepath.Abs(absMdPath); err == nil {
+	absMdPath := mdPath
+	if mdPath != "" && !filepath.IsAbs(mdPath) {
+		if abs, err := filepath.Abs(mdPath); err == nil {
 			absMdPath = abs
 		}
 	}
 
-	// Build map from image src → kitty sequence
-	kittyMap := map[string]string{}
+	// Key by the path glamour displays, so "./a.png" and "a.png" share an entry.
+	type entry struct {
+		seq  string
+		alts []string
+	}
+	entries := map[string]*entry{}
+	var order []string
 	for _, img := range images {
+		gp := displayedImagePath(img.Src)
+		if e, ok := entries[gp]; ok {
+			e.alts = append(e.alts, img.Alt)
+			continue
+		}
 		resolved := ResolveImagePath(img.Src, absMdPath)
 		if resolved == "" {
 			continue
 		}
-		if _, done := kittyMap[img.Src]; done {
-			continue
-		}
-		kittySeq, err := RenderKittyImage(resolved, maxCols-4)
+		seq, err := RenderKittyImage(resolved, maxCols)
 		if err != nil {
 			continue
 		}
-		kittyMap[img.Src] = kittySeq
+		entries[gp] = &entry{seq: seq, alts: []string{img.Alt}}
+		order = append(order, gp)
 	}
-	if len(kittyMap) == 0 {
+	if len(entries) == 0 {
 		return rendered
 	}
 
-	lines := strings.Split(rendered, "\n")
 	var result []string
-	for _, line := range lines {
-		stripped := ansiStripRe.ReplaceAllString(line, "")
-		stripped = strings.TrimSpace(stripped)
-
-		replaced := false
-		for src, kittySeq := range kittyMap {
-			if !strings.Contains(line, src) {
-				continue
+	for _, line := range strings.Split(rendered, "\n") {
+		stripped := strings.TrimSpace(ansiStripRe.ReplaceAllString(line, ""))
+		// A line holding only one image's caption is replaced by the image.
+		standalone := ""
+		for gp, e := range entries {
+			if stripped == gp || stripped == "/"+gp {
+				standalone = e.seq
 			}
-			// Compute what glamour shows as visible text for this src.
-			glamourPath := src
-			glamourPath = strings.TrimPrefix(glamourPath, "./")
-			for strings.HasPrefix(glamourPath, "../") {
-				glamourPath = strings.TrimPrefix(glamourPath, "../")
-			}
-			cleanStripped := strings.TrimPrefix(stripped, "/")
-			isImageLine := strings.HasPrefix(stripped, "Image: ") ||
-				stripped == src ||
-				stripped == "/"+glamourPath ||
-				cleanStripped == glamourPath ||
-				strings.Contains(stripped, "🖼️")
-			if isImageLine {
-				result = append(result, kittySeq)
-				replaced = true
-				break
+			for _, alt := range e.alts {
+				if stripped == strings.TrimSpace(alt+" 🖼️ /"+gp) {
+					standalone = e.seq
+				}
 			}
 		}
-		if !replaced {
-			result = append(result, line)
+		if standalone != "" {
+			result = append(result, standalone)
+			continue
+		}
+		result = append(result, line)
+		if !strings.Contains(stripped, "🖼️") {
+			continue
+		}
+		// Inline images: keep the text, put each image on the following lines
+		// in the order they appear.
+		type hit struct {
+			at  int
+			seq string
+		}
+		var hits []hit
+		for _, gp := range order {
+			if at := strings.Index(stripped, "🖼️ /"+gp); at >= 0 {
+				hits = append(hits, hit{at, entries[gp].seq})
+			}
+		}
+		sort.Slice(hits, func(i, j int) bool { return hits[i].at < hits[j].at })
+		for _, h := range hits {
+			result = append(result, h.seq)
 		}
 	}
-
 	return strings.Join(result, "\n")
+}
+
+// displayedImagePath is the path glamour shows for an image src: leading "./"
+// and "../" segments stripped, URL escapes kept as written.
+func displayedImagePath(src string) string {
+	gp := strings.TrimPrefix(src, "./")
+	for strings.HasPrefix(gp, "../") {
+		gp = strings.TrimPrefix(gp, "../")
+	}
+	return gp
 }

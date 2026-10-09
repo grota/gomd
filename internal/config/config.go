@@ -2,8 +2,10 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -11,18 +13,16 @@ import (
 
 // Config holds all application configuration.
 type Config struct {
-	UI       UIConfig       `toml:"ui"`
-	Terminal TerminalConfig `toml:"terminal"`
-	Images   ImageConfig    `toml:"images"`
-	Content  ContentConfig  `toml:"content"`
-	Keys     KeysConfig     `toml:"keys"`
+	UI     UIConfig    `toml:"ui"`
+	Images ImageConfig `toml:"images"`
+	Keys   KeysConfig  `toml:"keys"`
 }
 
 // UIConfig holds UI-related settings.
 type UIConfig struct {
 	Theme           string              `toml:"theme"`
 	CompactTree     bool                `toml:"compact_tree"`
-	Opener          string              `toml:"opener"` // command to open URLs (default: xdg-open on Linux, open on macOS)
+	Opener          string              `toml:"opener"` // command to open URLs, may include arguments (default: xdg-open on Linux, open on macOS)
 	GhosttyThemeDir string              `toml:"ghostty_theme_directory"`
 	SidebarHidden   bool                `toml:"sidebar_hidden"`
 	ThemeOverride   ThemeOverrideConfig `toml:"theme_override"`
@@ -46,19 +46,9 @@ type ThemeOverrideConfig struct {
 	NodeSel    string `toml:"nodesel"`
 }
 
-// TerminalConfig holds terminal-related settings.
-type TerminalConfig struct {
-	ColorMode string `toml:"color_mode"`
-}
-
 // ImageConfig holds image rendering settings.
 type ImageConfig struct {
 	Enabled bool `toml:"enabled"`
-}
-
-// ContentConfig holds content display settings.
-type ContentConfig struct {
-	SyntaxHighlighting bool `toml:"syntax_highlighting"`
 }
 
 // KeysConfig holds user-customizable key bindings.
@@ -116,6 +106,7 @@ type KeysConfig struct {
 	NodeCopy string `toml:"node_copy"`
 	NodeOpen string `toml:"node_open"`
 	NodeExit string `toml:"node_exit"`
+	NodeMode string `toml:"node_mode"` // cycle sub-mode (all/code/inline/links)
 }
 
 // DefaultKeys returns the default key bindings.
@@ -159,6 +150,7 @@ func DefaultKeys() KeysConfig {
 		NodeCopy:         "y",
 		NodeOpen:         "enter",
 		NodeExit:         "esc,q,i",
+		NodeMode:         "m",
 	}
 }
 
@@ -173,6 +165,30 @@ func KeyMatches(key string, binding string) bool {
 		}
 	}
 	return false
+}
+
+// IsSequencePrefix reports whether key starts a two-key sequence such as "gg"
+// in any of the bindings, so the caller should wait for the next key.
+// shortcut: a sequence is any 2-character entry except f1-f9; extend this if
+// longer sequences are ever needed.
+func IsSequencePrefix(key string, bindings ...string) bool {
+	for _, b := range bindings {
+		for _, e := range splitKeys(b) {
+			isFn := e[0] == 'f' && len(e) == 2 && e[1] >= '0' && e[1] <= '9'
+			if len(e) == 2 && !isFn && e[:1] == key {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// FirstKey returns the first key of a binding, for short on-screen hints.
+func FirstKey(binding string) string {
+	if keys := splitKeys(binding); len(keys) > 0 {
+		return keys[0]
+	}
+	return ""
 }
 
 func splitKeys(s string) []string {
@@ -194,62 +210,97 @@ func Default() Config {
 			CompactTree:   false,
 			SidebarHidden: true,
 		},
-		Terminal: TerminalConfig{
-			ColorMode: "auto",
-		},
 		Images: ImageConfig{
 			Enabled: true,
-		},
-		Content: ContentConfig{
-			SyntaxHighlighting: true,
 		},
 		Keys: DefaultKeys(),
 	}
 }
 
-// Load reads the configuration file, returning defaults if not found.
-func Load() Config {
+// Load reads the configuration file, returning defaults if it is missing.
+// A malformed file yields defaults plus an error describing the problem.
+func Load() (Config, error) {
 	cfg := Default()
-
 	path := configPath()
 	if path == "" {
-		return cfg
+		return cfg, nil
 	}
-
 	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return cfg, nil
+	}
 	if err != nil {
-		return cfg
+		return cfg, err
 	}
-
 	if err := toml.Unmarshal(data, &cfg); err != nil {
-		return cfg
+		return Default(), fmt.Errorf("%s: %w", path, err)
 	}
-
-	return cfg
+	return cfg, nil
 }
 
-// Save writes the configuration to disk.
-func (c *Config) Save() error {
+// SaveTheme persists ui.theme into the config file, editing only that line so
+// the user's comments, ordering and other keys survive.
+func SaveTheme(name string) error {
 	path := configPath()
 	if path == "" {
 		return nil
 	}
-
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	var probe map[string]any
+	if err := toml.Unmarshal(data, &probe); err != nil {
+		return fmt.Errorf("config %s is invalid, not saving: %w", path, err)
+	}
+	out := setUITheme(string(data), name)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
-
-	data, err := toml.Marshal(c)
-	if err != nil {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(out), 0644); err != nil {
 		return err
 	}
-
-	return os.WriteFile(path, data, 0644)
+	return os.Rename(tmp, path)
 }
 
-// IsCompactTree returns whether the compact tree style is enabled.
-func (c *Config) IsCompactTree() bool {
-	return c.UI.CompactTree
+var tomlTableRe = regexp.MustCompile(`^\s*\[`)
+var uiThemeRe = regexp.MustCompile(`^(\s*theme\s*=\s*).*$`)
+
+// setUITheme sets `theme` inside the [ui] table of TOML text.
+// shortcut: line-based, ignores dotted keys like `ui.theme = ...`; switch to a
+// comment-preserving TOML editor if the config grows more complex.
+func setUITheme(content, name string) string {
+	line := fmt.Sprintf("theme = %q", name)
+	lines := strings.Split(content, "\n")
+	uiAt := -1
+	for i, l := range lines {
+		t := strings.TrimSpace(l)
+		if tomlTableRe.MatchString(l) {
+			if uiAt >= 0 {
+				break
+			}
+			if t == "[ui]" {
+				uiAt = i
+			}
+			continue
+		}
+		if uiAt >= 0 && uiThemeRe.MatchString(l) {
+			lines[i] = uiThemeRe.ReplaceAllString(l, "${1}") + fmt.Sprintf("%q", name)
+			return strings.Join(lines, "\n")
+		}
+	}
+	if uiAt >= 0 {
+		lines = append(lines[:uiAt+1], append([]string{line}, lines[uiAt+1:]...)...)
+		return strings.Join(lines, "\n")
+	}
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	if content != "" {
+		content += "\n"
+	}
+	return content + "[ui]\n" + line + "\n"
 }
 
 func configPath() string {

@@ -2,13 +2,13 @@
 
 ## Project Overview
 
-`gomd` is a CLI + interactive TUI markdown viewer. It opens `.md` files in a dual-pane bubbletea interface with vim-style navigation. Also supports non-interactive modes for listing headings, querying markdown structure via a custom `tql` language, and finding the heading at a given line number.
+`gomd` is a CLI + interactive TUI markdown viewer. It opens `.md` files in a dual-pane bubbletea interface with vim-style navigation. Also supports non-interactive modes: rendering to stdout and listing, filtering, counting or extracting headings and sections.
 
 **Tech stack:** Go, Cobra (CLI), Bubbletea (TUI), Glamour v2 (rendering), Chroma (highlighting), Kitty graphics protocol (images), TOML config.
 
 ## Setup
 
-No task runner. Standard Go toolchain only.
+Standard Go toolchain. A `justfile` wraps the common commands (`just check` runs vet, format check and tests).
 
 ```bash
 go build ./cmd/gomd    # produces ./gomd (gitignored)
@@ -27,7 +27,7 @@ The Go version in `go.mod` is `1.26.2` — use the matching toolchain to avoid t
 | Vet             | `go vet ./...`                             |
 | Format          | `gofmt -w .`                               |
 
-Only `internal/parser` and `internal/tui` have tests.
+`internal/config`, `internal/parser` and `internal/tui` have tests.
 
 ## Architecture Notes
 
@@ -36,11 +36,12 @@ Only `internal/parser` and `internal/tui` have tests.
   1. TUI (default, no flags): `gomd file.md`
   2. Render (`-r`/`--render`): non-interactive stdout rendering with `--disable-background` and `--images` options
   3. CLI (`--list`, `--tree`, `--count`, `--section`): non-interactive structured output
-- Subcommand: none (at-line was removed).
+- Subcommands: none. At most one positional argument (file, directory, or `-`).
 - Input resolution: explicit arg → stdin → help and exit.
-- Config file: `~/.config/gomd/config.toml` (TOML, sections: `[ui]`, `[terminal]`, `[images]`, `[content]`, `[keys]`).
-- Config structure is defined in `internal/config/config.go` (struct fields + defaults in `DefaultConfig()`).
-- When adding, changing, or removing a config field or keybinding: update the struct, its default, and the help overlay in the TUI.
+- Config file: `os.UserConfigDir()/gomd/config.toml` (`~/.config` on Linux, `~/Library/Application Support` on macOS). TOML sections: `[ui]`, `[ui.theme_override]`, `[images]`, `[keys]`. Loaded once in `main.go`; an invalid file is ignored with a warning.
+- The theme picker persists only `ui.theme` via `config.SaveTheme`, editing that single line so user comments and keys survive. Never marshal the whole `Config` back to disk.
+- Config structure is defined in `internal/config/config.go` (struct fields + defaults in `Default()` / `DefaultKeys()`).
+- When adding, changing, or removing a config field or keybinding: update the struct, its default, the help overlay (`overlayHelp` in `internal/tui/view.go`) and the README config example. Match keys with `config.KeyMatches`; two-key sequences (`gg`, `zz`) go through `config.IsSequencePrefix`. Do not hardcode key strings except `esc` as a universal cancel.
 
 ## Package Boundaries
 
@@ -49,8 +50,13 @@ cmd/gomd/main.go         # Cobra entrypoint, all flag handling, renderToStdout()
 internal/config/         # TOML config loader
 internal/input/          # Stdin/file reading
 internal/parser/         # ParseMarkdown(), Heading/Document types, section extraction
-internal/tui/            # Bubbletea TUI (Run() entry)
-internal/tui/kitty.go    # Kitty graphics protocol: image rendering, tmux passthrough
+internal/tui/tui.go      # App state, lifecycle (reload, file watcher, opener), Run() entry
+internal/tui/theme.go    # Built-in themes, ResolveTheme, glamour StyleConfig
+internal/tui/nodes.go    # Section building, glamour pre/post-processing, node extraction
+internal/tui/keys.go     # Key handling per mode/focus, navigation, search
+internal/tui/view.go     # Layout, panes, node-to-line mapping, highlights, overlays
+internal/tui/ghostty.go  # Ghostty theme file loader
+internal/tui/kitty.go    # Kitty graphics: image rendering, tmux passthrough, -r image placement
 ```
 
 ### Rendering Pipeline
@@ -69,7 +75,7 @@ Node extraction (`extractCodeNodes`/`extractLinkNodes`) works on **raw** markdow
 
 ## Package Management
 
-No task runner wrapper — use Go toolchain directly.
+Go modules only (`go.mod` / `go.sum`); the `justfile` has a `tidy` recipe.
 
 ### Dependency Safety
 
@@ -90,7 +96,7 @@ go test ./...                                        # all tests
 go test ./internal/parser/ -run TestName             # single parser test
 ```
 
-No CI is configured. No integration test prerequisites.
+No test CI. `.github/workflows/release.yml` runs goreleaser (`.goreleaser.yaml`) on `v*` tags. No integration test prerequisites.
 
 ## Git Workflow
 

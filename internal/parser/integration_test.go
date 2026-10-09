@@ -160,167 +160,6 @@ func TestSectionExtractionFromRealDoc(t *testing.T) {
 	}
 }
 
-func TestLinksExtractedFromRealDoc(t *testing.T) {
-	doc := realWorldDoc
-	links := parser.ExtractLinks(doc)
-
-	if len(links) < 2 {
-		t.Fatalf("expected at least 2 links, got %d", len(links))
-	}
-
-	// Should find the external link
-	found := false
-	for _, l := range links {
-		if l.URL == "https://example.com/docs" && l.Type == parser.LinkTypeExternal {
-			found = true
-			if l.Text != "the docs" {
-				t.Errorf("link text: got %q, want 'the docs'", l.Text)
-			}
-		}
-	}
-	if !found {
-		t.Error("external link to example.com/docs not found")
-	}
-
-	// Should find the relative link
-	found = false
-	for _, l := range links {
-		if l.URL == "CONTRIBUTING.md" && l.Type == parser.LinkTypeRelative {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("relative link to CONTRIBUTING.md not found")
-	}
-}
-
-func TestCodeBlocksExtractedFromRealDoc(t *testing.T) {
-	blocks := parser.ExtractCodeBlocks(realWorldDoc)
-
-	if len(blocks) != 2 {
-		t.Fatalf("expected 2 code blocks, got %d", len(blocks))
-	}
-
-	// First block should be bash
-	if blocks[0].Language != "bash" {
-		t.Errorf("first code block language: got %q, want 'bash'", blocks[0].Language)
-	}
-	if !strings.Contains(blocks[0].Content, "go install") {
-		t.Errorf("first code block should contain 'go install'")
-	}
-
-	// Second block has no language
-	if blocks[1].Language != "" {
-		t.Errorf("second code block language: got %q, want empty", blocks[1].Language)
-	}
-}
-
-func TestTablesExtracted(t *testing.T) {
-	md := `# Data
-
-| Name | Age | City |
-|:-----|----:|:----:|
-| Alice | 30 | NYC |
-| Bob | 25 | LA |
-
-Some text after.
-`
-	tables := parser.ExtractTables(md)
-	if len(tables) != 1 {
-		t.Fatalf("expected 1 table, got %d", len(tables))
-	}
-
-	tbl := tables[0]
-	if len(tbl.Headers) != 3 {
-		t.Fatalf("expected 3 headers, got %d", len(tbl.Headers))
-	}
-	if tbl.Headers[0] != "Name" || tbl.Headers[1] != "Age" || tbl.Headers[2] != "City" {
-		t.Errorf("headers: %v", tbl.Headers)
-	}
-
-	if len(tbl.Rows) != 2 {
-		t.Fatalf("expected 2 rows, got %d", len(tbl.Rows))
-	}
-	if tbl.Rows[0][0] != "Alice" {
-		t.Errorf("first cell: got %q", tbl.Rows[0][0])
-	}
-
-	// Check alignments
-	if tbl.Alignments[0] != "left" || tbl.Alignments[1] != "right" || tbl.Alignments[2] != "center" {
-		t.Errorf("alignments: %v", tbl.Alignments)
-	}
-}
-
-func TestListsExtracted(t *testing.T) {
-	md := `# Lists
-
-- First item
-- Second item
-- Third item
-
-1. Ordered one
-2. Ordered two
-`
-	lists := parser.ExtractLists(md)
-	if len(lists) != 2 {
-		t.Fatalf("expected 2 lists, got %d", len(lists))
-	}
-
-	// Unordered list
-	if lists[0].Ordered {
-		t.Error("first list should be unordered")
-	}
-	if len(lists[0].Items) != 3 {
-		t.Fatalf("expected 3 items in first list, got %d", len(lists[0].Items))
-	}
-	if lists[0].Items[0].Content != "First item" {
-		t.Errorf("first item: got %q", lists[0].Items[0].Content)
-	}
-
-	// Ordered list
-	if !lists[1].Ordered {
-		t.Error("second list should be ordered")
-	}
-	if len(lists[1].Items) != 2 {
-		t.Fatalf("expected 2 items in second list, got %d", len(lists[1].Items))
-	}
-}
-
-func TestHeadingAtLineInContext(t *testing.T) {
-	md := `# Title
-
-Some intro paragraph that spans
-multiple lines of text.
-
-## Section A
-
-Content of section A.
-
-## Section B
-
-Content of section B.
-`
-	doc := parser.ParseMarkdown(md)
-
-	// Line in the intro should map to the title heading
-	h := doc.HeadingAtLine(3)
-	if h == nil || h.Text != "Title" {
-		t.Errorf("line 3 should be under 'Title', got %v", h)
-	}
-
-	// Line in Section A content
-	h = doc.HeadingAtLine(8)
-	if h == nil || h.Text != "Section A" {
-		t.Errorf("line 8 should be under 'Section A', got %v", h)
-	}
-
-	// Line in Section B content
-	h = doc.HeadingAtLine(12)
-	if h == nil || h.Text != "Section B" {
-		t.Errorf("line 12 should be under 'Section B', got %v", h)
-	}
-}
-
 func TestHeadingsInsideCodeBlocksAreIgnored(t *testing.T) {
 	md := `# Real Heading
 
@@ -378,25 +217,6 @@ func TestInlineFormattingStrippedInHeadings(t *testing.T) {
 	}
 }
 
-func TestWikiLinksExtracted(t *testing.T) {
-	md := `# Notes
-
-See [[PageOne]] for details.
-Also check [[PageTwo|the second page]].
-`
-	links := parser.ExtractLinks(md)
-
-	wikiLinks := 0
-	for _, l := range links {
-		if l.Type == parser.LinkTypeWikiLink {
-			wikiLinks++
-		}
-	}
-	if wikiLinks != 2 {
-		t.Fatalf("expected 2 wiki links, got %d", wikiLinks)
-	}
-}
-
 func TestImagesExtracted(t *testing.T) {
 	md := `# Gallery
 
@@ -415,27 +235,17 @@ func TestImagesExtracted(t *testing.T) {
 	}
 }
 
-func TestFilterAndFindHeadings(t *testing.T) {
+func TestFilterHeadings(t *testing.T) {
 	doc := parser.ParseMarkdown(realWorldDoc)
 
-	// FindHeading is case-insensitive
-	h := doc.FindHeading("installation")
-	if h == nil {
-		t.Fatal("FindHeading('installation') returned nil")
-	}
-	if h.Text != "Installation" {
-		t.Errorf("got %q", h.Text)
-	}
-
-	// FilterHeadings substring match
-	filtered := doc.FilterHeadings("command")
+	filtered := doc.FilterHeadings(0, "COMMAND")
 	if len(filtered) != 1 || filtered[0].Text != "Basic Commands" {
-		t.Errorf("FilterHeadings('command'): got %+v", filtered)
+		t.Errorf("FilterHeadings(0, \"COMMAND\"): got %+v", filtered)
 	}
-
-	// HeadingsAtLevel
-	level2 := doc.HeadingsAtLevel(2)
-	if len(level2) != 4 {
+	if level2 := doc.FilterHeadings(2, ""); len(level2) != 4 {
 		t.Errorf("expected 4 level-2 headings, got %d", len(level2))
+	}
+	if both := doc.FilterHeadings(1, "command"); len(both) != 0 {
+		t.Errorf("level and text filters must combine, got %+v", both)
 	}
 }

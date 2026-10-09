@@ -1,6 +1,10 @@
 package tui
 
 import (
+	"image"
+	"image/png"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -277,5 +281,55 @@ func TestJumpModeEnterAndCancel(t *testing.T) {
 	app.jumpLabels = nil
 	if app.mode != ModeNormal {
 		t.Error("should be back to normal mode")
+	}
+}
+
+func TestReplaceImagePlaceholders_KeepsSurroundingText(t *testing.T) {
+	dir := t.TempDir()
+	f, err := os.Create(filepath.Join(dir, "logo.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewRGBA(image.Rect(0, 0, 8, 8))); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	md := filepath.Join(dir, "doc.md")
+	src := "![logo](logo.png)\n\nBefore ![logo](logo.png) after\n"
+	rendered := "  logo 🖼️ /logo.png  \n  Before logo 🖼️ /logo.png after\n  plain line"
+
+	out := strings.Split(ReplaceImagePlaceholders(rendered, src, md, 40), "\n")
+	if len(out) != 4 {
+		t.Fatalf("want 4 lines, got %d: %q", len(out), out)
+	}
+	if !strings.HasPrefix(out[0], "\x1b") {
+		t.Errorf("standalone image line not replaced: %q", out[0])
+	}
+	if !strings.Contains(out[1], "Before") || !strings.Contains(out[1], "after") {
+		t.Errorf("inline image line lost its text: %q", out[1])
+	}
+	if !strings.HasPrefix(out[2], "\x1b") || out[3] != "  plain line" {
+		t.Errorf("image not placed after inline line, or plain line changed: %q", out[2:])
+	}
+}
+
+func TestReplaceImagePlaceholders_SharedPathDifferentForms(t *testing.T) {
+	dir := t.TempDir()
+	f, err := os.Create(filepath.Join(dir, "a.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewRGBA(image.Rect(0, 0, 8, 8))); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	// "./a.png" and "a.png" render the same path; an empty alt must not eat
+	// part of another caption.
+	src := "![one](./a.png)\n\n![](a.png)\n\n![two](a.png \"title\")\n"
+	rendered := "  one 🖼️ /a.png\n  /a.png\n  two 🖼️ /a.png"
+	for i, l := range strings.Split(ReplaceImagePlaceholders(rendered, src, filepath.Join(dir, "d.md"), 40), "\n") {
+		if !strings.HasPrefix(l, "\x1b") {
+			t.Errorf("line %d not replaced by an image: %q", i, l)
+		}
 	}
 }
