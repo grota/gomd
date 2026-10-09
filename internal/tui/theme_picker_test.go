@@ -281,13 +281,13 @@ func TestPickerMarksSystemModeAndNotesSwitch(t *testing.T) {
 	a := pickerApp(t)
 	press(a, "T")
 	view := ansi.Strip(a.overlayThemePicker(strings.Repeat("\n", a.height-1)))
-	if !strings.Contains(view, "Dark ●") || strings.Contains(view, "Light ●") || strings.Contains(view, "System is now") {
+	if !strings.Contains(view, "Dark ●") || strings.Contains(view, "Light ●") || strings.Contains(view, "will be used when you close") {
 		t.Fatalf("dark mode: want only Dark marked and no note:\n%s", view)
 	}
 	a.Update(uv.LightColorSchemeEvent{})
 	view = ansi.Strip(a.overlayThemePicker(strings.Repeat("\n", a.height-1)))
 	if !strings.Contains(view, "Light ●") || strings.Contains(view, "Dark ●") ||
-		!strings.Contains(view, "System is now light: applied when you close this") {
+		!strings.Contains(view, "The light theme will be used when you close this") {
 		t.Errorf("after switching to light:\n%s", view)
 	}
 }

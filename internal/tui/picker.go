@@ -275,7 +275,7 @@ func (a *App) overlayThemePicker(background string) string {
 	lines := []string{tabLabel(tabDark, "Dark") + "  " + tabLabel(tabLight, "Light")}
 	if p.switched {
 		lines = append(lines, lipgloss.NewStyle().Foreground(a.theme.Highlight).Render(
-			ansi.Truncate("System is now "+modeName(a.dark)+": applied when you close this", innerW, "…")))
+			ansi.Truncate("The "+modeName(a.dark)+" theme will be used when you close this", innerW, "…")))
 	}
 	lines = append(lines, "Search: "+p.filter[p.tab]+"█", "")
 

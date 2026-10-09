@@ -264,7 +264,7 @@ gomd follows the system's light or dark setting as reported by the terminal (mod
 
 These keys are fixed, since every other key goes into the filter.
 
-`●` marks the tab of the current system appearance. If the system switches while the picker is open, the picker says so and the new theme applies when it closes.
+`●` marks the tab of the current system appearance. If the system switches while the picker is open, the picker notes that the light (or dark) theme will be used when it closes.
 
 ### Downloads
 
