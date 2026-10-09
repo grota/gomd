@@ -348,9 +348,11 @@ func (a *App) setDark(dark bool) {
 		return
 	}
 	a.dark = dark
-	if a.mode != ModeThemePicker {
-		a.applyTheme()
+	if a.picker != nil {
+		a.picker.switched = true
+		return
 	}
+	a.applyTheme()
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

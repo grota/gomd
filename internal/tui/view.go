@@ -1115,9 +1115,14 @@ func (a *App) overlayHelp(background string) string {
 
 // overlayModal draws text in a bordered box of width modalW centered over background.
 func (a *App) overlayModal(background, text string, modalW int) string {
+	// Styled segments end with a reset, which would show the terminal's own
+	// background; re-apply the theme colours after each one.
+	bgOpen := ansi.Style{}.ForegroundColor(a.theme.Foreground).BackgroundColor(a.theme.Background).String()
+	text = strings.NewReplacer("\x1b[m", "\x1b[m"+bgOpen, "\x1b[0m", "\x1b[0m"+bgOpen).Replace(text)
 	modal := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(a.theme.Border).
+		BorderBackground(a.theme.Background).
 		Background(a.theme.Background).
 		Foreground(a.theme.Foreground).
 		Width(modalW). // lipgloss v2: width includes the border

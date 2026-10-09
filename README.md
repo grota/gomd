@@ -264,6 +264,8 @@ gomd follows the system's light or dark setting as reported by the terminal (mod
 
 These keys are fixed, since every other key goes into the filter.
 
+`●` marks the tab of the current system appearance. If the system switches while the picker is open, the picker says so and the new theme applies when it closes.
+
 ### Downloads
 
 The Ghostty themes come from a pinned release, verified by SHA-256 and cached in the user cache directory (`~/.cache/gomd/themes/` on Linux). gomd downloads it the first time the picker opens, and at startup when `theme` names a theme that is not cached yet (waiting at most 5 seconds; on failure it uses the Ocean themes and prints a warning). A name that is neither built-in nor in the pinned set is an error.

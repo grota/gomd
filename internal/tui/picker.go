@@ -38,6 +38,7 @@ type themePicker struct {
 	offset      [2]int // first visible row of the filtered list
 	downloading bool
 	err         string
+	switched    bool // the system mode changed while the picker was open
 }
 
 // themesDownloadedMsg reports the end of a background theme download.
@@ -261,18 +262,22 @@ func (a *App) overlayThemePicker(background string) string {
 	active := lipgloss.NewStyle().Bold(true).Foreground(a.theme.Highlight)
 	dim := lipgloss.NewStyle().Foreground(a.theme.HeadingN)
 
+	// ● marks the tab matching the current system mode.
 	tabLabel := func(tab int, label string) string {
+		if (tab == tabDark) == a.dark {
+			label += " ●"
+		}
 		if tab == p.tab {
 			return active.Render("[" + label + "]")
 		}
 		return dim.Render(" " + label + " ")
 	}
-	lines := []string{
-		tabLabel(tabDark, "Dark") + "  " + tabLabel(tabLight, "Light") +
-			dim.Render("   system: "+modeName(a.dark)),
-		"Search: " + p.filter[p.tab] + "█",
-		"",
+	lines := []string{tabLabel(tabDark, "Dark") + "  " + tabLabel(tabLight, "Light")}
+	if p.switched {
+		lines = append(lines, lipgloss.NewStyle().Foreground(a.theme.Highlight).Render(
+			ansi.Truncate("System is now "+modeName(a.dark)+": applied when you close this", innerW, "…")))
 	}
+	lines = append(lines, "Search: "+p.filter[p.tab]+"█", "")
 
 	list := a.filteredEntries(p.tab)
 	inUse := [2]string{a.themeSetting.Dark, a.themeSetting.Light}[p.tab]

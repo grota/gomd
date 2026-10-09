@@ -17,6 +17,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/grota/gomd/internal/config"
 	"github.com/grota/gomd/internal/parser"
@@ -244,5 +245,49 @@ func TestSystemModeSwitchWaitsForPicker(t *testing.T) {
 	press(a, "esc")
 	if a.theme.Name != "Dusk" {
 		t.Errorf("after closing, dark mode should show Dusk, got %s", a.theme.Name)
+	}
+}
+
+// Every popup cell must carry the theme background: a reset not followed by
+// a colour (or the end of the line) would show the terminal's own background.
+func TestPopupPaintsItsOwnBackground(t *testing.T) {
+	a := pickerApp(t)
+	press(a, "T")
+	popup := a.overlayThemePicker(strings.Repeat("\n", a.height-1))
+	for i, line := range strings.Split(popup, "\n") {
+		if line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, "\x1b[") {
+			t.Errorf("line %d starts without colours: %q", i, line)
+		}
+		for _, reset := range []string{"\x1b[m", "\x1b[0m"} {
+			for rest := line; ; {
+				j := strings.Index(rest, reset)
+				if j < 0 {
+					break
+				}
+				rest = rest[j+len(reset):]
+				if rest != "" && !strings.HasPrefix(rest, "\x1b[") {
+					t.Errorf("line %d: text after a reset without colours: %q", i, rest)
+					break
+				}
+			}
+		}
+	}
+}
+
+func TestPickerMarksSystemModeAndNotesSwitch(t *testing.T) {
+	a := pickerApp(t)
+	press(a, "T")
+	view := ansi.Strip(a.overlayThemePicker(strings.Repeat("\n", a.height-1)))
+	if !strings.Contains(view, "Dark ●") || strings.Contains(view, "Light ●") || strings.Contains(view, "System is now") {
+		t.Fatalf("dark mode: want only Dark marked and no note:\n%s", view)
+	}
+	a.Update(uv.LightColorSchemeEvent{})
+	view = ansi.Strip(a.overlayThemePicker(strings.Repeat("\n", a.height-1)))
+	if !strings.Contains(view, "Light ●") || strings.Contains(view, "Dark ●") ||
+		!strings.Contains(view, "System is now light: applied when you close this") {
+		t.Errorf("after switching to light:\n%s", view)
 	}
 }
