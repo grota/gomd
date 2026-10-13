@@ -74,7 +74,7 @@ func parseGhosttyFile(path string) (ghosttyTheme, error) {
 //   - Heading3    → palette 4  (blue)
 //   - HeadingN    → palette 8  (bright black)
 //   - Highlight   → palette 11 (bright yellow)
-//   - Code        → palette 0  (black)
+//   - Code        → background moved towards white/black to 1.6:1 (interactive tint)
 //   - Search      → palette 1  (red)
 //   - NodeSel     → palette 6  (cyan)
 func ghosttyToTheme(name string, gt ghosttyTheme) Theme {
@@ -91,10 +91,12 @@ func ghosttyToTheme(name string, gt ghosttyTheme) Theme {
 		selectedBg = gt.Palette[0]
 	}
 
+	bg := c(gt.Background, "#000000")
+	fg := c(gt.Foreground, "#ffffff")
 	return Theme{
 		Name:       name,
-		Background: c(gt.Background, "#000000"),
-		Foreground: c(gt.Foreground, "#ffffff"),
+		Background: bg,
+		Foreground: fg,
 		Border:     c(gt.Palette[8], "#4c4c4c"),
 		Selected:   c(selectedBg, "#000000"),
 		StatusBar:  c(gt.Palette[8], "#4c4c4c"),
@@ -103,7 +105,7 @@ func ghosttyToTheme(name string, gt ghosttyTheme) Theme {
 		Heading3:   c(gt.Palette[4], "#7a7ab8"),
 		HeadingN:   c(gt.Palette[8], "#4c4c4c"),
 		Highlight:  c(gt.Palette[11], "#dbdbbd"),
-		Code:       c(gt.Palette[0], "#000000"),
+		Code:       ensureContrast(bg, bg, 1.6),
 		Search:     c(gt.Palette[1], "#b87a7a"),
 		NodeSel:    c(gt.Palette[6], "#7ab8b8"),
 	}

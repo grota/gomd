@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -174,6 +175,68 @@ func luminance(hex Color) float64 {
 	return (0.2126*float64(r) + 0.7152*float64(g) + 0.0722*float64(b)) / 255
 }
 
+// contrast is the WCAG contrast ratio of two "#rrggbb" colours, 1 to 21.
+func contrast(a, b Color) float64 {
+	rel := func(c Color) float64 {
+		r, g, b, ok := parseHex(string(c))
+		if !ok {
+			return 0
+		}
+		lin := func(v uint64) float64 {
+			s := float64(v) / 255
+			if s <= 0.04045 {
+				return s / 12.92
+			}
+			return math.Pow((s+0.055)/1.055, 2.4)
+		}
+		return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b)
+	}
+	la, lb := rel(a), rel(b)
+	return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+}
+
+// textOn returns a readable text colour for a fill painted in bg: the theme
+// foreground or background when either reaches WCAG AA (4.5:1), else black or
+// white. Ghostty themes such as Primary set palette 8 equal to the foreground.
+func (t Theme) textOn(bg Color) Color {
+	for _, c := range []Color{t.Foreground, t.Background} {
+		if contrast(c, bg) >= 4.5 {
+			return c
+		}
+	}
+	if contrast("#000000", bg) > contrast("#ffffff", bg) {
+		return "#000000"
+	}
+	return "#ffffff"
+}
+
+// mix blends a towards b by k (0..1). It returns a when either is not "#rrggbb".
+func mix(a, b Color, k float64) Color {
+	ar, ag, ab, ok1 := parseHex(string(a))
+	br, bg, bb, ok2 := parseHex(string(b))
+	if !ok1 || !ok2 {
+		return a
+	}
+	m := func(x, y uint64) uint64 { return uint64(math.Round(float64(x) + (float64(y)-float64(x))*k)) }
+	return Color(fmt.Sprintf("#%02x%02x%02x", m(ar, br), m(ag, bg), m(ab, bb)))
+}
+
+// ensureContrast moves c towards black or white, whichever is further from
+// bg, until it reaches ratio against bg. Black or white reach 4.58:1 on any
+// background, so every ratio up to that is met.
+func ensureContrast(c, bg Color, ratio float64) Color {
+	to := Color("#ffffff")
+	if contrast("#000000", bg) > contrast(to, bg) {
+		to = "#000000"
+	}
+	for k := 0.0; k < 1; k += 0.02 {
+		if m := mix(c, to, k); contrast(m, bg) >= ratio {
+			return m
+		}
+	}
+	return to
+}
+
 // ─────────────────────────────────────────────
 // Glamour style
 // ─────────────────────────────────────────────
@@ -190,16 +253,14 @@ func StyleConfigFromTheme(theme Theme) gansi.StyleConfig {
 	h2 := string(theme.Heading2)
 	h3 := string(theme.Heading3)
 	hN := string(theme.HeadingN)
-	code := string(theme.Code)
-	bg := string(theme.Background)
 	link := string(theme.Search) // reuse Search color for links
 	border := string(theme.Border)
 
-	// Pick a code block background: slightly offset from the main background.
-	codeBg := "#373737"
-	if isLightColor(bg) {
-		codeBg = "#e8e8e8"
-	}
+	// Code background: the page background moved towards white (dark themes)
+	// or black (light themes) to 1.25:1, the same visible step on every theme.
+	// theme.Code is the interactive-mode tint, not a text colour.
+	codeBg := string(ensureContrast(theme.Background, theme.Background, 1.25))
+	codeFg := string(ensureContrast(theme.Foreground, Color(codeBg), 4.5))
 
 	return gansi.StyleConfig{
 		Document: gansi.StyleBlock{
@@ -306,18 +367,18 @@ func StyleConfigFromTheme(theme Theme) gansi.StyleConfig {
 			StylePrimitive: gansi.StylePrimitive{
 				Prefix:          " ",
 				Suffix:          " ",
-				Color:           &code,
+				Color:           &codeFg,
 				BackgroundColor: &codeBg,
 			},
 		},
 		CodeBlock: gansi.StyleCodeBlock{
 			StyleBlock: gansi.StyleBlock{
 				StylePrimitive: gansi.StylePrimitive{
-					Color: &fg,
+					Color: &codeFg,
 				},
 				Margin: uintPtr(2),
 			},
-			Chroma: chromaForTheme(fg, codeBg, isLightColor(bg)),
+			Chroma: chromaForTheme(codeFg, codeBg, isLightColor(codeBg)),
 		},
 		Table: gansi.StyleTable{},
 		DefinitionDescription: gansi.StylePrimitive{
@@ -354,12 +415,25 @@ func isLightColor(hex string) bool {
 }
 
 // chromaForTheme returns a full Chroma token color config appropriate for light
-// or dark backgrounds.  Colors are taken from glamour's built-in styles.
+// or dark backgrounds.  Colors are taken from glamour's built-in styles and
+// pushed towards black or white until readable on codeBg: 4.5:1 (WCAG AA),
+// 3:1 for comments so they stay dimmer than code.
 func chromaForTheme(fg, codeBg string, light bool) *gansi.Chroma {
+	readable := func(color string, ratio float64) string {
+		if color == "" {
+			return ""
+		}
+		return string(ensureContrast(Color(color), Color(codeBg), ratio))
+	}
+	dim := func(color string) gansi.StylePrimitive {
+		color = readable(color, 3)
+		return gansi.StylePrimitive{Color: &color}
+	}
 	sp := func(color string) gansi.StylePrimitive {
 		if color == "" {
 			return gansi.StylePrimitive{}
 		}
+		color = readable(color, 4.5)
 		return gansi.StylePrimitive{Color: &color}
 	}
 	spBg := func(fg, bg string) gansi.StylePrimitive {
@@ -375,6 +449,7 @@ func chromaForTheme(fg, codeBg string, light bool) *gansi.Chroma {
 	spStyle := func(color string, bold, italic, underline bool) gansi.StylePrimitive {
 		p := gansi.StylePrimitive{}
 		if color != "" {
+			color = readable(color, 4.5)
 			p.Color = &color
 		}
 		if bold {
@@ -393,7 +468,7 @@ func chromaForTheme(fg, codeBg string, light bool) *gansi.Chroma {
 		return &gansi.Chroma{
 			Text:                sp("#2A2A2A"),
 			Error:               spBg("#F1F1F1", "#FF5555"),
-			Comment:             sp("#8D8D8D"),
+			Comment:             dim("#8D8D8D"),
 			CommentPreproc:      sp("#FF875F"),
 			Keyword:             sp("#279EFC"),
 			KeywordReserved:     sp("#FF5FD2"),
@@ -415,7 +490,7 @@ func chromaForTheme(fg, codeBg string, light bool) *gansi.Chroma {
 			GenericEmph:         spStyle("", false, true, false),
 			GenericInserted:     sp("#00D787"),
 			GenericStrong:       spStyle("", true, false, false),
-			GenericSubheading:   sp("#777777"),
+			GenericSubheading:   dim("#777777"),
 			Background:          spBg("", codeBg),
 		}
 	}
@@ -423,7 +498,7 @@ func chromaForTheme(fg, codeBg string, light bool) *gansi.Chroma {
 	return &gansi.Chroma{
 		Text:                sp(fg),
 		Error:               spBg("#F1F1F1", "#F05B5B"),
-		Comment:             sp("#676767"),
+		Comment:             dim("#676767"),
 		CommentPreproc:      sp("#FF875F"),
 		Keyword:             sp("#00AAFF"),
 		KeywordReserved:     sp("#FF5FD2"),
@@ -445,7 +520,7 @@ func chromaForTheme(fg, codeBg string, light bool) *gansi.Chroma {
 		GenericEmph:         spStyle("", false, true, false),
 		GenericInserted:     sp("#00D787"),
 		GenericStrong:       spStyle("", true, false, false),
-		GenericSubheading:   sp("#777777"),
+		GenericSubheading:   dim("#777777"),
 		Background:          spBg("", codeBg),
 	}
 }

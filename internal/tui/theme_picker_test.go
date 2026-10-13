@@ -12,10 +12,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	gansi "charm.land/glamour/v2/ansi"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
@@ -289,5 +291,68 @@ func TestPickerMarksSystemModeAndNotesSwitch(t *testing.T) {
 	if !strings.Contains(view, "Light ●") || strings.Contains(view, "Dark ●") ||
 		!strings.Contains(view, "The light theme will be used when you close this") {
 		t.Errorf("after switching to light:\n%s", view)
+	}
+}
+
+func TestTextOnAvoidsInvisibleText(t *testing.T) {
+	primary := Theme{Background: "#ffffff", Foreground: "#000000"}
+	if got := primary.textOn("#000000"); got != "#ffffff" {
+		t.Errorf("bar #000000 on Primary: got %s, want #ffffff", got)
+	}
+	fahrenheit := Theme{Background: "#000000", Foreground: "#ffffce"}
+	if got := fahrenheit.textOn("#404040"); got != "#ffffce" {
+		t.Errorf("bar #404040 on Fahrenheit: got %s, want #ffffce", got)
+	}
+	// Neither theme colour reaches 4.5:1 on mid grey: fall back to black.
+	grey := Theme{Background: "#555555", Foreground: "#aaaaaa"}
+	if got := grey.textOn("#999999"); got != "#000000" {
+		t.Errorf("mid grey fill: got %s, want #000000", got)
+	}
+}
+
+func TestMix(t *testing.T) {
+	if got := mix("#000000", "#ffffff", 0.12); got != "#1f1f1f" {
+		t.Errorf("mix black/white 12%%: got %s, want #1f1f1f", got)
+	}
+	if got := mix("203", "#ffffff", 0.5); got != "203" {
+		t.Errorf("mix with a non-hex colour: got %s, want it unchanged", got)
+	}
+}
+
+func TestCodeColoursReadableOnEveryTheme(t *testing.T) {
+	// Pages that broke the old fixed or blended code background: dim
+	// foregrounds, near-black, coloured and mid-grey backgrounds.
+	cases := []Theme{
+		{Name: "Fahrenheit", Background: "#000000", Foreground: "#ffffce"},
+		{Name: "Primary", Background: "#ffffff", Foreground: "#000000"},
+		{Name: "Batman", Background: "#1b1d1e", Foreground: "#6f6f6f"},
+		{Name: "C64", Background: "#40318d", Foreground: "#7869c4"},
+		{Name: "3024 Night", Background: "#090300", Foreground: "#a5a2a2"},
+		{Name: "mid grey", Background: "#808080", Foreground: "#ffffff"},
+		themes["OceanDark"], themes["OceanLight"],
+	}
+	for _, th := range cases {
+		sc := StyleConfigFromTheme(th)
+		bg := Color(*sc.Code.BackgroundColor)
+		if r := contrast(bg, th.Background); r < 1.25 {
+			t.Errorf("%s: code background %s is %.2f:1 from the page", th.Name, bg, r)
+		}
+		if r := contrast(Color(*sc.Code.Color), bg); r < 4.5 {
+			t.Errorf("%s: inline code %s is %.2f:1 on %s", th.Name, *sc.Code.Color, r, bg)
+		}
+		v := reflect.ValueOf(*sc.CodeBlock.Chroma)
+		for i := range v.NumField() {
+			p, ok := v.Field(i).Interface().(gansi.StylePrimitive)
+			if !ok || p.Color == nil || p.BackgroundColor != nil {
+				continue // Error and Background bring their own fill
+			}
+			name, want := v.Type().Field(i).Name, 4.5
+			if name == "Comment" || name == "GenericSubheading" {
+				want = 3
+			}
+			if r := contrast(Color(*p.Color), bg); r < want {
+				t.Errorf("%s: %s %s is %.2f:1 on %s, want %.1f", th.Name, name, *p.Color, r, bg, want)
+			}
+		}
 	}
 }

@@ -133,7 +133,7 @@ func (a *App) renderTitle() string {
 
 	return lipgloss.NewStyle().
 		Background(a.theme.Border).
-		Foreground(a.theme.Foreground).
+		Foreground(a.theme.textOn(a.theme.Border)).
 		Bold(true).
 		Width(a.width).
 		Padding(0, 1).
@@ -819,8 +819,8 @@ func applyNodeHighlights(lines []string, nodes []codeNode, selIdx int, info []no
 	out := make([]string, len(lines))
 	copy(out, lines)
 
-	dimStyle := lipgloss.NewStyle().Background(theme.Code)
-	selStyle := lipgloss.NewStyle().Background(theme.NodeSel).Foreground(theme.Background).Bold(true)
+	dimStyle := lipgloss.NewStyle().Background(theme.Code).Foreground(theme.textOn(theme.Code))
+	selStyle := lipgloss.NewStyle().Background(theme.NodeSel).Foreground(theme.textOn(theme.NodeSel)).Bold(true)
 
 	// Apply available highlights first (lower priority), then selected (higher).
 	for pass := 0; pass < 2; pass++ {
@@ -957,7 +957,7 @@ func (a *App) renderStatus() string {
 
 	return lipgloss.NewStyle().
 		Background(a.theme.StatusBar).
-		Foreground(a.theme.Foreground).
+		Foreground(a.theme.textOn(a.theme.StatusBar)).
 		Width(a.width).
 		Padding(0, 1).
 		Render(content)

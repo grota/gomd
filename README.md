@@ -181,7 +181,7 @@ opener = "xdg-open"       # command to open URLs, may include arguments (macOS d
 # foreground = "#ebdbb2"
 # statusbar = "#3c3836"
 # highlight = "#fe8019"
-# code = "#1d2021"
+# code = "#1d2021"       # tint of selectable nodes in interactive mode
 # search = "#fb4934"
 # nodesel = "#8ec07c"
 
