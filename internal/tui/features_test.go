@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/ansi/kitty"
 
@@ -106,6 +107,33 @@ func TestBreadcrumb(t *testing.T) {
 	}
 	if !strings.Contains(bc, "Prerequisites") {
 		t.Errorf("breadcrumb should contain 'Prerequisites', got %q", bc)
+	}
+}
+
+func TestTitleCentresFileName(t *testing.T) {
+	app := newTestApp(featureTestDoc)
+	for i, h := range app.doc.Headings {
+		if h.Text == "Prerequisites" {
+			app.selectedIdx = i
+			break
+		}
+	}
+	title := ansi.Strip(app.renderTitle())
+	if w := lipgloss.Width(title); w != app.width {
+		t.Fatalf("title width %d, want %d", w, app.width)
+	}
+	if col := strings.Index(title, "test.md"); col != (app.width-len("test.md"))/2 {
+		t.Errorf("file name at column %d, want centred:\n%q", col, title)
+	}
+	if !strings.HasPrefix(title, " Introduction > Getting Started > Prerequisites ") {
+		t.Errorf("breadcrumb should lead the title:\n%q", title)
+	}
+
+	// A breadcrumb that would reach the name is cut short of it.
+	app.width = 30
+	title = ansi.Strip(app.renderTitle())
+	if lipgloss.Width(title) != 30 || !strings.Contains(title, "… test.md") {
+		t.Errorf("narrow title:\n%q", title)
 	}
 }
 

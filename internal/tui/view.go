@@ -126,10 +126,15 @@ func (a *App) renderTitle() string {
 		name = "gomd"
 	}
 
-	title := "gomd — " + name
-	if bc := a.breadcrumb(); bc != "" {
-		title += " > " + bc
+	// File name centred on the bar, breadcrumb on the left cut short of it.
+	inner := max(a.width-2, 0) // Padding(0, 1)
+	name = ansi.Truncate(name, inner, "…")
+	start := (inner - lipgloss.Width(name)) / 2
+	left := ""
+	if bc := a.breadcrumb(); bc != "" && start > 1 {
+		left = ansi.Truncate(bc, start-1, "…")
 	}
+	title := left + strings.Repeat(" ", start-lipgloss.Width(left)) + name
 
 	return lipgloss.NewStyle().
 		Background(a.theme.Border).
