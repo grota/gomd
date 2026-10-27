@@ -479,3 +479,89 @@ func TestViewLinesFillTerminalWidth(t *testing.T) {
 		}
 	}
 }
+
+func TestContentBorderWithSidebar(t *testing.T) {
+	cfg := config.Default()
+	cfg.UI.ContentBorder = config.ContentBorderWithSidebar
+	a := NewApp(parser.ParseMarkdown("# A\n\ntext\n"), "f.md", "", cfg)
+	a.Update(tea.WindowSizeMsg{Width: 120, Height: 10})
+
+	view := ansi.Strip(a.View().Content)
+	lines := strings.Split(view, "\n")
+	if len(lines) != 10 || strings.ContainsAny(view, "┌│") {
+		t.Errorf("sidebar hidden: want 10 borderless lines, got %d:\n%s", len(lines), view)
+	}
+	for i, l := range lines[1 : len(lines)-1] {
+		if w := lipgloss.Width(l); w != 120 {
+			t.Errorf("line %d is %d columns wide, want 120", i+1, w)
+		}
+	}
+
+	a.sidebarHidden = false
+	if view := ansi.Strip(a.View().Content); strings.Count(view, "┌") != 2 {
+		t.Errorf("sidebar shown: want both panes boxed:\n%s", view)
+	}
+}
+
+func TestHighlightSpansManyMatchesStayLinear(t *testing.T) {
+	line := "\x1b[38;5;252mThe quick brown fox jumps over the lazy dog, then everyone sees the event\x1b[0m"
+	a := &App{renderedLines: []string{line}, contentSearchQuery: "e"}
+	a.findContentSearchMatches()
+	out := a.applyContentSearchHighlights(a.renderedLines, 0, 1)[0]
+	if got := ansi.Strip(out); got != ansi.Strip(line) {
+		t.Errorf("text changed: %q", got)
+	}
+	if len(out) > 40*len(line) {
+		t.Errorf("%d matches grew the line from %d to %d bytes", len(a.contentSearchMatches), len(line), len(out))
+	}
+}
+
+func TestHighlightSpansRestoresStyle(t *testing.T) {
+	red := "\x1b[31m"
+	style := lipgloss.NewStyle().Bold(true)
+	out := highlightSpans(red+"ab cd ef\x1b[0m", []highlightSpan{{0, 2, style}, {6, 8, style}})
+	if ansi.Strip(out) != "ab cd ef" {
+		t.Fatalf("text changed: %q", out)
+	}
+	// After the first span, " cd " must be red again.
+	i := strings.Index(out, " cd ")
+	if i < 0 || !strings.HasSuffix(out[:i], red) {
+		t.Errorf("style not restored before %q: %q", " cd ", out)
+	}
+}
+
+func TestMouseDragSelectsAndCopies(t *testing.T) {
+	for _, border := range []string{config.ContentBorderAlways, config.ContentBorderWithSidebar} {
+		cfg := config.Default()
+		cfg.UI.ContentBorder = border
+		a := NewApp(parser.ParseMarkdown("alpha beta\n\ngamma delta\n"), "f.md", "", cfg)
+		a.Update(tea.WindowSizeMsg{Width: 80, Height: 12})
+		a.View()
+
+		// Find the screen cells of "beta" and "gamma" in the rendered lines.
+		x0, y0 := a.contentOrigin()
+		var bx, by, gx, gy int
+		for i, l := range a.renderedLines {
+			s := ansi.Strip(l)
+			if j := strings.Index(s, "beta"); j >= 0 {
+				bx, by = x0+j, y0+i
+			}
+			if j := strings.Index(s, "gamma"); j >= 0 {
+				gx, gy = x0+j+len("gamma")-1, y0+i
+			}
+		}
+		a.Update(tea.MouseClickMsg{X: bx, Y: by, Button: tea.MouseLeft})
+		a.Update(tea.MouseMotionMsg{X: gx, Y: gy, Button: tea.MouseLeft})
+		_, cmd := a.Update(tea.MouseReleaseMsg{X: gx, Y: gy, Button: tea.MouseLeft})
+
+		if got := a.selectedText(); got != "beta\n\ngamma" {
+			t.Errorf("%s: selected %q, want %q", border, got, "beta\n\ngamma")
+		}
+		if cmd == nil || !strings.Contains(a.statusMsg, "Copied") {
+			t.Errorf("%s: no clipboard command (status %q)", border, a.statusMsg)
+		}
+		if !strings.Contains(a.View().Content, "beta") {
+			t.Errorf("%s: selection highlight lost the text", border)
+		}
+	}
+}

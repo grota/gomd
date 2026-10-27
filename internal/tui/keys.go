@@ -19,6 +19,7 @@ import (
 
 func (a *App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
+	a.sel = nil
 
 	// Global keys that work in any mode
 	switch k {
@@ -127,7 +128,8 @@ func (a *App) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-// handleMouseClick handles mouse click events for sidebar clicks.
+// handleMouseClick selects a clicked sidebar heading, or starts a selection
+// in the content pane (see selection.go).
 func (a *App) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if a.mode != ModeNormal {
 		return a, nil
@@ -135,6 +137,11 @@ func (a *App) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 
 	if msg.Button == tea.MouseLeft {
 		mouse := msg.Mouse()
+		a.sel = nil
+		if a.inContent(mouse.X, mouse.Y) {
+			p := a.contentPosAt(mouse.X, mouse.Y)
+			a.sel = &selection{anchor: p, head: p, dragging: true}
+		}
 		// Check if click is in the sidebar
 		sw := a.sidebarWidth()
 		if !a.sidebarHidden && mouse.X < sw && mouse.Y >= 2 && mouse.Y < a.height-1 {
@@ -809,6 +816,7 @@ func (a *App) ensureRenderedLines() {
 	a.renderedLines = a.renderGlamour(markdown, w)
 	a.renderedLinesIdx = a.selectedIdx
 	a.renderedLinesWidth = w
+	a.sel = nil // its positions index the old lines
 	a.nodeRenderInfo = mapNodesToRenderedLines(a.codeNodes, a.renderedLines)
 	// Match positions index into renderedLines, so recompute them for the new render.
 	a.findContentSearchMatches()

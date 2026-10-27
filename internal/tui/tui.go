@@ -172,6 +172,7 @@ type App struct {
 
 	// Status
 	statusMsg string
+	sel       *selection // mouse selection in the content pane, nil when none
 }
 
 // ─────────────────────────────────────────────
@@ -397,6 +398,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleMouseWheel(msg)
 	case tea.MouseClickMsg:
 		return a.handleMouseClick(msg)
+	case tea.MouseMotionMsg:
+		return a.handleMouseMotion(msg)
+	case tea.MouseReleaseMsg:
+		return a.handleMouseRelease(msg)
 	}
 
 	return a, nil

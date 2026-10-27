@@ -89,6 +89,11 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	if flagTheme != "" {
 		cfg.UI.Theme = flagTheme
 	}
+	if b := cfg.UI.ContentBorder; b != config.ContentBorderAlways && b != config.ContentBorderWithSidebar {
+		fmt.Fprintf(os.Stderr, "Warning: ui.content_border %q is not %q or %q, using %q\n",
+			b, config.ContentBorderAlways, config.ContentBorderWithSidebar, config.ContentBorderAlways)
+		cfg.UI.ContentBorder = config.ContentBorderAlways
+	}
 	cfg.Images.Enabled = cfg.Images.Enabled && !flagNoImages && tui.IsKittySupported()
 
 	doc := parser.ParseMarkdown(inp.Content)

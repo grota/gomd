@@ -42,7 +42,7 @@ interactive mode:
 - **Jump mode** (`f`) — EasyMotion-style labels to quickly jump to any selectable element
 - **Navigation history** — `Ctrl+O` / `Ctrl+I` for back/forward heading navigation
 - **Internal link following** — `Enter` on `#anchor` links jumps to the referenced heading
-- **Mouse support** — click sidebar headings, scroll content with mouse wheel
+- **Mouse support** — click sidebar headings, scroll content with mouse wheel, drag over content to select and copy it
 - **Responsive sidebar** — width auto-adjusts based on heading text length
 - **Themes** — 700+ Ghostty themes with a live-preview picker (`T`), and separate light and dark themes that follow the system appearance
 - **CLI mode** — list, tree, count, extract sections non-interactively
@@ -122,6 +122,15 @@ Images are rendered as `alt 📷 path` and links as `text 🔗 url`. HTML `<img>
 | `q` / `Ctrl+C`      | Quit                                        |
 | Mouse click         | Select sidebar heading                      |
 | Scroll wheel        | Scroll content                              |
+| Mouse drag          | Select content text and copy it (see below) |
+
+Dragging over the content copies the selected text to the system clipboard with OSC 52 (Ghostty and Kitty allow it by default). Inside tmux, the copy silently does nothing unless tmux forwards it:
+
+```tmux
+set -g set-clipboard on
+```
+
+Hold `Shift` while dragging to use the terminal's own selection instead.
 
 `Ctrl+I` is indistinguishable from `Tab` on terminals without the Kitty keyboard protocol, so there it toggles focus instead of navigating forward. Rebind `nav_forward` if that matters to you.
 
@@ -166,6 +175,7 @@ All settings are optional — only specify what you want to override.
 theme = "light:OceanLight,dark:OceanDark"   # or a single name; see Themes
 compact_tree = false      # compact --tree output
 sidebar_hidden = true     # start with the sidebar hidden
+content_border = "always" # or "with_sidebar": no content border while the sidebar is hidden
 opener = "xdg-open"       # command to open URLs, may include arguments (macOS default: "open")
 
 [ui.theme_override]

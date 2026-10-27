@@ -70,9 +70,22 @@ func (a *App) paneInnerHeight() int {
 	return h
 }
 
+// contentBordered reports whether the content pane is drawn inside a box.
+// Without one it keeps a blank column on each side, so its inner width is
+// unchanged and only the two border rows go to content.
+func (a *App) contentBordered() bool {
+	return !a.sidebarHidden || a.cfg.UI.ContentBorder != config.ContentBorderWithSidebar
+}
+
 // outlineHeight is an alias kept for scrollOutlineToSelected.
 func (a *App) outlineHeight() int { return a.paneInnerHeight() }
-func (a *App) contentHeight() int { return a.paneInnerHeight() }
+
+func (a *App) contentHeight() int {
+	if a.contentBordered() {
+		return a.paneInnerHeight()
+	}
+	return max(a.height-2, 0) // title(1) + status(1)
+}
 
 // ─────────────────────────────────────────────
 // View
@@ -209,11 +222,14 @@ func (a *App) drawBox(lines []string, outerW int, focused bool, title string) st
 	top := bc.Render("┌" + topMid + "┐")
 	bottom := bc.Render("└" + strings.Repeat("─", innerW) + "┘")
 
+	border := bc.Render("│")
+	return top + "\n" + a.paintPaneLines(lines, innerW, border) + "\n" + bottom
+}
+
+// paintPaneLines fits each line to innerW columns on the theme background,
+// wraps it in edge (a border or a blank cell) and joins the lines.
+func (a *App) paintPaneLines(lines []string, innerW int, edge string) string {
 	var sb strings.Builder
-	sb.WriteString(top)
-	sb.WriteByte('\n')
-	borderL := bc.Render("│")
-	borderR := bc.Render("│")
 	bgStyle := lipgloss.NewStyle().
 		Background(a.theme.Background).
 		Foreground(a.theme.Foreground)
@@ -221,7 +237,7 @@ func (a *App) drawBox(lines []string, outerW int, focused bool, title string) st
 	// in glamour output so the pane background survives.
 	bgOpen := ansi.Style{}.ForegroundColor(a.theme.Foreground).BackgroundColor(a.theme.Background).String()
 
-	for _, line := range lines {
+	for i, line := range lines {
 		// Normalize line to exactly innerW display columns so the right
 		// border always appears in the correct column regardless of whether
 		// the line contains ANSI sequences (e.g. from glamour).
@@ -239,10 +255,11 @@ func (a *App) drawBox(lines []string, outerW int, focused bool, title string) st
 		if visW < innerW {
 			line += bgStyle.Render(strings.Repeat(" ", innerW-visW))
 		}
-		sb.WriteString(borderL + line + borderR)
-		sb.WriteByte('\n')
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(edge + line + edge)
 	}
-	sb.WriteString(bottom)
 	return sb.String()
 }
 
@@ -332,13 +349,17 @@ func (a *App) renderBorderedContent(outerW int, focused bool) string {
 	}
 	inner := a.renderContentWidth(innerW)
 	lines := strings.Split(inner, "\n")
-	h := a.paneInnerHeight()
+	h := a.contentHeight()
 	// Ensure exactly h lines
 	for len(lines) < h {
 		lines = append(lines, "")
 	}
 	lines = lines[:h]
 
+	if !a.contentBordered() {
+		pad := lipgloss.NewStyle().Background(a.theme.Background).Render(" ")
+		return a.paintPaneLines(lines, innerW, pad)
+	}
 	return a.drawBox(lines, outerW, focused, "")
 }
 
@@ -382,7 +403,10 @@ func (a *App) renderContentGlamour(w, h int) string {
 
 	// Apply content search highlights
 	if len(a.contentSearchMatches) > 0 && a.contentSearchQuery != "" {
-		lines = a.applyContentSearchHighlights(lines)
+		lines = a.applyContentSearchHighlights(lines, a.contentOffset, a.contentOffset+h)
+	}
+	if a.sel != nil {
+		lines = a.applySelectionHighlight(lines, a.contentOffset, a.contentOffset+h, w)
 	}
 
 	start := a.contentOffset
@@ -684,55 +708,100 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 // line at display columns [colStart, colEnd). The rest of the line retains its original
 // ANSI styling. Returns the modified line.
 func highlightSpanInLine(line string, colStart, colEnd int, style lipgloss.Style) string {
-	if colStart < 0 || colEnd <= colStart {
-		return line
-	}
-	// Split the rendered string at display column boundaries using ansi.Truncate.
-	// prefix = first colStart columns
-	// middle = next (colEnd-colStart) columns
-	// suffix = everything after colEnd
-	prefix := ansi.Truncate(line, colStart, "")
-	withMid := ansi.Truncate(line, colEnd, "")
-	// middle is withMid minus prefix — we can get it by stripping the prefix bytes
-	// from withMid. Since ansi.Truncate preserves ANSI codes, we use TruncateLeft.
-	middle := ansi.TruncateLeft(withMid, colStart, "")
-	suffix := ansi.TruncateLeft(line, colEnd, "")
-	// Re-render the middle span with the highlight style.
-	plainMiddle := ansi.Strip(middle)
-	return prefix + style.Render(plainMiddle) + suffix
+	return highlightSpans(line, []highlightSpan{{colStart, colEnd, style}})
 }
 
-// applyContentSearchHighlights highlights all content search matches in the rendered lines.
-func (a *App) applyContentSearchHighlights(lines []string) []string {
-	if len(a.contentSearchMatches) == 0 {
-		return lines
+// highlightSpan is a display-column range [colStart, colEnd) of a rendered
+// line and the style to paint it with.
+type highlightSpan struct {
+	colStart, colEnd int
+	style            lipgloss.Style
+}
+
+// highlightSpans paints spans, sorted by colStart and not overlapping, over a
+// rendered line in one pass. Text inside a span is drawn plain in the span's
+// style; after it the SGR state in effect at that point is restored. Other
+// sequences inside a span (OSC 8 links) are moved to just after it.
+func highlightSpans(line string, spans []highlightSpan) string {
+	var out, sgr, mid, held strings.Builder // sgr: SGR sequences since the last reset
+	var state byte
+	col, si, in := 0, 0, false
+	closeSpan := func() {
+		out.WriteString(spans[si].style.Render(mid.String()))
+		out.WriteString(held.String())
+		out.WriteString(sgr.String())
+		mid.Reset()
+		held.Reset()
+		in = false
+		si++
 	}
+	for len(line) > 0 {
+		seq, w, n, newState := ansi.DecodeSequence(line, state, nil)
+		state = newState
+		line = line[n:]
+		for !in && si < len(spans) && (spans[si].colStart < 0 || spans[si].colEnd <= max(spans[si].colStart, col)) {
+			si++ // empty, invalid, or already behind
+		}
+		if !in && si < len(spans) && w > 0 && col >= spans[si].colStart {
+			in = true
+		}
+		switch {
+		case !strings.HasPrefix(seq, "\x1b"):
+			if in {
+				mid.WriteString(seq)
+			} else {
+				out.WriteString(seq)
+			}
+			col += w
+			if in && col >= spans[si].colEnd {
+				closeSpan()
+			}
+		case strings.HasPrefix(seq, "\x1b[") && strings.HasSuffix(seq, "m"):
+			if seq == "\x1b[m" || seq == "\x1b[0m" || strings.HasPrefix(seq, "\x1b[0;") {
+				sgr.Reset()
+			}
+			sgr.WriteString(seq)
+			if !in {
+				out.WriteString(seq)
+			}
+		default:
+			if in {
+				held.WriteString(seq)
+			} else {
+				out.WriteString(seq)
+			}
+		}
+	}
+	if in {
+		closeSpan()
+	}
+	return out.String()
+}
+
+// applyContentSearchHighlights highlights the content search matches on
+// lines [from, to), the ones on screen.
+func (a *App) applyContentSearchHighlights(lines []string, from, to int) []string {
 	out := make([]string, len(lines))
 	copy(out, lines)
 
 	matchStyle := lipgloss.NewStyle().Background(lipgloss.Color("#5f5f00")).Foreground(lipgloss.Color("#ffffff"))
 	currentStyle := lipgloss.NewStyle().Background(lipgloss.Color("#af8700")).Foreground(lipgloss.Color("#000000")).Bold(true)
 
-	// Group matches by line for efficient processing
-	// Apply from right to left to preserve column positions
-	lineMatches := make(map[int][]int) // line -> list of match indices
+	// Matches are ordered by line, then column, so each line's spans are
+	// collected in order and painted in one pass.
+	var spans []highlightSpan
 	for i, m := range a.contentSearchMatches {
-		lineMatches[m.line] = append(lineMatches[m.line], i)
-	}
-
-	for lineIdx, matchIdxs := range lineMatches {
-		if lineIdx >= len(out) {
+		if m.line < from || m.line >= to || m.line >= len(out) {
 			continue
 		}
-		// Apply in reverse order (right to left) to preserve positions
-		for i := len(matchIdxs) - 1; i >= 0; i-- {
-			mi := matchIdxs[i]
-			m := a.contentSearchMatches[mi]
-			style := matchStyle
-			if mi == a.contentSearchIdx {
-				style = currentStyle
-			}
-			out[lineIdx] = highlightSpanInLine(out[lineIdx], m.colStart, m.colEnd, style)
+		style := matchStyle
+		if i == a.contentSearchIdx {
+			style = currentStyle
+		}
+		spans = append(spans, highlightSpan{m.colStart, m.colEnd, style})
+		if i+1 == len(a.contentSearchMatches) || a.contentSearchMatches[i+1].line != m.line {
+			out[m.line] = highlightSpans(out[m.line], spans)
+			spans = spans[:0]
 		}
 	}
 	return out
@@ -1034,6 +1103,7 @@ func (a *App) overlayHelp(background string) string {
 		{fmtKeys(km.Reload), "Reload file"},
 		{fmtKeys(km.ThemePicker), "Open theme picker"},
 		{fmtKeys(km.NavBack) + " / " + fmtKeys(km.NavForward), "Navigate back / forward"},
+		{"Mouse drag", "Select content text and copy it"},
 		{fmtKeys(km.Help), "Toggle this help"},
 		{fmtKeys(km.Quit), "Quit"},
 	}

@@ -24,8 +24,15 @@ type UIConfig struct {
 	CompactTree   bool                `toml:"compact_tree"`
 	Opener        string              `toml:"opener"` // command to open URLs, may include arguments (default: xdg-open on Linux, open on macOS)
 	SidebarHidden bool                `toml:"sidebar_hidden"`
+	ContentBorder string              `toml:"content_border"` // ContentBorderAlways or ContentBorderWithSidebar
 	ThemeOverride ThemeOverrideConfig `toml:"theme_override"`
 }
+
+// Values of ui.content_border.
+const (
+	ContentBorderAlways      = "always"       // border the content pane in every layout
+	ContentBorderWithSidebar = "with_sidebar" // border it only while the sidebar is shown
+)
 
 // ThemeOverrideConfig allows overriding individual colors of the active theme.
 // Values should be hex color strings (e.g., "#ff0000").
@@ -208,6 +215,7 @@ func Default() Config {
 			Theme:         "light:OceanLight,dark:OceanDark",
 			CompactTree:   false,
 			SidebarHidden: true,
+			ContentBorder: ContentBorderAlways,
 		},
 		Images: ImageConfig{
 			Enabled: true,
