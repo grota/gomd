@@ -463,3 +463,30 @@ func TestCaptionGlyphWidthsAgree(t *testing.T) {
 		}
 	}
 }
+
+func TestSelectedImageFindsCoveredImage(t *testing.T) {
+	dir := t.TempDir()
+	f, err := os.Create(filepath.Join(dir, "a.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewRGBA(image.Rect(0, 0, 32, 32))); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	md := filepath.Join(dir, "d.md")
+	a := NewApp(parser.ParseMarkdown("before\n\n![pic](a.png)\n\nafter\n"), "d.md", md, config.Default())
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	last := len(a.renderedLines) - 1
+	a.sel = &selection{anchor: textPos{0, 0}, head: textPos{last, 10}}
+	if got := a.selectedImage(); got != filepath.Join(dir, "a.png") {
+		t.Errorf("selectedImage = %q, want a.png", got)
+	}
+	if strings.ContainsRune(a.selectedText(), kitty.Placeholder) {
+		t.Errorf("selected text contains placeholder cells")
+	}
+	a.sel = &selection{anchor: textPos{0, 0}, head: textPos{0, 5}}
+	if got := a.selectedImage(); got != "" {
+		t.Errorf("selection without the image returned %q", got)
+	}
+}

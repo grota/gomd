@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"bytes"
+	"encoding/base64"
 	"os"
 	"strings"
 	"testing"
@@ -534,6 +536,7 @@ func TestMouseDragSelectsAndCopies(t *testing.T) {
 	for _, border := range []string{config.ContentBorderAlways, config.ContentBorderWithSidebar} {
 		cfg := config.Default()
 		cfg.UI.ContentBorder = border
+		cfg.UI.Clipboard = config.ClipboardOSC52 // leave the real clipboard alone
 		a := NewApp(parser.ParseMarkdown("alpha beta\n\ngamma delta\n"), "f.md", "", cfg)
 		a.Update(tea.WindowSizeMsg{Width: 80, Height: 12})
 		a.View()
@@ -557,11 +560,41 @@ func TestMouseDragSelectsAndCopies(t *testing.T) {
 		if got := a.selectedText(); got != "beta\n\ngamma" {
 			t.Errorf("%s: selected %q, want %q", border, got, "beta\n\ngamma")
 		}
-		if cmd == nil || !strings.Contains(a.statusMsg, "Copied") {
-			t.Errorf("%s: no clipboard command (status %q)", border, a.statusMsg)
+		if cmd == nil {
+			t.Fatalf("%s: no clipboard command", border)
+		}
+		if _, cmd = a.Update(cmd()); cmd == nil || a.statusMsg != "Copied 11 characters" {
+			t.Errorf("%s: no OSC 52 copy (status %q)", border, a.statusMsg)
 		}
 		if !strings.Contains(a.View().Content, "beta") {
 			t.Errorf("%s: selection highlight lost the text", border)
+		}
+	}
+}
+
+func TestOSC5522Write(t *testing.T) {
+	img := bytes.Repeat([]byte{7}, 5000) // two chunks
+	seq := osc5522Write("hi", img)
+	b64 := base64.StdEncoding.EncodeToString
+	text := "\x1b]5522;type=wdata:mime=" + b64([]byte("text/plain")) + ";" + b64([]byte("hi")) + "\x1b\\"
+	if inTmux() {
+		t.Skip("packets are wrapped for tmux passthrough")
+	}
+	if !strings.HasPrefix(seq, "\x1b]5522;type=write\x1b\\"+text) || !strings.HasSuffix(seq, "\x1b]5522;type=wdata\x1b\\") {
+		t.Errorf("bad framing: %q", seq[:min(len(seq), 120)])
+	}
+	if n := strings.Count(seq, "mime="+b64([]byte("image/png"))); n != 2 {
+		t.Errorf("image sent in %d chunks, want 2", n)
+	}
+}
+
+func TestTermHasOSC5522(t *testing.T) {
+	for s, want := range map[string]bool{
+		"ghostty 1.4.0": true, "ghostty 1.3.1-arch2": false, "ghostty 2.0.0": true,
+		"kitty(0.45.0)": true, "xterm 390": false, " ": false,
+	} {
+		if got := termHasOSC5522(s); got != want {
+			t.Errorf("termHasOSC5522(%q) = %v, want %v", s, got, want)
 		}
 	}
 }

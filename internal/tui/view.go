@@ -784,8 +784,12 @@ func (a *App) applyContentSearchHighlights(lines []string, from, to int) []strin
 	out := make([]string, len(lines))
 	copy(out, lines)
 
-	matchStyle := lipgloss.NewStyle().Background(lipgloss.Color("#5f5f00")).Foreground(lipgloss.Color("#ffffff"))
-	currentStyle := lipgloss.NewStyle().Background(lipgloss.Color("#af8700")).Foreground(lipgloss.Color("#000000")).Bold(true)
+	// The current match is filled with the theme's highlight colour, the
+	// others with a dimmer blend of it into the background.
+	t := a.theme
+	dim := mix(t.Highlight, t.Background, 0.6)
+	matchStyle := lipgloss.NewStyle().Background(dim).Foreground(t.textOn(dim))
+	currentStyle := lipgloss.NewStyle().Background(t.Highlight).Foreground(t.textOn(t.Highlight)).Bold(true)
 
 	// Matches are ordered by line, then column, so each line's spans are
 	// collected in order and painted in one pass.

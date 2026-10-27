@@ -1,7 +1,8 @@
 package tui
 
 import (
-	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -11,7 +12,7 @@ import (
 )
 
 // Mouse selection in the content pane: drag to select, release to copy the
-// plain text to the clipboard with OSC 52 (tea.SetClipboard).
+// plain text, and the first image it covers, to the clipboard (clipboard.go).
 
 // textPos is a cell of the rendered content: a line of renderedLines and a
 // display column within it.
@@ -98,9 +99,33 @@ func (a *App) handleMouseRelease(msg tea.MouseReleaseMsg) (tea.Model, tea.Cmd) {
 		a.sel = nil // a plain click
 		return a, nil
 	}
-	text := a.selectedText()
-	a.statusMsg = fmt.Sprintf("Copied %d characters", len([]rune(text)))
-	return a, tea.SetClipboard(text)
+	a.statusMsg = "Copying…"
+	return a, copyCmd(a.cfg.UI.Clipboard, a.selectedText(), a.selectedImage())
+}
+
+// placeholderIDRe matches the colour that carries a placeholder row's image id.
+var placeholderIDRe = regexp.MustCompile(`\x1b\[38;2;(\d+);(\d+);(\d+)m` + string(kitty.Placeholder))
+
+// selectedImage returns the file of the first image the selection covers, or
+// "" when it covers none.
+func (a *App) selectedImage() string {
+	from, to := a.sel.ordered()
+	for i := from.line; i <= to.line && i < len(a.renderedLines); i++ {
+		m := placeholderIDRe.FindStringSubmatch(a.renderedLines[i])
+		if m == nil {
+			continue
+		}
+		r, _ := strconv.Atoi(m[1])
+		g, _ := strconv.Atoi(m[2])
+		b, _ := strconv.Atoi(m[3])
+		id := uint32(r<<16 | g<<8 | b)
+		for _, k := range a.images {
+			if k.id == id {
+				return k.path
+			}
+		}
+	}
+	return ""
 }
 
 // selectedText returns the selection as plain text, without image rows and

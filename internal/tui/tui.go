@@ -402,6 +402,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleMouseMotion(msg)
 	case tea.MouseReleaseMsg:
 		return a.handleMouseRelease(msg)
+	case clipboardDoneMsg:
+		return a.handleClipboardDone(msg)
 	}
 
 	return a, nil

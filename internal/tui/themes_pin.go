@@ -4,6 +4,6 @@ package tui
 
 // Pinned mbadolato/iTerm2-Color-Schemes release providing the Ghostty themes.
 const (
-	remoteThemesTag    = "release-20261005-151109-31756e7"
-	remoteThemesSHA256 = "574403c123bdd892699f7894bf5f85f81ce3ca0d9af18ce9885041a8b9d1e3f0"
+	remoteThemesTag    = "release-20261026-153024-27cbbb5"
+	remoteThemesSHA256 = "38bb80d98456677bad9a78a76e83a1e4851e88900aec93af74c6251ca32b78a0"
 )

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -89,11 +90,8 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	if flagTheme != "" {
 		cfg.UI.Theme = flagTheme
 	}
-	if b := cfg.UI.ContentBorder; b != config.ContentBorderAlways && b != config.ContentBorderWithSidebar {
-		fmt.Fprintf(os.Stderr, "Warning: ui.content_border %q is not %q or %q, using %q\n",
-			b, config.ContentBorderAlways, config.ContentBorderWithSidebar, config.ContentBorderAlways)
-		cfg.UI.ContentBorder = config.ContentBorderAlways
-	}
+	checkChoice("ui.content_border", &cfg.UI.ContentBorder, config.ContentBorderAlways, config.ContentBorderWithSidebar)
+	checkChoice("ui.clipboard", &cfg.UI.Clipboard, config.ClipboardAuto, config.ClipboardOSC52)
 	cfg.Images.Enabled = cfg.Images.Enabled && !flagNoImages && tui.IsKittySupported()
 
 	doc := parser.ParseMarkdown(inp.Content)
@@ -120,6 +118,16 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		filename = "stdin"
 	}
 	return tui.Run(doc, filename, filePath, cfg, dark)
+}
+
+// checkChoice resets *v to the first choice, with a warning, when it is none
+// of them.
+func checkChoice(key string, v *string, choices ...string) {
+	if slices.Contains(choices, *v) {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "Warning: %s %q is not one of %q, using %q\n", key, *v, choices, choices[0])
+	*v = choices[0]
 }
 
 // prepareThemes rejects unknown theme names, downloads the pinned Ghostty
