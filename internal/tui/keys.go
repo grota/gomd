@@ -24,7 +24,7 @@ func (a *App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			a.statusMsg = "No markdown to copy"
 			return a, nil
 		}
-		return a, copyCmd(text, fmt.Sprintf("Copied %d characters of markdown", len([]rune(text))))
+		return a, copyCmd(text, fmt.Sprintf("Copied %d characters of markdown", len([]rune(text))), "", "")
 	}
 	a.sel = nil
 
@@ -685,7 +685,7 @@ func (a *App) handleNodeSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if a.nodeSubMode != nodeAll && a.nodeSubMode != nodeLink {
 				a.mode = ModeNormal
 			}
-			return a, copyCmd(node.content, status)
+			return a, copyCmd(node.content, status, "", "")
 		}
 	case config.KeyMatches(k, km.NodeOpen) && (a.nodeSubMode == nodeLink || (a.nodeSubMode == nodeAll && len(filtered) > 0 && filtered[a.nodeSelIdx].kind == nodeLink)):
 		if len(filtered) > 0 {

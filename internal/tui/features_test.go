@@ -500,7 +500,7 @@ func TestCopyGoesThroughTmux(t *testing.T) {
 	t.Setenv("TMUX", "test")
 
 	a := NewApp(parser.ParseMarkdown("text\n"), "f.md", "", config.Default())
-	if _, cmd := a.Update(copyCmd("hi", "done")()); cmd != nil {
+	if _, cmd := a.Update(copyCmd("hi", "done", "", "")()); cmd != nil {
 		t.Errorf("sent OSC 52 although tmux took the copy")
 	}
 	if copied != "hi" || a.statusMsg != "done" {

@@ -130,12 +130,16 @@ Dragging over the content copies the selected text to the system clipboard, as r
 
 The selection snaps to whole bold, italic and strikethrough spans, inline code, links, images, tables and HTML blocks, so both copies cover what is highlighted. The markdown copy also takes a line's prefix (`- `, `> `, `## `) when the selection starts before the line's text, and a code block's fences when it covers the whole block.
 
-Every copy is plain text sent through OSC 52, so it also works over SSH. Inside tmux gomd hands it to `tmux load-buffer -w`, which forwards it to the terminal when `set-clipboard` is `on` or `external` and the terminal has the `clipboard` feature:
+Every copy carries plain text sent through OSC 52, so it also works over SSH. Inside tmux gomd hands it to `tmux load-buffer -w`, which forwards it to the terminal when `set-clipboard` is `on` or `external` and the terminal has the `clipboard` feature:
 
 ```tmux
 set -s set-clipboard external
 set -as terminal-features ',xterm*:clipboard'
 ```
+
+On a terminal with the Kitty clipboard protocol (OSC 5522: kitty, Ghostty 1.4+), the drag copy also carries the selection as HTML, with local images up to 5 MB inlined, so applications that paste rich text (office suites, mail clients) get the formatting and the images, while terminals and editors still get the plain text. gomd detects the protocol from the terminal's name and version (`TERM_PROGRAM`, `TERM_PROGRAM_VERSION`, `KITTY_WINDOW_ID`, or tmux's `client_termtype`). Inside tmux it goes through passthrough, so it needs `allow-passthrough on`, as images do.
+
+**Untested corner case, OSC 5522 inside tmux:** the terminal answers each OSC 5522 copy with a status reply. Outside tmux gomd ignores it, but tmux may pass it on as typed characters, and gomd acts on keys such as `q` (quit) or `e` (edit). If gomd reacts on its own right after a drag copy, please open an issue.
 
 `Ctrl+I` is indistinguishable from `Tab` on terminals without the Kitty keyboard protocol, so there it toggles focus instead of navigating forward. Rebind `nav_forward` if that matters to you.
 

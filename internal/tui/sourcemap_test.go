@@ -1,6 +1,11 @@
 package tui
 
 import (
+	"encoding/base64"
+	"image"
+	"image/png"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -99,5 +104,72 @@ func TestKeyCopiesSelectionMarkdown(t *testing.T) {
 	}
 	if a.sel == nil {
 		t.Errorf("the selection was cleared")
+	}
+}
+
+func TestReleaseCopiesHTMLWithOSC5522(t *testing.T) {
+	defer func(f func() bool) { osc5522Supported = f }(osc5522Supported)
+	osc5522Supported = func() bool { return true }
+	t.Setenv("TMUX", "")
+	dir := t.TempDir()
+	f, err := os.Create(filepath.Join(dir, "a.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewRGBA(image.Rect(0, 0, 8, 8))); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	md := "Some **bold** text\n\n![pic](a.png)\n\nafter\n"
+	a := NewApp(parser.ParseMarkdown(md), "d.md", filepath.Join(dir, "d.md"), config.Default())
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	a.View()
+	from, to := cellOf(t, a, "bold", 1), cellOf(t, a, "after", 4)
+	a.sel = &selection{anchor: from, head: to, dragging: true}
+	x0, y0 := a.contentOrigin()
+	_, cmd := a.Update(tea.MouseReleaseMsg{X: x0 + to.col, Y: y0 + to.line - a.contentOffset, Button: tea.MouseLeft})
+	msg, ok := cmd().(clipboardDoneMsg)
+	if !ok || msg.raw == "" {
+		t.Fatalf("no OSC 5522 write: %+v", msg)
+	}
+	var html string
+	b64 := base64.StdEncoding
+	htmlMime := "mime=" + b64.EncodeToString([]byte("text/html")) + ";"
+	for _, part := range strings.Split(msg.raw, "\x1b\\") {
+		if i := strings.Index(part, htmlMime); i >= 0 {
+			chunk, _ := b64.DecodeString(part[i+len(htmlMime):])
+			html += string(chunk)
+		}
+	}
+	for _, want := range []string{"<strong>bold</strong>", `<img src="data:image/png;base64,`, `alt="pic"`, "after"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("HTML %q lacks %q", html, want)
+		}
+	}
+}
+
+func TestOSC5522Write(t *testing.T) {
+	t.Setenv("TMUX", "")
+	html := strings.Repeat("x", 5000) // two chunks
+	seq := osc5522Write("hi", html)
+	b64 := base64.StdEncoding.EncodeToString
+	text := "\x1b]5522;type=wdata:mime=" + b64([]byte("text/plain")) + ";" + b64([]byte("hi")) + "\x1b\\"
+	if !strings.HasPrefix(seq, "\x1b]5522;type=write\x1b\\"+text) || !strings.HasSuffix(seq, "\x1b]5522;type=wdata\x1b\\") {
+		t.Errorf("bad framing: %q", seq[:min(len(seq), 120)])
+	}
+	if n := strings.Count(seq, "mime="+b64([]byte("text/html"))); n != 2 {
+		t.Errorf("HTML sent in %d chunks, want 2", n)
+	}
+}
+
+func TestTermHasOSC5522(t *testing.T) {
+	for s, want := range map[string]bool{
+		"ghostty 1.4.0": true, "ghostty 1.3.1-arch2": false, "ghostty 2.0.0": true,
+		"kitty(0.45.0)": true, "xterm 390": false, " ": false,
+	} {
+		if got := termHasOSC5522(s); got != want {
+			t.Errorf("termHasOSC5522(%q) = %v, want %v", s, got, want)
+		}
 	}
 }
