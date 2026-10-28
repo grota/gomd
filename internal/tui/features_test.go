@@ -464,7 +464,7 @@ func TestCaptionGlyphWidthsAgree(t *testing.T) {
 	}
 }
 
-func TestSelectedImageFindsCoveredImage(t *testing.T) {
+func TestSelectionCopiesImageAsMarkdown(t *testing.T) {
 	dir := t.TempDir()
 	f, err := os.Create(filepath.Join(dir, "a.png"))
 	if err != nil {
@@ -475,18 +475,35 @@ func TestSelectedImageFindsCoveredImage(t *testing.T) {
 	}
 	f.Close()
 	md := filepath.Join(dir, "d.md")
-	a := NewApp(parser.ParseMarkdown("before\n\n![pic](a.png)\n\nafter\n"), "d.md", md, config.Default())
+	a := NewApp(parser.ParseMarkdown("before\n\n![pic](./a.png)\n\n![](a.png)\n\nafter\n"), "d.md", md, config.Default())
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 	last := len(a.renderedLines) - 1
 	a.sel = &selection{anchor: textPos{0, 0}, head: textPos{last, 10}}
-	if got := a.selectedImage(); got != filepath.Join(dir, "a.png") {
-		t.Errorf("selectedImage = %q, want a.png", got)
-	}
-	if strings.ContainsRune(a.selectedText(), kitty.Placeholder) {
+	got := a.selectedText()
+	if strings.ContainsRune(got, kitty.Placeholder) {
 		t.Errorf("selected text contains placeholder cells")
 	}
-	a.sel = &selection{anchor: textPos{0, 0}, head: textPos{0, 5}}
-	if got := a.selectedImage(); got != "" {
-		t.Errorf("selection without the image returned %q", got)
+	for _, want := range []string{"before", "![pic](./a.png)", "![](a.png)", "after"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("selected text %q lacks %q", got, want)
+		}
+	}
+	if strings.Contains(got, "📷") {
+		t.Errorf("selected text %q kept a caption", got)
+	}
+}
+
+func TestCopyGoesThroughTmux(t *testing.T) {
+	var copied string
+	defer func(f func(string) error) { tmuxLoadBuffer = f }(tmuxLoadBuffer)
+	tmuxLoadBuffer = func(s string) error { copied = s; return nil }
+	t.Setenv("TMUX", "test")
+
+	a := NewApp(parser.ParseMarkdown("text\n"), "f.md", "", config.Default())
+	if _, cmd := a.Update(copyCmd("hi", "done")()); cmd != nil {
+		t.Errorf("sent OSC 52 although tmux took the copy")
+	}
+	if copied != "hi" || a.statusMsg != "done" {
+		t.Errorf("copied %q with status %q", copied, a.statusMsg)
 	}
 }

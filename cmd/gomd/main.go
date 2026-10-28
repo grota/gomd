@@ -91,7 +91,6 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		cfg.UI.Theme = flagTheme
 	}
 	checkChoice("ui.content_border", &cfg.UI.ContentBorder, config.ContentBorderAlways, config.ContentBorderWithSidebar)
-	checkChoice("ui.clipboard", &cfg.UI.Clipboard, config.ClipboardAuto, config.ClipboardOSC52)
 	cfg.Images.Enabled = cfg.Images.Enabled && !flagNoImages && tui.IsKittySupported()
 
 	doc := parser.ParseMarkdown(inp.Content)

@@ -94,7 +94,6 @@ func wrapTmuxPassthrough(seq string) string {
 // tmux scrolls them like any other character.
 type kittyImage struct {
 	id         uint32 // 24-bit, encoded in the placeholders' foreground colour
-	path       string // source file, for copying the image
 	cols, rows int
 	upload     string // escape sequences that transmit the image; send once
 }
@@ -150,7 +149,7 @@ func loadKittyImage(path string, maxCols int) (kittyImage, error) {
 		}
 		sb.WriteString(seq)
 	}
-	return kittyImage{id: id, path: path, cols: cols, rows: rows, upload: sb.String()}, nil
+	return kittyImage{id: id, cols: cols, rows: rows, upload: sb.String()}, nil
 }
 
 // placeholderRows returns the text rows that display the image.

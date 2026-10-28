@@ -1,18 +1,21 @@
 package tui
 
 import (
-	"regexp"
-	"strconv"
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/ansi/kitty"
+
+	"github.com/grota/gomd/internal/parser"
 )
 
 // Mouse selection in the content pane: drag to select, release to copy the
-// plain text, and the first image it covers, to the clipboard (clipboard.go).
+// plain text to the clipboard (clipboard.go). A covered image caption is
+// copied as the image's markdown. The selection snaps to whole elements, and
+// the markdown key copies its source (sourcemap.go).
 
 // textPos is a cell of the rendered content: a line of renderedLines and a
 // display column within it.
@@ -57,10 +60,38 @@ func (a *App) contentPosAt(mx, my int) textPos {
 	return textPos{a.contentOffset + row, col}
 }
 
+// selRange returns the ends of the selection, grown to whole elements (see
+// sourceMap.snap) so that every copy covers what is highlighted.
+func (a *App) selRange() (from, to textPos) {
+	from, to = a.sel.ordered()
+	if f, t, _, _, ok := a.sourceMap().snap(from, to); ok {
+		return f, t
+	}
+	return from, to
+}
+
+// selectedMarkdown returns the markdown source of the selection, or "" when
+// it covers no source text.
+func (a *App) selectedMarkdown() string {
+	m := a.sourceMap()
+	f, t, c0, c1, ok := m.snap(a.sel.ordered())
+	if !ok {
+		return ""
+	}
+	return m.markdown(f, t, c0, c1)
+}
+
+func (a *App) sourceMap() *sourceMap {
+	if a.srcMap == nil {
+		a.srcMap = buildSourceMap(strings.Join(a.sectionLines, "\n"), a.renderedLines)
+	}
+	return a.srcMap
+}
+
 // selectionCols returns the selected column range [left, right) of line i,
 // where w is the width of a full line.
 func (a *App) selectionCols(i, w int) (left, right int) {
-	from, to := a.sel.ordered()
+	from, to := a.selRange()
 	left, right = 0, w
 	if i == from.line {
 		left = from.col
@@ -99,39 +130,19 @@ func (a *App) handleMouseRelease(msg tea.MouseReleaseMsg) (tea.Model, tea.Cmd) {
 		a.sel = nil // a plain click
 		return a, nil
 	}
-	a.statusMsg = "Copying…"
-	return a, copyCmd(a.cfg.UI.Clipboard, a.selectedText(), a.selectedImage())
-}
-
-// placeholderIDRe matches the colour that carries a placeholder row's image id.
-var placeholderIDRe = regexp.MustCompile(`\x1b\[38;2;(\d+);(\d+);(\d+)m` + string(kitty.Placeholder))
-
-// selectedImage returns the file of the first image the selection covers, or
-// "" when it covers none.
-func (a *App) selectedImage() string {
-	from, to := a.sel.ordered()
-	for i := from.line; i <= to.line && i < len(a.renderedLines); i++ {
-		m := placeholderIDRe.FindStringSubmatch(a.renderedLines[i])
-		if m == nil {
-			continue
-		}
-		r, _ := strconv.Atoi(m[1])
-		g, _ := strconv.Atoi(m[2])
-		b, _ := strconv.Atoi(m[3])
-		id := uint32(r<<16 | g<<8 | b)
-		for _, k := range a.images {
-			if k.id == id {
-				return k.path
-			}
-		}
+	text := a.selectedText()
+	if text == "" {
+		a.statusMsg = "Nothing to copy"
+		return a, nil
 	}
-	return ""
+	return a, copyCmd(text, fmt.Sprintf("Copied %d characters", len([]rune(text))))
 }
 
 // selectedText returns the selection as plain text, without image rows and
-// without the left margin all its lines share.
+// without the left margin all its lines share. Whole image captions
+// ("alt 📷 /path") become the image's markdown.
 func (a *App) selectedText() string {
-	from, to := a.sel.ordered()
+	from, to := a.selRange()
 	var lines []string
 	partial := false // lines[0] starts mid-line, so its margin is already cut
 	for i := from.line; i <= to.line && i < len(a.renderedLines); i++ {
@@ -158,13 +169,37 @@ func (a *App) selectedText() string {
 		}
 		lines[i] = l[min(max(margin, 0), len(l)):]
 	}
+	return a.captionsToMarkdown(strings.Join(lines, "\n"))
+}
+
+// captionsToMarkdown replaces the whole image captions in text with the
+// images' markdown, "![alt](src)" as written in the source. A caption without
+// alt text is the bare path, so it is replaced only when it fills a line.
+func (a *App) captionsToMarkdown(text string) string {
+	images := parser.ExtractImages(PreProcessMarkdown(strings.Join(a.sectionLines, "\n")))
+	if len(images) == 0 {
+		return text
+	}
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		for _, im := range images {
+			md := "![" + im.Alt + "](" + im.Src + ")"
+			caption := imageCaption(im.Alt, im.Src)
+			if im.Alt != "" {
+				l = strings.ReplaceAll(l, caption, md)
+			} else if t := strings.TrimLeft(l, " "); t == caption {
+				l = l[:len(l)-len(t)] + md
+			}
+		}
+		lines[i] = l
+	}
 	return strings.Join(lines, "\n")
 }
 
 // applySelectionHighlight paints the selection on lines [from, to), the ones
 // on screen. Image rows are left alone: their colour carries the image id.
 func (a *App) applySelectionHighlight(lines []string, from, to, w int) []string {
-	sf, st := a.sel.ordered()
+	sf, st := a.selRange()
 	out := make([]string, len(lines))
 	copy(out, lines)
 	style := lipgloss.NewStyle().Background(a.theme.Selected).Foreground(a.theme.textOn(a.theme.Selected))

@@ -78,20 +78,75 @@ var aTagRe = regexp.MustCompile(`(?i)<a\s[^>]*href\s*=\s*["']([^"']*)["'][^>]*>(
 // equivalents so that glamour renders them properly. This must be called
 // before passing content to glamour.
 func PreProcessMarkdown(md string) string {
+	out, _, _ := preProcess(md)
+	return out
+}
+
+// preProcess is PreProcessMarkdown that also returns its two passes of
+// rewrites, to map offsets in the result back to md: imgs then anchors.
+func preProcess(md string) (string, rewrites, rewrites) {
 	// Replace <img ... src="url" alt="text" ... /> with ![text](url)
-	md = imgTagRe.ReplaceAllStringFunc(md, func(tag string) string {
+	md, imgs := replaceAll(imgTagRe, md, func(m []int) (string, bool) {
+		tag := md[m[0]:m[1]]
 		src := extractHTMLAttr(tag, "src")
 		if src == "" {
-			return tag
+			return "", false
 		}
-		alt := extractHTMLAttr(tag, "alt")
-		return "![" + alt + "](" + src + ")"
+		return "![" + extractHTMLAttr(tag, "alt") + "](" + src + ")", true
 	})
 
 	// Replace <a href="url">text</a> with [text](url)
-	md = aTagRe.ReplaceAllString(md, "[$2]($1)")
+	md, anchors := replaceAll(aTagRe, md, func(m []int) (string, bool) {
+		return "[" + md[m[4]:m[5]] + "](" + md[m[2]:m[3]] + ")", true
+	})
+	return md, imgs, anchors
+}
 
-	return md
+// A rewrite replaced bytes [in0, in1) of a text with [out0, out1) of the result.
+type rewrite struct{ in0, in1, out0, out1 int }
+
+type rewrites []rewrite
+
+// back maps offset off of the result to the text before the rewrites. An
+// offset inside a rewrite maps to its start, or to its end when end is set.
+func (rs rewrites) back(off int, end bool) int {
+	delta := 0
+	for _, r := range rs {
+		switch {
+		case off < r.out0 || off == r.out0 && end:
+			return off + delta
+		case off < r.out1 || off == r.out1 && end:
+			if end {
+				return r.in1
+			}
+			return r.in0
+		}
+		delta = r.in1 - r.out1
+	}
+	return off + delta
+}
+
+// replaceAll replaces the matches of re in s for which repl returns true.
+func replaceAll(re *regexp.Regexp, s string, repl func(m []int) (string, bool)) (string, rewrites) {
+	var sb strings.Builder
+	var rs rewrites
+	last := 0
+	for _, m := range re.FindAllStringSubmatchIndex(s, -1) {
+		r, ok := repl(m)
+		if !ok {
+			continue
+		}
+		sb.WriteString(s[last:m[0]])
+		out0 := sb.Len()
+		sb.WriteString(r)
+		rs = append(rs, rewrite{m[0], m[1], out0, sb.Len()})
+		last = m[1]
+	}
+	if rs == nil {
+		return s, nil
+	}
+	sb.WriteString(s[last:])
+	return sb.String(), rs
 }
 
 // PostProcessLinks inserts a 🔗 glyph between link text and URL in

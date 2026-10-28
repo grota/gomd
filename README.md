@@ -1,6 +1,7 @@
 <div align="center">
   <h1>gomd</h1>
 </div>
+
 A terminal markdown viewer with interactive element selection and vim-style navigation.
 
 <br>
@@ -123,24 +124,18 @@ Images are rendered as `alt 📷 path` and links as `text 🔗 url`. HTML `<img>
 | Mouse click         | Select sidebar heading                      |
 | Scroll wheel        | Scroll content                              |
 | Mouse drag          | Select content text and copy it (see below) |
+| `y` after a drag    | Copy the selection's markdown source        |
 
-Dragging over the content copies the selected text, and the first image it covers, to the system clipboard. Hold `Shift` while dragging to use the terminal's own selection instead.
+Dragging over the content copies the selected text to the system clipboard, as rendered. A selected image caption is copied as the image's markdown, `![alt](path)`. While the selection is shown, `y` copies its markdown source instead. Hold `Shift` while dragging to use the terminal's own selection.
 
-With `ui.clipboard = "auto"` (the default) gomd uses the first of these that works:
+The selection snaps to whole bold, italic and strikethrough spans, inline code, links, images, tables and HTML blocks, so both copies cover what is highlighted. The markdown copy also takes a line's prefix (`- `, `> `, `## `) when the selection starts before the line's text, and a code block's fences when it covers the whole block.
 
-1. **Kitty clipboard protocol (OSC 5522)**, on Kitty and Ghostty 1.4+: text and image go into one clipboard entry, and the application you paste into picks the format (a chat app takes the image, a terminal the text). Works over SSH. Inside tmux it goes through passthrough, so it needs `allow-passthrough on` (as images do) but not `set-clipboard`.
-2. **A local clipboard tool**, when gomd does not run over SSH: `wl-copy` (Wayland), `xclip` (X11), or `pbcopy` and `osascript` (macOS). These hold one format, so when the selection covers an image, only the image is copied. This route bypasses tmux too.
-3. **OSC 52**: text only. Inside tmux it silently does nothing unless tmux forwards it:
+Every copy is plain text sent through OSC 52, so it also works over SSH. Inside tmux gomd hands it to `tmux load-buffer -w`, which forwards it to the terminal when `set-clipboard` is `on` or `external` and the terminal has the `clipboard` feature:
 
-   ```tmux
-   set -s set-clipboard on
-   ```
-
-With `ui.clipboard = "osc52"` gomd always copies text only, through OSC 52.
-
-**Untested corner case, OSC 5522 inside tmux:** the terminal answers each OSC 5522 copy with a status reply. Outside tmux gomd ignores it, but tmux may pass it on as typed characters, and gomd acts on keys such as `q` (quit) or `e` (edit). If gomd reacts on its own right after a copy, set `ui.clipboard = "osc52"`.
-
-gomd detects OSC 5522 from the terminal's name and version (`TERM_PROGRAM`, `TERM_PROGRAM_VERSION`, `KITTY_WINDOW_ID`, or tmux's `client_termtype`). Non-PNG images are converted to PNG.
+```tmux
+set -s set-clipboard external
+set -as terminal-features ',xterm*:clipboard'
+```
 
 `Ctrl+I` is indistinguishable from `Tab` on terminals without the Kitty keyboard protocol, so there it toggles focus instead of navigating forward. Rebind `nav_forward` if that matters to you.
 
@@ -186,7 +181,6 @@ theme = "light:OceanLight,dark:OceanDark"   # or a single name; see Themes
 compact_tree = false      # compact --tree output
 sidebar_hidden = true     # start with the sidebar hidden
 content_border = "always" # or "with_sidebar": no content border while the sidebar is hidden
-clipboard = "auto"        # or "osc52": how mouse selections are copied (see Interactive TUI)
 opener = "xdg-open"       # command to open URLs, may include arguments (macOS default: "open")
 
 [ui.theme_override]
@@ -218,6 +212,7 @@ toggle_focus = "tab"
 toggle_sidebar = "w"
 reload = "r"
 edit = "e"
+copy_markdown = "y"       # copy the mouse selection's markdown source
 nav_back = "ctrl+o"
 nav_forward = "ctrl+i"
 

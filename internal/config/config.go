@@ -25,7 +25,6 @@ type UIConfig struct {
 	Opener        string              `toml:"opener"` // command to open URLs, may include arguments (default: xdg-open on Linux, open on macOS)
 	SidebarHidden bool                `toml:"sidebar_hidden"`
 	ContentBorder string              `toml:"content_border"` // ContentBorderAlways or ContentBorderWithSidebar
-	Clipboard     string              `toml:"clipboard"`      // ClipboardAuto or ClipboardOSC52
 	ThemeOverride ThemeOverrideConfig `toml:"theme_override"`
 }
 
@@ -33,12 +32,6 @@ type UIConfig struct {
 const (
 	ContentBorderAlways      = "always"       // border the content pane in every layout
 	ContentBorderWithSidebar = "with_sidebar" // border it only while the sidebar is shown
-)
-
-// Values of ui.clipboard: how a mouse selection is copied.
-const (
-	ClipboardAuto  = "auto"  // OSC 5522 (text and images), else a local tool, else OSC 52
-	ClipboardOSC52 = "osc52" // text only, through OSC 52
 )
 
 // ThemeOverrideConfig allows overriding individual colors of the active theme.
@@ -76,6 +69,7 @@ type KeysConfig struct {
 	ToggleSidebar string `toml:"toggle_sidebar"`
 	Reload        string `toml:"reload"`
 	Edit          string `toml:"edit"`
+	CopyMarkdown  string `toml:"copy_markdown"` // copy the mouse selection's markdown source
 
 	// Sidebar
 	SidebarDown   string `toml:"sidebar_down"`
@@ -132,6 +126,7 @@ func DefaultKeys() KeysConfig {
 		ToggleSidebar:    "w",
 		Reload:           "r",
 		Edit:             "e",
+		CopyMarkdown:     "y",
 		SidebarDown:      "j,down",
 		SidebarUp:        "k,up",
 		SidebarTop:       "gg",
@@ -223,7 +218,6 @@ func Default() Config {
 			CompactTree:   false,
 			SidebarHidden: true,
 			ContentBorder: ContentBorderAlways,
-			Clipboard:     ClipboardAuto,
 		},
 		Images: ImageConfig{
 			Enabled: true,

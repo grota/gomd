@@ -173,6 +173,7 @@ type App struct {
 	// Status
 	statusMsg string
 	sel       *selection // mouse selection in the content pane, nil when none
+	srcMap    *sourceMap // renderedLines to source, built on first use
 }
 
 // ─────────────────────────────────────────────

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/grota/gomd/internal/config"
@@ -19,6 +18,14 @@ import (
 
 func (a *App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
+	if a.sel != nil && !a.sel.dragging && a.mode == ModeNormal && config.KeyMatches(k, a.cfg.Keys.CopyMarkdown) {
+		text := a.selectedMarkdown()
+		if text == "" {
+			a.statusMsg = "No markdown to copy"
+			return a, nil
+		}
+		return a, copyCmd(text, fmt.Sprintf("Copied %d characters of markdown", len([]rune(text))))
+	}
 	a.sel = nil
 
 	// Global keys that work in any mode
@@ -667,22 +674,18 @@ func (a *App) handleNodeSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case config.KeyMatches(k, km.NodeCopy):
 		if len(filtered) > 0 {
 			node := filtered[a.nodeSelIdx]
-			if err := clipboard.WriteAll(node.content); err != nil {
-				a.statusMsg = "Clipboard error: " + err.Error()
-			} else {
-				lang := node.lang
-				if lang == "" {
-					lang = "span"
-				}
-				if node.kind == nodeLink {
-					a.statusMsg = fmt.Sprintf("✓ Copied link: %s", node.content)
-				} else {
-					a.statusMsg = fmt.Sprintf("✓ Copied %s block (%d lines)", lang, strings.Count(node.content, "\n")+1)
-				}
+			lang := node.lang
+			if lang == "" {
+				lang = "span"
+			}
+			status := fmt.Sprintf("✓ Copied %s block (%d lines)", lang, strings.Count(node.content, "\n")+1)
+			if node.kind == nodeLink {
+				status = fmt.Sprintf("✓ Copied link: %s", node.content)
 			}
 			if a.nodeSubMode != nodeAll && a.nodeSubMode != nodeLink {
 				a.mode = ModeNormal
 			}
+			return a, copyCmd(node.content, status)
 		}
 	case config.KeyMatches(k, km.NodeOpen) && (a.nodeSubMode == nodeLink || (a.nodeSubMode == nodeAll && len(filtered) > 0 && filtered[a.nodeSelIdx].kind == nodeLink)):
 		if len(filtered) > 0 {
@@ -817,6 +820,7 @@ func (a *App) ensureRenderedLines() {
 	a.renderedLinesIdx = a.selectedIdx
 	a.renderedLinesWidth = w
 	a.sel = nil // its positions index the old lines
+	a.srcMap = nil
 	a.nodeRenderInfo = mapNodesToRenderedLines(a.codeNodes, a.renderedLines)
 	// Match positions index into renderedLines, so recompute them for the new render.
 	a.findContentSearchMatches()

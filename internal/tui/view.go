@@ -1108,6 +1108,7 @@ func (a *App) overlayHelp(background string) string {
 		{fmtKeys(km.ThemePicker), "Open theme picker"},
 		{fmtKeys(km.NavBack) + " / " + fmtKeys(km.NavForward), "Navigate back / forward"},
 		{"Mouse drag", "Select content text and copy it"},
+		{fmtKeys(km.CopyMarkdown), "Copy the selection's markdown source"},
 		{fmtKeys(km.Help), "Toggle this help"},
 		{fmtKeys(km.Quit), "Quit"},
 	}
