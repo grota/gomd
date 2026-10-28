@@ -560,7 +560,7 @@ func TestMouseDragSelectsAndCopies(t *testing.T) {
 		if cmd == nil {
 			t.Fatalf("%s: no clipboard command", border)
 		}
-		if _, cmd = a.Update(cmd()); a.statusMsg != "Copied 11 characters" {
+		if _, cmd = a.Update(cmd()); !strings.HasPrefix(a.statusMsg, "Copied the selection via ") {
 			t.Errorf("%s: no OSC 52 copy (status %q)", border, a.statusMsg)
 		}
 		if !strings.Contains(a.View().Content, "beta") {

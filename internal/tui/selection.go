@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -135,7 +134,7 @@ func (a *App) handleMouseRelease(msg tea.MouseReleaseMsg) (tea.Model, tea.Cmd) {
 		a.statusMsg = "Nothing to copy"
 		return a, nil
 	}
-	return a, copyCmd(text, fmt.Sprintf("Copied %d characters", len([]rune(text))), a.selectedMarkdown(), a.filepath)
+	return a, copyCmd(text, "the selection", a.selectedMarkdown(), a.filepath)
 }
 
 // selectedText returns the selection as plain text, without image rows and

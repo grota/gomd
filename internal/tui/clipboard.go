@@ -42,18 +42,20 @@ var tmuxLoadBuffer = func(text string) error {
 	return cmd.Run()
 }
 
-// copyCmd copies text to the clipboard and reports status when done. When
-// md is set and the terminal supports OSC 5522, md rendered as HTML, with
-// local images inlined, is copied too; mdPath resolves those images.
-func copyCmd(text, status, md, mdPath string) tea.Cmd {
+// copyCmd copies text to the clipboard and reports "Copied <what> via
+// <transport>" when done. When md is set and the terminal supports OSC 5522,
+// md rendered as HTML, with local images inlined, is copied too; mdPath
+// resolves those images.
+func copyCmd(text, what, md, mdPath string) tea.Cmd {
+	status := "Copied " + what
 	return func() tea.Msg {
 		if md != "" && osc5522Supported() {
-			return clipboardDoneMsg{status: status + " with formatting", raw: osc5522Write(text, markdownHTML(md, mdPath))}
+			return clipboardDoneMsg{status: status + " with formatting via OSC 5522", raw: osc5522Write(text, markdownHTML(md, mdPath))}
 		}
 		if inTmux() && tmuxLoadBuffer(text) == nil {
-			return clipboardDoneMsg{status: status}
+			return clipboardDoneMsg{status: status + " via tmux"}
 		}
-		return clipboardDoneMsg{status: status, osc52: text}
+		return clipboardDoneMsg{status: status + " via OSC 52", osc52: text}
 	}
 }
 
