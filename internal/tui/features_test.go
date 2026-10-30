@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"image"
 	"image/png"
 	"os"
@@ -538,5 +541,23 @@ func TestPlaceImages_NewWidthFreesTheOldSize(t *testing.T) {
 	}
 	if again := place(20); len(again) != 0 {
 		t.Errorf("same width uploaded again: %d", len(again))
+	}
+}
+
+func TestHugeImageIsRefusedBeforeDecoding(t *testing.T) {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil {
+		t.Fatal(err)
+	}
+	b := buf.Bytes()
+	binary.BigEndian.PutUint32(b[16:], 20000) // IHDR width
+	binary.BigEndian.PutUint32(b[20:], 20000) // IHDR height
+	binary.BigEndian.PutUint32(b[29:], crc32.ChecksumIEEE(b[12:29]))
+	path := filepath.Join(t.TempDir(), "huge.png")
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadKittyImage(path, 40); err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("want a too-large error, got %v", err)
 	}
 }

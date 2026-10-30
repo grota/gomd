@@ -7,6 +7,7 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	"image/png"
+	"io"
 	"math"
 	"math/rand/v2"
 	"net/url"
@@ -101,6 +102,10 @@ type kittyImage struct {
 	b64        string // the image as base64 PNG, kept to upload other sizes
 }
 
+// maxImagePixels caps the images decoded: 100 megapixels, 400 MB decoded,
+// well above photos and 8K screenshots.
+const maxImagePixels = 100_000_000
+
 // loadKittyImage decodes path and prepares its upload, sized to at most
 // maxCols cells wide.
 func loadKittyImage(path string, maxCols int) (kittyImage, error) {
@@ -109,6 +114,16 @@ func loadKittyImage(path string, maxCols int) (kittyImage, error) {
 		return kittyImage{}, fmt.Errorf("open image: %w", err)
 	}
 	defer f.Close()
+	// The header alone gives the size: refuse images whose pixels would take
+	// gigabytes once decoded.
+	if c, _, err := image.DecodeConfig(f); err != nil {
+		return kittyImage{}, fmt.Errorf("decode image: %w", err)
+	} else if c.Width*c.Height > maxImagePixels {
+		return kittyImage{}, fmt.Errorf("image too large: %dx%d", c.Width, c.Height)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return kittyImage{}, fmt.Errorf("open image: %w", err)
+	}
 	img, _, err := image.Decode(f)
 	if err != nil {
 		return kittyImage{}, fmt.Errorf("decode image: %w", err)

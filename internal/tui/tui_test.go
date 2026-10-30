@@ -5,11 +5,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/fsnotify/fsnotify"
 
 	"github.com/grota/gomd/internal/config"
 	"github.com/grota/gomd/internal/parser"
@@ -697,5 +699,36 @@ func TestFollowMarkdownLinkAndBack(t *testing.T) {
 	}
 	if a.watcher != nil {
 		a.watcher.Close()
+	}
+}
+
+func TestWatcherReadsASaveOnceComplete(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "f.md")
+	os.WriteFile(path, []byte("# Old\n"), 0o644)
+	w, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	if err := w.Add(dir); err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan tea.Msg, 1)
+	go func() { got <- waitForFileChange(w, path)() }()
+	// A save written in two parts, the second shortly after the first.
+	f, _ := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0)
+	f.WriteString("# Ne")
+	time.Sleep(reloadDelay / 3)
+	f.WriteString("w\n")
+	f.Close()
+	select {
+	case msg := <-got:
+		m, ok := msg.(fileReloadMsg)
+		if !ok || len(m.doc.Headings) != 1 || m.doc.Headings[0].Text != "New" {
+			t.Fatalf("got %#v", msg)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no reload")
 	}
 }

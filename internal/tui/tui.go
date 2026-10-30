@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/fsnotify/fsnotify"
@@ -349,30 +350,37 @@ func openEditorCmd(filePath string) tea.Cmd {
 	})
 }
 
+// reloadDelay is how long the watched file must stay unchanged before it is
+// read, so a save written in several parts is read once, complete.
+const reloadDelay = 100 * time.Millisecond
+
 // waitForFileChange waits for the next write to filePath. The watcher is on
 // the parent directory because editors that save atomically replace the file,
 // which would silently drop a watch on the file itself.
 func waitForFileChange(watcher *fsnotify.Watcher, filePath string) tea.Cmd {
 	target := filepath.Clean(filePath)
 	return func() tea.Msg {
+		var settled <-chan time.Time // nil, so never ready, until a change
 		for {
 			select {
 			case event, ok := <-watcher.Events:
 				if !ok {
 					return nil
 				}
-				if filepath.Clean(event.Name) != target || event.Op&(fsnotify.Write|fsnotify.Create) == 0 {
-					continue
+				if filepath.Clean(event.Name) == target && event.Op&(fsnotify.Write|fsnotify.Create) != 0 {
+					settled = time.After(reloadDelay)
 				}
-				data, err := os.ReadFile(filePath)
-				if err != nil {
-					continue
-				}
-				return fileReloadMsg{filePath, parser.ParseMarkdown(string(data))}
 			case _, ok := <-watcher.Errors:
 				if !ok {
 					return nil
 				}
+			case <-settled:
+				settled = nil
+				inp, err := input.ReadFile(filePath)
+				if err != nil {
+					continue
+				}
+				return fileReloadMsg{filePath, parser.ParseMarkdown(inp.Content)}
 			}
 		}
 	}
@@ -430,12 +438,12 @@ func (a *App) reloadFromDisk(status string) {
 		a.statusMsg = "Nothing to reload (stdin)"
 		return
 	}
-	data, err := os.ReadFile(a.filepath)
+	inp, err := input.ReadFile(a.filepath)
 	if err != nil {
 		a.statusMsg = "Reload failed: " + err.Error()
 		return
 	}
-	a.reload(parser.ParseMarkdown(string(data)), status)
+	a.reload(parser.ParseMarkdown(inp.Content), status)
 }
 
 func (a *App) Init() tea.Cmd {
