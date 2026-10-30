@@ -24,8 +24,21 @@ Open work only. Finished items are removed; git history has the details.
       early: the hyperlink target is corrupt and the rest of the URL shows
       as text, repeated by glamour's word wrap. The source map then loses its
       place for the rest of the document (gopls `doc/contributing.md`: 41 of
-      its nodes). Report upstream; a gomd workaround would percent-encode
-      those characters in link destinations before rendering.
+      its nodes).
+
+      **Decision: wait for upstream**, then bump `x/ansi` and rerun the corpus
+      benchmark (with the fix, misses dropped from 242 to 160). Upstream
+      issue: https://github.com/charmbracelet/x/issues/848. Fix PR:
+      https://github.com/charmbracelet/x/pull/946, which covers only
+      `Parser`; our commit extending it to `Strip`, `Wrap`, `Truncate`,
+      `DecodeSequence` and the rest is
+      https://github.com/grota/x/commit/3498cdf146b20a2f108b1f2a6e52955277627761
+      (offered in
+      https://github.com/charmbracelet/x/pull/946#issuecomment-6533146504).
+      Check that whatever merges covers those functions. A `replace`
+      directive is not an option: `go install ...@latest` rejects it. A gomd
+      workaround would percent-encode those characters in link destinations
+      before rendering.
 
 ## Unconfirmed checks
 
