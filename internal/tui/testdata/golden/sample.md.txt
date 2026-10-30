@@ -65,18 +65,18 @@
 == nodes
 block  src 2-6 col 0-0  shown 3-5 col -1--1  "some block\nsome block\nsome block"
 block  src 8-13 col 0-0  shown 7-10 col -1--1  "echo \"some code\"\nif [ -f \"test-images/gradient.png\" ]; then\n  echo \"image exists\"\nfi"
-inline src 15-15 col 19-28  shown 12-12 col 22-29  "gomd -r"
-link   src 23-23 col 0-39  shown 20-20 col 2-39  "gradient 📷 /test-images/gradient.png -> ./test-images/gradient.png"
-link   src 27-27 col 28-62  shown 24-24 col 30-64  "red square 📷 /test-images/red.png -> test-images/red.png"
-link   src 31-31 col 0-49  shown 29-29 col 2-37  "checker 📷 /test-images/checker.png -> test-images/checker.png"
-link   src 35-35 col 0-28  shown 33-33 col 3-27  "/test-images/checker.png -> test-images/checker.png"
-link   src 39-39 col 0-31  shown 37-37 col 2-33  "red one 📷 /test-images/red.png -> test-images/red.png"
-link   src 41-41 col 0-31  shown 39-39 col 2-33  "red two 📷 /test-images/red.png -> test-images/red.png"
-link   src 45-45 col 0-39  shown 43-43 col 2-41  "blue 📷 /test-images/sub%20dir/blue.png -> test-images/sub%20dir/blue.png"
-link   src 50-50 col 2-47  shown 48-48 col 4-49  "gradient in list 📷 /test-images/gradient.png -> test-images/gradient.png"
-link   src 55-55 col 25-57  shown 53-53 col 27-59  "missing 📷 /test-images/nope.png -> test-images/nope.png"
-link   src 59-59 col 28-67  shown 57-57 col 30-68  "remote 📷 https://example.com/logo.png -> https://example.com/logo.png"
-link   src 63-63 col 0-51  shown 61-61 col 2-36  "titled 📷 /test-images/checker.png -> test-images/checker.png"
+inline src 15-15 col 19-28  shown 12-12 col 22-29  "gomd -r" on "gomd -r"
+link   src 23-23 col 0-39  shown 20-20 col 2-39  "gradient 📷 /test-images/gradient.png -> ./test-images/gradient.png" on "gradient 📷 /test-images/gradient.png"
+link   src 27-27 col 28-62  shown 24-24 col 30-64  "red square 📷 /test-images/red.png -> test-images/red.png" on "red square 📷 /test-images/red.png"
+link   src 31-31 col 0-49  shown 29-29 col 2-37  "checker 📷 /test-images/checker.png -> test-images/checker.png" on "checker 📷 /test-images/checker.png"
+link   src 35-35 col 0-28  shown 33-33 col 3-27  "/test-images/checker.png -> test-images/checker.png" on "/test-images/checker.png"
+link   src 39-39 col 0-31  shown 37-37 col 2-33  "red one 📷 /test-images/red.png -> test-images/red.png" on "red one 📷 /test-images/red.png"
+link   src 41-41 col 0-31  shown 39-39 col 2-33  "red two 📷 /test-images/red.png -> test-images/red.png" on "red two 📷 /test-images/red.png"
+link   src 45-45 col 0-39  shown 43-43 col 2-41  "blue 📷 /test-images/sub%20dir/blue.png -> test-images/sub%20dir/blue.png" on "blue 📷 /test-images/sub%20dir/blue.png"
+link   src 50-50 col 2-47  shown 48-48 col 4-49  "gradient in list 📷 /test-images/gradient.png -> test-images/gradient.png" on "gradient in list 📷 /test-images/gradient.png"
+link   src 55-55 col 25-57  shown 53-53 col 27-59  "missing 📷 /test-images/nope.png -> test-images/nope.png" on "missing 📷 /test-images/nope.png"
+link   src 59-59 col 28-67  shown 57-57 col 30-68  "remote 📷 https://example.com/logo.png -> https://example.com/logo.png" on "remote 📷 https://example.com/logo.png"
+link   src 63-63 col 0-51  shown 61-61 col 2-36  "titled 📷 /test-images/checker.png -> test-images/checker.png" on "titled 📷 /test-images/checker.png"
 == copy per line
 1: "test" | "# test"
 3: "some block" | "some block"
@@ -180,18 +180,18 @@ link   src 63-63 col 0-51  shown 61-61 col 2-36  "titled 📷 /test-images/check
 == nodes
 block  src 2-6 col 0-0  shown 3-5 col -1--1  "some block\nsome block\nsome block"
 block  src 8-13 col 0-0  shown 7-10 col -1--1  "echo \"some code\"\nif [ -f \"test-images/gradient.png\" ]; then\n  echo \"image exists\"\nfi"
-inline src 15-15 col 19-28  shown 12-12 col 22-29  "gomd -r"
-link   src 23-23 col 0-39  shown 20-20 col 2-39  "gradient 📷 /test-images/gradient.png -> ./test-images/gradient.png"
-link   src 27-27 col 28-62  shown 24-24 col 30-64  "red square 📷 /test-images/red.png -> test-images/red.png"
-link   src 31-31 col 0-49  shown 29-29 col 2-37  "checker 📷 /test-images/checker.png -> test-images/checker.png"
-link   src 35-35 col 0-28  shown 33-33 col 3-27  "/test-images/checker.png -> test-images/checker.png"
-link   src 39-39 col 0-31  shown 37-37 col 2-33  "red one 📷 /test-images/red.png -> test-images/red.png"
-link   src 41-41 col 0-31  shown 39-39 col 2-33  "red two 📷 /test-images/red.png -> test-images/red.png"
-link   src 45-45 col 0-39  shown 43-43 col 2-41  "blue 📷 /test-images/sub%20dir/blue.png -> test-images/sub%20dir/blue.png"
-link   src 50-50 col 2-47  shown 48-48 col 4-49  "gradient in list 📷 /test-images/gradient.png -> test-images/gradient.png"
-link   src 55-55 col 25-57  shown 53-53 col 27-59  "missing 📷 /test-images/nope.png -> test-images/nope.png"
-link   src 59-59 col 28-67  shown 57-57 col 30-68  "remote 📷 https://example.com/logo.png -> https://example.com/logo.png"
-link   src 63-63 col 0-51  shown 61-61 col 2-36  "titled 📷 /test-images/checker.png -> test-images/checker.png"
+inline src 15-15 col 19-28  shown 12-12 col 22-29  "gomd -r" on "gomd -r"
+link   src 23-23 col 0-39  shown 20-20 col 2-39  "gradient 📷 /test-images/gradient.png -> ./test-images/gradient.png" on "gradient 📷 /test-images/gradient.png"
+link   src 27-27 col 28-62  shown 24-24 col 30-64  "red square 📷 /test-images/red.png -> test-images/red.png" on "red square 📷 /test-images/red.png"
+link   src 31-31 col 0-49  shown 29-29 col 2-37  "checker 📷 /test-images/checker.png -> test-images/checker.png" on "checker 📷 /test-images/checker.png"
+link   src 35-35 col 0-28  shown 33-33 col 3-27  "/test-images/checker.png -> test-images/checker.png" on "/test-images/checker.png"
+link   src 39-39 col 0-31  shown 37-37 col 2-33  "red one 📷 /test-images/red.png -> test-images/red.png" on "red one 📷 /test-images/red.png"
+link   src 41-41 col 0-31  shown 39-39 col 2-33  "red two 📷 /test-images/red.png -> test-images/red.png" on "red two 📷 /test-images/red.png"
+link   src 45-45 col 0-39  shown 43-43 col 2-41  "blue 📷 /test-images/sub%20dir/blue.png -> test-images/sub%20dir/blue.png" on "blue 📷 /test-images/sub%20dir/blue.png"
+link   src 50-50 col 2-47  shown 48-48 col 4-49  "gradient in list 📷 /test-images/gradient.png -> test-images/gradient.png" on "gradient in list 📷 /test-images/gradient.png"
+link   src 55-55 col 25-57  shown 53-53 col 27-59  "missing 📷 /test-images/nope.png -> test-images/nope.png" on "missing 📷 /test-images/nope.png"
+link   src 59-59 col 28-67  shown 57-57 col 30-68  "remote 📷 https://example.com/logo.png -> https://example.com/logo.png" on "remote 📷 https://example.com/logo.png"
+link   src 63-63 col 0-51  shown 61-61 col 2-36  "titled 📷 /test-images/checker.png -> test-images/checker.png" on "titled 📷 /test-images/checker.png"
 == copy per line
 1: "test" | "# test"
 3: "some block" | "some block"
@@ -282,18 +282,18 @@ link   src 63-63 col 0-51  shown 61-61 col 2-36  "titled 📷 /test-images/check
 
   titled 📷 /test-images/checker.png
 == nodes
-inline src 0-0 col 19-28  shown 1-1 col 22-29  "gomd -r"
-link   src 8-8 col 0-39  shown 9-9 col 2-39  "gradient 📷 /test-images/gradient.png -> ./test-images/gradient.png"
-link   src 12-12 col 28-62  shown 13-13 col 30-64  "red square 📷 /test-images/red.png -> test-images/red.png"
-link   src 16-16 col 0-49  shown 18-18 col 2-37  "checker 📷 /test-images/checker.png -> test-images/checker.png"
-link   src 20-20 col 0-28  shown 22-22 col 3-27  "/test-images/checker.png -> test-images/checker.png"
-link   src 24-24 col 0-31  shown 26-26 col 2-33  "red one 📷 /test-images/red.png -> test-images/red.png"
-link   src 26-26 col 0-31  shown 28-28 col 2-33  "red two 📷 /test-images/red.png -> test-images/red.png"
-link   src 30-30 col 0-39  shown 32-32 col 2-41  "blue 📷 /test-images/sub%20dir/blue.png -> test-images/sub%20dir/blue.png"
-link   src 35-35 col 2-47  shown 37-37 col 4-49  "gradient in list 📷 /test-images/gradient.png -> test-images/gradient.png"
-link   src 40-40 col 25-57  shown 42-42 col 27-59  "missing 📷 /test-images/nope.png -> test-images/nope.png"
-link   src 44-44 col 28-67  shown 46-46 col 30-68  "remote 📷 https://example.com/logo.png -> https://example.com/logo.png"
-link   src 48-48 col 0-51  shown 50-50 col 2-36  "titled 📷 /test-images/checker.png -> test-images/checker.png"
+inline src 0-0 col 19-28  shown 1-1 col 22-29  "gomd -r" on "gomd -r"
+link   src 8-8 col 0-39  shown 9-9 col 2-39  "gradient 📷 /test-images/gradient.png -> ./test-images/gradient.png" on "gradient 📷 /test-images/gradient.png"
+link   src 12-12 col 28-62  shown 13-13 col 30-64  "red square 📷 /test-images/red.png -> test-images/red.png" on "red square 📷 /test-images/red.png"
+link   src 16-16 col 0-49  shown 18-18 col 2-37  "checker 📷 /test-images/checker.png -> test-images/checker.png" on "checker 📷 /test-images/checker.png"
+link   src 20-20 col 0-28  shown 22-22 col 3-27  "/test-images/checker.png -> test-images/checker.png" on "/test-images/checker.png"
+link   src 24-24 col 0-31  shown 26-26 col 2-33  "red one 📷 /test-images/red.png -> test-images/red.png" on "red one 📷 /test-images/red.png"
+link   src 26-26 col 0-31  shown 28-28 col 2-33  "red two 📷 /test-images/red.png -> test-images/red.png" on "red two 📷 /test-images/red.png"
+link   src 30-30 col 0-39  shown 32-32 col 2-41  "blue 📷 /test-images/sub%20dir/blue.png -> test-images/sub%20dir/blue.png" on "blue 📷 /test-images/sub%20dir/blue.png"
+link   src 35-35 col 2-47  shown 37-37 col 4-49  "gradient in list 📷 /test-images/gradient.png -> test-images/gradient.png" on "gradient in list 📷 /test-images/gradient.png"
+link   src 40-40 col 25-57  shown 42-42 col 27-59  "missing 📷 /test-images/nope.png -> test-images/nope.png" on "missing 📷 /test-images/nope.png"
+link   src 44-44 col 28-67  shown 46-46 col 30-68  "remote 📷 https://example.com/logo.png -> https://example.com/logo.png" on "remote 📷 https://example.com/logo.png"
+link   src 48-48 col 0-51  shown 50-50 col 2-36  "titled 📷 /test-images/checker.png -> test-images/checker.png" on "titled 📷 /test-images/checker.png"
 == copy per line
 1: "## Images (TUI and  gomd -r )" | "## Images (TUI and `gomd -r`)"
 3: "Each case says what you should see." | "Each case says what you should see."
@@ -331,7 +331,7 @@ link   src 48-48 col 0-51  shown 50-50 col 2-36  "titled 📷 /test-images/check
 
   gradient 📷 /test-images/gradient.png
 == nodes
-link   src 4-4 col 0-39  shown 5-5 col 2-39  "gradient 📷 /test-images/gradient.png -> ./test-images/gradient.png"
+link   src 4-4 col 0-39  shown 5-5 col 2-39  "gradient 📷 /test-images/gradient.png -> ./test-images/gradient.png" on "gradient 📷 /test-images/gradient.png"
 == copy per line
 1: "### 1. Standalone image" | "### 1. Standalone image"
 3: "The caption line is replaced by the gradient image." | "The caption line is replaced by the gradient image."
@@ -344,7 +344,7 @@ link   src 4-4 col 0-39  shown 5-5 col 2-39  "gradient 📷 /test-images/gradien
   This text must stay: before red square 📷 /test-images/red.png after. The
   red square appears on the line below it.
 == nodes
-link   src 2-2 col 28-62  shown 3-3 col 30-64  "red square 📷 /test-images/red.png -> test-images/red.png"
+link   src 2-2 col 28-62  shown 3-3 col 30-64  "red square 📷 /test-images/red.png -> test-images/red.png" on "red square 📷 /test-images/red.png"
 == copy per line
 1: "### 2. Inline image inside a sentence (B2 fix)" | "### 2. Inline image inside a sentence (B2 fix)"
 3: "This text must stay: before ![red square](test-images/red.png) after. The" | "This text must stay: before ![red square](test-images/red.png) after. The"
@@ -356,7 +356,7 @@ link   src 2-2 col 28-62  shown 3-3 col 30-64  "red square 📷 /test-images/red
 
   checker 📷 /test-images/checker.png
 == nodes
-link   src 2-2 col 0-49  shown 3-3 col 2-37  "checker 📷 /test-images/checker.png -> test-images/checker.png"
+link   src 2-2 col 0-49  shown 3-3 col 2-37  "checker 📷 /test-images/checker.png -> test-images/checker.png" on "checker 📷 /test-images/checker.png"
 == copy per line
 1: "### 3. HTML img tag" | "### 3. HTML img tag"
 3: "![checker](test-images/checker.png)" | "<img src=\"test-images/checker.png\" alt=\"checker\">"
@@ -367,7 +367,7 @@ link   src 2-2 col 0-49  shown 3-3 col 2-37  "checker 📷 /test-images/checker.
 
    /test-images/checker.png
 == nodes
-link   src 2-2 col 0-28  shown 3-3 col 3-27  "/test-images/checker.png -> test-images/checker.png"
+link   src 2-2 col 0-28  shown 3-3 col 3-27  "/test-images/checker.png -> test-images/checker.png" on "/test-images/checker.png"
 == copy per line
 1: "### 4. Empty alt text" | "### 4. Empty alt text"
 3: "![](test-images/checker.png)" | "![](test-images/checker.png)"
@@ -380,8 +380,8 @@ link   src 2-2 col 0-28  shown 3-3 col 3-27  "/test-images/checker.png -> test-i
 
   red two 📷 /test-images/red.png
 == nodes
-link   src 2-2 col 0-31  shown 3-3 col 2-33  "red one 📷 /test-images/red.png -> test-images/red.png"
-link   src 4-4 col 0-31  shown 5-5 col 2-33  "red two 📷 /test-images/red.png -> test-images/red.png"
+link   src 2-2 col 0-31  shown 3-3 col 2-33  "red one 📷 /test-images/red.png -> test-images/red.png" on "red one 📷 /test-images/red.png"
+link   src 4-4 col 0-31  shown 5-5 col 2-33  "red two 📷 /test-images/red.png -> test-images/red.png" on "red two 📷 /test-images/red.png"
 == copy per line
 1: "### 5. Same image used twice" | "### 5. Same image used twice"
 3: "![red one](test-images/red.png)" | "![red one](test-images/red.png)"
@@ -393,7 +393,7 @@ link   src 4-4 col 0-31  shown 5-5 col 2-33  "red two 📷 /test-images/red.png 
 
   blue 📷 /test-images/sub%20dir/blue.png
 == nodes
-link   src 2-2 col 0-39  shown 3-3 col 2-41  "blue 📷 /test-images/sub%20dir/blue.png -> test-images/sub%20dir/blue.png"
+link   src 2-2 col 0-39  shown 3-3 col 2-41  "blue 📷 /test-images/sub%20dir/blue.png -> test-images/sub%20dir/blue.png" on "blue 📷 /test-images/sub%20dir/blue.png"
 == copy per line
 1: "### 6. Path with an encoded space" | "### 6. Path with an encoded space"
 3: "![blue](test-images/sub%20dir/blue.png)" | "![blue](test-images/sub%20dir/blue.png)"
@@ -406,7 +406,7 @@ link   src 2-2 col 0-39  shown 3-3 col 2-41  "blue 📷 /test-images/sub%20dir/b
   • gradient in list 📷 /test-images/gradient.png
   • third item
 == nodes
-link   src 3-3 col 2-47  shown 4-4 col 4-49  "gradient in list 📷 /test-images/gradient.png -> test-images/gradient.png"
+link   src 3-3 col 2-47  shown 4-4 col 4-49  "gradient in list 📷 /test-images/gradient.png -> test-images/gradient.png" on "gradient in list 📷 /test-images/gradient.png"
 == copy per line
 1: "### 7. Image inside a list item" | "### 7. Image inside a list item"
 3: "• first item" | "- first item"
@@ -419,7 +419,7 @@ link   src 3-3 col 2-47  shown 4-4 col 4-49  "gradient in list 📷 /test-images
 
   Stays as text, no image: missing 📷 /test-images/nope.png
 == nodes
-link   src 2-2 col 25-57  shown 3-3 col 27-59  "missing 📷 /test-images/nope.png -> test-images/nope.png"
+link   src 2-2 col 25-57  shown 3-3 col 27-59  "missing 📷 /test-images/nope.png -> test-images/nope.png" on "missing 📷 /test-images/nope.png"
 == copy per line
 1: "### 8. Missing file" | "### 8. Missing file"
 3: "Stays as text, no image: ![missing](test-images/nope.png)" | "Stays as text, no image: ![missing](test-images/nope.png)"
@@ -430,7 +430,7 @@ link   src 2-2 col 25-57  shown 3-3 col 27-59  "missing 📷 /test-images/nope.p
 
   Stays as text, not fetched: remote 📷 https://example.com/logo.png
 == nodes
-link   src 2-2 col 28-67  shown 3-3 col 30-68  "remote 📷 https://example.com/logo.png -> https://example.com/logo.png"
+link   src 2-2 col 28-67  shown 3-3 col 30-68  "remote 📷 https://example.com/logo.png -> https://example.com/logo.png" on "remote 📷 https://example.com/logo.png"
 == copy per line
 1: "### 9. Remote URL" | "### 9. Remote URL"
 3: "Stays as text, not fetched: ![remote](https://example.com/logo.png)" | "Stays as text, not fetched: ![remote](https://example.com/logo.png)"
@@ -441,7 +441,7 @@ link   src 2-2 col 28-67  shown 3-3 col 30-68  "remote 📷 https://example.com/
 
   titled 📷 /test-images/checker.png
 == nodes
-link   src 2-2 col 0-51  shown 3-3 col 2-36  "titled 📷 /test-images/checker.png -> test-images/checker.png"
+link   src 2-2 col 0-51  shown 3-3 col 2-36  "titled 📷 /test-images/checker.png -> test-images/checker.png" on "titled 📷 /test-images/checker.png"
 == copy per line
 1: "### 10. Image with a title" | "### 10. Image with a title"
 3: "![titled](test-images/checker.png)" | "![titled](test-images/checker.png \"A checkerboard\")"

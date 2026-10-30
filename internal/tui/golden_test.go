@@ -81,8 +81,12 @@ func writeSection(text, styled *strings.Builder, a *App) {
 		if n.kind == nodeLink {
 			label = n.display + " -> " + n.content
 		}
-		fmt.Fprintf(text, "%-6s src %d-%d col %d-%d  shown %d-%d col %d-%d  %q\n", kinds[n.kind],
+		fmt.Fprintf(text, "%-6s src %d-%d col %d-%d  shown %d-%d col %d-%d  %q", kinds[n.kind],
 			n.startLine, n.endLine, n.colStart, n.colEnd, loc.firstLine, loc.lastLine, loc.spanCol, loc.spanColEnd, label)
+		if n.inline && loc.firstLine >= 0 && loc.spanCol >= 0 { // the text highlighted on its first line
+			fmt.Fprintf(text, " on %q", ansi.Cut(ansi.Strip(a.renderedLines[loc.firstLine]), loc.spanCol, loc.spanColEnd))
+		}
+		text.WriteString("\n")
 	}
 	text.WriteString("== copy per line\n")
 	for i, l := range a.renderedLines {
