@@ -287,11 +287,13 @@ func (a *App) startWatcher() tea.Cmd {
 
 // reload swaps in a freshly parsed document, keeping the selected heading when
 // its text still exists and dropping indexes that refer to the old document.
+// The scroll position survives when the same section is shown again.
 func (a *App) reload(doc *parser.Document, status string) {
 	prevHeading := ""
 	if a.selectedIdx >= 0 && a.selectedIdx < len(a.doc.Headings) {
 		prevHeading = a.doc.Headings[a.selectedIdx].Text
 	}
+	wasRoot, offset := a.selectedIdx < 0, a.contentOffset
 	a.doc = doc
 	a.selectedIdx = -1
 	for i, h := range doc.Headings {
@@ -303,6 +305,9 @@ func (a *App) reload(doc *parser.Document, status string) {
 	a.navHistory, a.navFuture = nil, nil
 	a.searchMatches, a.searchIdx = nil, 0
 	a.rebuildSection()
+	if wasRoot == (a.selectedIdx < 0) {
+		a.contentOffset = offset // clamped when the section is rendered
+	}
 	a.scrollOutlineToSelected()
 	a.statusMsg = status
 }

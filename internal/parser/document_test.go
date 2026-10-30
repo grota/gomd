@@ -148,3 +148,15 @@ func TestParseNoFrontmatter(t *testing.T) {
 		t.Fatalf("expected 1 heading, got %d", len(doc.Headings))
 	}
 }
+
+func TestLeadingThematicBreakIsNotFrontmatter(t *testing.T) {
+	md := "---\n\n# Intro\n\nHello\n\n---\n\n# Next\n"
+	doc := parser.ParseMarkdown(md)
+	if doc.Content != md || len(doc.Headings) != 2 {
+		t.Fatalf("content lost: %q, %d headings", doc.Content, len(doc.Headings))
+	}
+	md = "---\ntitle: a---b\n---\n# T\n"
+	if got := parser.ParseMarkdown(md).Content; got != "# T\n" {
+		t.Fatalf("frontmatter with --- in a value: got %q", got)
+	}
+}

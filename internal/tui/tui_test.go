@@ -568,3 +568,44 @@ func TestMouseDragSelectsAndCopies(t *testing.T) {
 		}
 	}
 }
+
+func TestStatusBarFitsAt80Columns(t *testing.T) {
+	cfg := config.Default()
+	cfg.Images.Enabled = false
+	cfg.Keys.Quit = "x"
+	a := NewApp(parser.ParseMarkdown("# A fairly long heading title here\n\ntext\n"), "f.md", "", cfg)
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	for _, idx := range []int{-1, 0} {
+		a.navigateTo(idx)
+		if n := len(strings.Split(a.View().Content, "\n")); n != 24 {
+			t.Fatalf("selectedIdx %d: view has %d lines, want 24", idx, n)
+		}
+	}
+	a.Update(tea.WindowSizeMsg{Width: 200, Height: 24})
+	if status := ansi.Strip(a.renderStatus()); !strings.Contains(status, "x:quit") {
+		t.Fatalf("status ignores the quit binding: %q", status)
+	}
+}
+
+func TestReloadKeepsScroll(t *testing.T) {
+	cfg := config.Default()
+	cfg.Images.Enabled = false
+	md := strings.Repeat("line\n\n", 200)
+	a := NewApp(parser.ParseMarkdown(md), "f.md", "", cfg)
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	a.View()
+	a.scrollContent(100)
+	a.reload(parser.ParseMarkdown(md+"more\n"), "Reloaded")
+	a.View()
+	if a.contentOffset != 100 {
+		t.Fatalf("contentOffset = %d after reload, want 100", a.contentOffset)
+	}
+}
+
+func TestPreProcessLeavesCodeAlone(t *testing.T) {
+	in := "```html\n<img src=\"a.png\" alt=\"x\">\n```\n\nUse `<a href=\"u\">t</a>` or <a href=\"v\">w</a> and <img src=\"b.png\">\n"
+	want := "```html\n<img src=\"a.png\" alt=\"x\">\n```\n\nUse `<a href=\"u\">t</a>` or [w](v) and ![](b.png)\n"
+	if got := PreProcessMarkdown(in); got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}

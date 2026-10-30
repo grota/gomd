@@ -91,7 +91,8 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		cfg.UI.Theme = flagTheme
 	}
 	checkChoice("ui.content_border", &cfg.UI.ContentBorder, config.ContentBorderAlways, config.ContentBorderWithSidebar)
-	cfg.Images.Enabled = cfg.Images.Enabled && !flagNoImages && tui.IsKittySupported()
+	// Image uploads are escape sequences: never write them into a pipe or file.
+	cfg.Images.Enabled = cfg.Images.Enabled && !flagNoImages && term.IsTerminal(int(os.Stdout.Fd())) && tui.IsKittySupported()
 
 	doc := parser.ParseMarkdown(inp.Content)
 

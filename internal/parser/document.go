@@ -249,36 +249,23 @@ func offsetToLine(lineOffsets []int, offset int) int {
 	return lo // 1-based because lineOffsets[0] = 0 means line 1
 }
 
-// stripFrontmatter removes YAML frontmatter (delimited by "---") from the
-// beginning of a markdown document. Returns the content without frontmatter.
+// stripFrontmatter removes YAML frontmatter from the beginning of a markdown
+// document: a first line of exactly "---", a non-blank line after it, and a
+// closing line of exactly "---". A document opening with a thematic break
+// ("---" then a blank line) is left alone.
 func stripFrontmatter(content string) string {
-	if !strings.HasPrefix(content, "---") {
+	lines := strings.SplitAfter(content, "\n")
+	if len(lines) < 3 || strings.TrimRight(lines[0], "\r\n") != "---" || strings.TrimSpace(lines[1]) == "" {
 		return content
 	}
-	// Find the closing "---" after the opening one.
-	rest := content[3:]
-	// Skip the remainder of the opening line (e.g. "---\n")
-	nl := strings.Index(rest, "\n")
-	if nl < 0 {
-		return content // no newline after opening ---, not valid frontmatter
+	off := len(lines[0])
+	for _, l := range lines[1:] {
+		off += len(l)
+		if strings.TrimRight(l, "\r\n") == "---" {
+			return content[off:]
+		}
 	}
-	rest = rest[nl+1:]
-	closing := strings.Index(rest, "---")
-	if closing < 0 {
-		return content // no closing ---
-	}
-	// Ensure the closing --- is at the start of a line
-	if closing > 0 && rest[closing-1] != '\n' {
-		return content
-	}
-	// Skip past the closing --- line
-	after := rest[closing+3:]
-	if idx := strings.Index(after, "\n"); idx >= 0 {
-		after = after[idx+1:]
-	} else {
-		after = ""
-	}
-	return after
+	return content
 }
 
 // ParseMarkdown parses markdown content and returns a Document.

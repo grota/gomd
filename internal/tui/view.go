@@ -1003,17 +1003,20 @@ func (a *App) renderStatus() string {
 	case ModeJump:
 		rightPlain = ""
 	default:
-		if a.sidebarHidden {
-			rightPlain = "w:sidebar  Tab:focus  e:edit  i:interactive  /:search  T:theme  ?:help  q:quit"
-		} else {
-			rightPlain = "Tab:focus  w:hide sidebar  e:edit  i:interactive  /:search  T:theme  ?:help  q:quit"
+		hint := func(binding, label string) string { return config.FirstKey(binding) + ":" + label }
+		hints := []string{hint(km.ToggleSidebar, "sidebar"), hint(km.ToggleFocus, "focus")}
+		if !a.sidebarHidden {
+			hints = []string{hint(km.ToggleFocus, "focus"), hint(km.ToggleSidebar, "hide sidebar")}
 		}
+		hints = append(hints, hint(km.Edit, "edit"), hint(km.NodeSelect, "interactive"),
+			hint(km.ContentSearch, "search"), hint(km.ThemePicker, "theme"), hint(km.Help, "help"), hint(km.Quit, "quit"))
+		rightPlain = strings.Join(hints, "  ")
 	}
 
-	// Use rune counts (no ANSI codes yet) for padding calculation.
-	// Subtract 2 for the 1-cell padding on each side added by lipgloss.
+	// Measure before styling. Subtract 2 for the 1-cell padding on each side
+	// added by lipgloss.
 	innerWidth := a.width - 2
-	usedWidth := len([]rune(leftPlain)) + len([]rune(rightPlain))
+	usedWidth := lipgloss.Width(leftPlain) + lipgloss.Width(rightPlain)
 	pad := innerWidth - usedWidth
 	if pad < 1 {
 		pad = 1
@@ -1032,6 +1035,9 @@ func (a *App) renderStatus() string {
 	default:
 		content = leftPlain + strings.Repeat(" ", pad) + rightPlain
 	}
+	// Cut what does not fit: a wrapped status bar would push the view past
+	// the bottom of the terminal.
+	content = ansi.Truncate(content, max(innerWidth, 0), "…")
 
 	return lipgloss.NewStyle().
 		Background(a.theme.StatusBar).

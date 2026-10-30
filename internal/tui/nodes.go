@@ -7,6 +7,9 @@ import (
 	"strings"
 
 	"charm.land/glamour/v2"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/text"
 )
 
 // ─────────────────────────────────────────────
@@ -86,7 +89,11 @@ func PreProcessMarkdown(md string) string {
 // rewrites, to map offsets in the result back to md: imgs then anchors.
 func preProcess(md string) (string, rewrites, rewrites) {
 	// Replace <img ... src="url" alt="text" ... /> with ![text](url)
+	inCode := codeChecker(md)
 	md, imgs := replaceAll(imgTagRe, md, func(m []int) (string, bool) {
+		if inCode(m[0]) {
+			return "", false
+		}
 		tag := md[m[0]:m[1]]
 		src := extractHTMLAttr(tag, "src")
 		if src == "" {
@@ -96,10 +103,56 @@ func preProcess(md string) (string, rewrites, rewrites) {
 	})
 
 	// Replace <a href="url">text</a> with [text](url)
+	inCode = codeChecker(md)
 	md, anchors := replaceAll(aTagRe, md, func(m []int) (string, bool) {
+		if inCode(m[0]) {
+			return "", false
+		}
 		return "[" + md[m[4]:m[5]] + "](" + md[m[2]:m[3]] + ")", true
 	})
 	return md, imgs, anchors
+}
+
+// codeChecker returns a function reporting whether byte offset off of md
+// lies in a code block or code span, where HTML is shown as written. md is
+// parsed on the first call, so text without HTML tags costs nothing.
+func codeChecker(md string) func(off int) bool {
+	var ranges [][2]int
+	parsed := false
+	return func(off int) bool {
+		if !parsed {
+			parsed = true
+			src := []byte(md)
+			doc := goldmark.New().Parser().Parse(text.NewReader(src))
+			ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+				if !entering {
+					return ast.WalkContinue, nil
+				}
+				switch n.(type) {
+				case *ast.FencedCodeBlock, *ast.CodeBlock:
+					for i := 0; i < n.Lines().Len(); i++ {
+						s := n.Lines().At(i)
+						ranges = append(ranges, [2]int{s.Start, s.Stop})
+					}
+					return ast.WalkSkipChildren, nil
+				case *ast.CodeSpan:
+					for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+						if t, ok := c.(*ast.Text); ok {
+							ranges = append(ranges, [2]int{t.Segment.Start, t.Segment.Stop})
+						}
+					}
+					return ast.WalkSkipChildren, nil
+				}
+				return ast.WalkContinue, nil
+			})
+		}
+		for _, r := range ranges {
+			if off >= r[0] && off < r[1] {
+				return true
+			}
+		}
+		return false
+	}
 }
 
 // A rewrite replaced bytes [in0, in1) of a text with [out0, out1) of the result.
