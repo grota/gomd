@@ -102,6 +102,24 @@ type kittyImage struct {
 	b64        string // the image as base64 PNG, kept to upload other sizes
 }
 
+// defaultCellAspect is a cell's height over its width when the terminal does
+// not report its pixel size: 8x16 px cells.
+const defaultCellAspect = 2.0
+
+// aspectOf returns a cell's height over its width for a window of cols x rows
+// cells and xpx x ypx pixels, or defaultCellAspect when the pixels are not
+// reported or the result is implausible.
+func aspectOf(cols, rows, xpx, ypx uint16) float64 {
+	if cols == 0 || rows == 0 || xpx == 0 || ypx == 0 {
+		return defaultCellAspect
+	}
+	r := (float64(ypx) / float64(rows)) / (float64(xpx) / float64(cols))
+	if r < 1 || r > 4 {
+		return defaultCellAspect
+	}
+	return r
+}
+
 // maxImagePixels caps the images decoded: 100 megapixels, 400 MB decoded,
 // well above photos and 8K screenshots.
 const maxImagePixels = 100_000_000
@@ -144,11 +162,12 @@ func loadKittyImage(path string, maxCols int) (kittyImage, error) {
 // sized returns the image as a new upload with a fresh id, at most maxCols
 // cells wide, reusing the encoded data.
 func (k kittyImage) sized(maxCols int) kittyImage {
-	// shortcut: assumes ~8x16 px cells; query the cell size (CSI 16 t) if
-	// images look stretched on unusual fonts.
-	const cellW, cellH = 8, 16
+	// The width takes one cell per 8 image pixels, as if cells were 8 px
+	// wide; the rows follow the cell's real proportions so the image keeps
+	// its aspect ratio.
+	const cellW = 8
 	cols := max(min(int(math.Ceil(float64(k.imgW)/cellW)), maxCols), 1)
-	rows := max(int(math.Ceil(float64(k.imgH)/cellH*float64(cols)*cellW/float64(k.imgW))), 1)
+	rows := max(int(math.Ceil(float64(k.imgH)*float64(cols)/(float64(k.imgW)*cellAspect()))), 1)
 
 	// Random ids keep two gomd instances (e.g. tmux panes) from overwriting
 	// each other's images in the shared outer terminal.

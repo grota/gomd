@@ -7,6 +7,7 @@ import (
 	"hash/crc32"
 	"image"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -559,5 +560,22 @@ func TestHugeImageIsRefusedBeforeDecoding(t *testing.T) {
 	}
 	if _, err := loadKittyImage(path, 40); err == nil || !strings.Contains(err.Error(), "too large") {
 		t.Fatalf("want a too-large error, got %v", err)
+	}
+}
+
+func TestAspectOf(t *testing.T) {
+	for _, tt := range []struct {
+		cols, rows, xpx, ypx uint16
+		want                 float64
+	}{
+		{80, 24, 800, 504, 2.1}, // 10x21 px cells
+		{100, 50, 900, 1000, 2.0 * 10 / 9},
+		{80, 24, 0, 0, defaultCellAspect},      // pixels not reported
+		{80, 24, 800, 100, defaultCellAspect},  // implausibly flat
+		{80, 24, 100, 1000, defaultCellAspect}, // implausibly tall
+	} {
+		if got := aspectOf(tt.cols, tt.rows, tt.xpx, tt.ypx); math.Abs(got-tt.want) > 1e-9 {
+			t.Errorf("aspectOf%v = %v, want %v", tt, got, tt.want)
+		}
 	}
 }
