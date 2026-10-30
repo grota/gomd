@@ -80,7 +80,7 @@ Both `renderGlamour()` (TUI) and `renderToStdout()` (CLI render mode) apply this
 
 4. **Images** (`placeImages()` in `kitty.go`): finds caption lines (`alt 📷 /path`) and inserts Kitty Unicode placeholder rows. Each image is uploaded once (`a=T,U=1,q=2`, random 24-bit id in the foreground colour) and then drawn as plain text cells, so bubbletea diffs it and tmux scrolls it. The TUI sends uploads from `Update` via `tea.Raw` (View cannot return commands) and frees images on exit. Do not write raw image escape sequences into the view: bubbletea v2's cell renderer drops them, and tmux cannot track them.
 
-Node extraction (`extractCodeNodes`/`extractLinkNodes`) works on **raw** markdown lines (before pre-processing), so it must handle both markdown and HTML syntax (`<img>`, `<a>` tags). This ordering is intentional: the extracted `colStart`/`colEnd` byte offsets must match the raw source lines so that `highlightSpanInLine` can highlight the correct column range in rendered output. Running extraction after pre-processing would break these offsets because `PreProcessMarkdown` changes line content and length (e.g. a long `<img>` tag becomes a shorter `![alt](url)`). The `display` field on `codeNode` bridges the gap by storing the visible text glamour renders, enabling mapping from nodes to rendered lines without relying on column offsets for line-level identification.
+Node extraction (`extractCodeNodes`/`extractLinkNodes`) works on **raw** markdown lines (before pre-processing), so it must handle both markdown and HTML syntax (`<img>`, `<a>` tags); a goldmark pass (`extractMoreCodeBlocks`) adds indented code blocks and code blocks in quotes. Where each node is shown comes from the source map (`placeNodesFromSource`, `sourcemap.go`), which matches the rendered cells to the raw source characters, so the node's `startLine` and `colStart`/`colEnd` must be raw byte offsets. The source map loses its place where glamour shows text that is not at that spot in the source (reference link URLs, table link footnotes); a node it cannot place falls back to a search of the rendered text (`mapNodesToRenderedLines`).
 
 ## Package Management
 
@@ -107,7 +107,11 @@ go test ./...                                        # all tests
 go test ./internal/parser/ -run TestName             # single parser test
 ```
 
-No test CI. `.github/workflows/release.yml` runs goreleaser (`.goreleaser.yaml`) on `v*` tags. No integration test prerequisites.
+The golden snapshots (`internal/tui/golden_test.go`, files in `internal/tui/testdata/golden`) pin rendering, node placement and copy for the documents in `internal/tui/testdata`. After an intended change, run `go test ./internal/tui -run TestGolden -update` and review the diff.
+
+`TestCorpus` measures node placement on real documents and skips unless `GOMD_CORPUS` names a folder of markdown files: `GOMD_CORPUS=$(go env GOMODCACHE) go test ./internal/tui -run TestCorpus -v`. Run it before and after a source map change and compare the counts.
+
+CI (`.github/workflows/ci.yml`) runs vet, the format check and the tests on pushes and pull requests. `.github/workflows/release.yml` runs goreleaser (`.goreleaser.yaml`) on `v*` tags. No integration test prerequisites.
 
 ## Git Workflow
 
