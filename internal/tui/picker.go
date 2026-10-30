@@ -215,16 +215,26 @@ func (a *App) handleThemeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // saveThemeSlot stores name in the dark or light slot, saves it and closes
-// the picker.
+// the picker. The saved setting starts from the config file's own, so a
+// --theme given for this run is not written for the other slot.
 func (a *App) saveThemeSlot(dark bool, name string) {
-	if dark {
-		a.themeSetting.Dark = name
-	} else {
-		a.themeSetting.Light = name
+	set := func(s *ThemeSetting) {
+		if dark {
+			s.Dark = name
+		} else {
+			s.Light = name
+		}
 	}
+	set(&a.themeSetting)
 	a.cfg.UI.Theme = a.themeSetting.String()
 	a.closeThemePicker()
-	switch err := config.SaveTheme(a.cfg.UI.Theme); {
+	file, _ := config.Load() // defaults when missing or invalid; SaveTheme refuses an invalid file
+	saved, err := ParseThemeSetting(file.UI.Theme)
+	if err != nil {
+		saved, _ = ParseThemeSetting("")
+	}
+	set(&saved)
+	switch err := config.SaveTheme(saved.String()); {
 	case err != nil:
 		a.statusMsg = "Theme not saved: " + err.Error()
 	case dark != a.dark:

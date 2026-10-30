@@ -150,9 +150,26 @@ func pickerApp(t *testing.T) *App {
 	}
 	cfg := config.Default()
 	cfg.UI.Theme = "light:Cream,dark:Dusk"
+	if err := config.SaveTheme(cfg.UI.Theme); err != nil {
+		t.Fatal(err)
+	}
 	a := NewApp(parser.ParseMarkdown("# T\n\ntext\n"), "t.md", "", cfg)
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 40})
 	return a
+}
+
+func TestPickerDoesNotSaveTheThemeFlag(t *testing.T) {
+	a := pickerApp(t) // the file says light:Cream,dark:Dusk
+	a.cfg.UI.Theme = "Nu Sky"
+	a.themeSetting, _ = ParseThemeSetting(a.cfg.UI.Theme) // as with --theme "Nu Sky"
+	press(a, "T", "tab", "p", "a", "enter")
+	if a.cfg.UI.Theme != "light:Paper,dark:Nu Sky" {
+		t.Errorf("this run should keep the flag's dark theme: %q", a.cfg.UI.Theme)
+	}
+	saved, err := os.ReadFile(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "gomd", "config.toml"))
+	if err != nil || !strings.Contains(string(saved), `theme = "light:Paper,dark:Dusk"`) {
+		t.Errorf("saved %q, %v; want the file's dark theme kept", saved, err)
+	}
 }
 
 func names(entries []pickerEntry) string {
