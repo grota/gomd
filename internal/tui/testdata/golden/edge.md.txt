@@ -1,0 +1,324 @@
+######## section -1
+== rendered
+
+   Edge cases
+
+  Inline  code ,  two words ,  with ` tick , and  j / k  keys. A bold  span
+  and emphasis with a link 🔗 https://example.com/a.
+
+  Bare URL https://example.com/path, autolink https://example.com/auto and
+  mail someone@example.com. Unicode: café, 日本語, emoji 🎉  ünïcode .
+
+  ## Links and anchors
+
+  • same file
+  • repeated
+  • other file 🔗 /docs/other%20file.md#setup
+  • html link 🔗 https://example.com/html
+
+  ## Usage
+
+  First usage.
+
+  ## Usage
+
+  Second usage.
+
+  ## Code
+
+    ```go
+    fmt.Println("nested")
+    ```
+
+    tilde fence
+
+    <img src="a.png" alt="x"> and <a href="u">t</a>
+
+    indented code block
+
+  │ A quote with  code  and a link 🔗 https://example.com/q.
+
+   Column                               │ Value
+  ──────────────────────────────────────┼─────────────────────────────────────
+    a                                   │ b[1]
+   日本                                 │ 🎉
+
+  [1]: b https://example.com/b
+
+  1. one
+  2. two  2
+    • nested item
+
+
+  --------
+
+  Text after a rule, then a final paragraph.
+== nodes
+inline src 7-7 col 7-13  shown 3-3 col 10-14  "code"
+inline src 7-7 col 15-26  shown 3-3 col 18-27  "two words"
+inline src 7-7 col 28-43  shown 3-3 col 31-42  "with ` tick"
+inline src 7-7 col 49-52  shown 3-3 col 50-51  "j"
+inline src 7-7 col 53-56  shown 3-3 col 54-55  "k"
+inline src 8-8 col 0-6  shown 3-3 col 71-75  "span"
+link   src 8-8 col 30-67  shown 4-4 col 22-26  "link -> https://example.com/a"
+link   src 10-10 col 9-33  shown 6-6 col 11-35  "https://example.com/path -> https://example.com/path"
+link   src 10-10 col 44-70  shown 6-6 col 46-70  "https://example.com/auto -> https://example.com/auto"
+link   src 11-11 col 5-26  shown 7-7 col 7-26  "someone@example.com -> someone@example.com"
+inline src 11-11 col 66-77  shown 7-7 col 61-68  "ünïcode"
+link   src 15-15 col 2-33  shown 11-11 col 4-13  "same file -> #links-and-anchors"
+link   src 16-16 col 2-22  shown 12-12 col 4-12  "repeated -> #usage-1"
+link   src 17-17 col 2-42  shown 13-13 col 4-14  "other file -> docs/other%20file.md#setup"
+link   src 18-18 col 2-50  shown 14-14 col 4-13  "html link -> https://example.com/html"
+block  src 30-34 col 0-0  shown 26-34 col -1--1  "```go\nfmt.Println(\"nested\")\n```"
+block  src 36-38 col 0-0  shown 30-34 col -1--1  "tilde fence"
+block  src 40-42 col 0-0  shown 32-34 col -1--1  "<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>"
+inline src 46-46 col 15-21  shown 36-36 col 18-22  "code"
+link   src 46-46 col 28-57  shown 36-36 col 30-34  "link -> https://example.com/q"
+inline src 50-50 col 2-5  shown 40-40 col 4-5  "a"
+link   src 50-50 col 11-37  shown 40-40 col 42-43  "b -> https://example.com/b"
+inline src 54-54 col 7-10  shown 46-46 col 10-11  "2"
+== copy per line
+1: "Edge cases" | "# Edge cases"
+3: "Inline  code ,  two words ,  with ` tick , and  j / k  keys. A bold  span" | "Inline `code`, `two words`, ``with ` tick``, and `j`/`k` keys. A **bold\n`span`**"
+4: "and emphasis with a link 🔗 https://example.com/a." | "and *emphasis with a [link](https://example.com/a \"Title\")*."
+6: "Bare URL https://example.com/path, autolink https://example.com/auto and" | "Bare URL https://example.com/path, autolink <https://example.com/auto> and"
+7: "mail someone@example.com. Unicode: café, 日本語, emoji 🎉  ünïcode ." | "mail <someone@example.com>. Unicode: café, 日本語, emoji 🎉 `ünïcode`."
+9: "## Links and anchors" | "## Links and anchors"
+11: "• same file" | "- [same file](#links-and-anchors)"
+12: "• repeated" | "- [repeated](#usage-1)"
+13: "• other file 🔗 /docs/other%20file.md#setup" | "- [other file](docs/other%20file.md#setup)"
+14: "• html link 🔗 https://example.com/html" | "- <a href=\"https://example.com/html\">html link</a>"
+16: "## Usage" | "## Usage"
+18: "First usage." | "First usage."
+20: "## Usage" | "## Usage"
+22: "Second usage." | "Second usage."
+24: "## Code" | "## Code"
+26: "```go" | "```go"
+27: "fmt.Println(\"nested\")" | "fmt.Println(\"nested\")"
+28: "```" | "```"
+30: "tilde fence" | "~~~\ntilde fence\n~~~"
+32: "<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>" | "```html\n<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>\n```"
+34: "indented code block" | "    indented code block"
+36: "│ A quote with  code  and a link 🔗 https://example.com/q." | "> A quote with `code` and a [link](https://example.com/q)."
+38: " Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b[1]\n 日本                                 │ 🎉\n\n[1]: b https://example.com/b" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+39: "──────────────────────────────────────┼─────────────────────────────────────" | ""
+40: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b[1]\n 日本                                 │ 🎉\n\n[1]: b https://example.com/b" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+41: "日本                                 │ 🎉" | ""
+43: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b[1]\n 日本                                 │ 🎉\n\n[1]: b https://example.com/b" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+45: "1. one" | ""
+46: "2. two  2" | ""
+47: "• nested item" | "   - nested *item*"
+50: "--------" | ""
+52: "Text after a rule, then a final paragraph." | "Text after a rule, then a final paragraph."
+######## section 0
+== rendered
+
+   Edge cases
+
+  Inline  code ,  two words ,  with ` tick , and  j / k  keys. A bold  span
+  and emphasis with a link 🔗 https://example.com/a.
+
+  Bare URL https://example.com/path, autolink https://example.com/auto and
+  mail someone@example.com. Unicode: café, 日本語, emoji 🎉  ünïcode .
+
+  ## Links and anchors
+
+  • same file
+  • repeated
+  • other file 🔗 /docs/other%20file.md#setup
+  • html link 🔗 https://example.com/html
+
+  ## Usage
+
+  First usage.
+
+  ## Usage
+
+  Second usage.
+
+  ## Code
+
+    ```go
+    fmt.Println("nested")
+    ```
+
+    tilde fence
+
+    <img src="a.png" alt="x"> and <a href="u">t</a>
+
+    indented code block
+
+  │ A quote with  code  and a link 🔗 https://example.com/q.
+
+   Column                               │ Value
+  ──────────────────────────────────────┼─────────────────────────────────────
+    a                                   │ b[1]
+   日本                                 │ 🎉
+
+  [1]: b https://example.com/b
+
+  1. one
+  2. two  2
+    • nested item
+
+
+  --------
+
+  Text after a rule, then a final paragraph.
+== nodes
+inline src 2-2 col 7-13  shown 3-3 col 10-14  "code"
+inline src 2-2 col 15-26  shown 3-3 col 18-27  "two words"
+inline src 2-2 col 28-43  shown 3-3 col 31-42  "with ` tick"
+inline src 2-2 col 49-52  shown 3-3 col 50-51  "j"
+inline src 2-2 col 53-56  shown 3-3 col 54-55  "k"
+inline src 3-3 col 0-6  shown 3-3 col 71-75  "span"
+link   src 3-3 col 30-67  shown 4-4 col 22-26  "link -> https://example.com/a"
+link   src 5-5 col 9-33  shown 6-6 col 11-35  "https://example.com/path -> https://example.com/path"
+link   src 5-5 col 44-70  shown 6-6 col 46-70  "https://example.com/auto -> https://example.com/auto"
+link   src 6-6 col 5-26  shown 7-7 col 7-26  "someone@example.com -> someone@example.com"
+inline src 6-6 col 66-77  shown 7-7 col 61-68  "ünïcode"
+link   src 10-10 col 2-33  shown 11-11 col 4-13  "same file -> #links-and-anchors"
+link   src 11-11 col 2-22  shown 12-12 col 4-12  "repeated -> #usage-1"
+link   src 12-12 col 2-42  shown 13-13 col 4-14  "other file -> docs/other%20file.md#setup"
+link   src 13-13 col 2-50  shown 14-14 col 4-13  "html link -> https://example.com/html"
+block  src 25-29 col 0-0  shown 26-34 col -1--1  "```go\nfmt.Println(\"nested\")\n```"
+block  src 31-33 col 0-0  shown 30-34 col -1--1  "tilde fence"
+block  src 35-37 col 0-0  shown 32-34 col -1--1  "<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>"
+inline src 41-41 col 15-21  shown 36-36 col 18-22  "code"
+link   src 41-41 col 28-57  shown 36-36 col 30-34  "link -> https://example.com/q"
+inline src 45-45 col 2-5  shown 40-40 col 4-5  "a"
+link   src 45-45 col 11-37  shown 40-40 col 42-43  "b -> https://example.com/b"
+inline src 49-49 col 7-10  shown 46-46 col 10-11  "2"
+== copy per line
+1: "Edge cases" | "# Edge cases"
+3: "Inline  code ,  two words ,  with ` tick , and  j / k  keys. A bold  span" | "Inline `code`, `two words`, ``with ` tick``, and `j`/`k` keys. A **bold\n`span`**"
+4: "and emphasis with a link 🔗 https://example.com/a." | "and *emphasis with a [link](https://example.com/a \"Title\")*."
+6: "Bare URL https://example.com/path, autolink https://example.com/auto and" | "Bare URL https://example.com/path, autolink <https://example.com/auto> and"
+7: "mail someone@example.com. Unicode: café, 日本語, emoji 🎉  ünïcode ." | "mail <someone@example.com>. Unicode: café, 日本語, emoji 🎉 `ünïcode`."
+9: "## Links and anchors" | "## Links and anchors"
+11: "• same file" | "- [same file](#links-and-anchors)"
+12: "• repeated" | "- [repeated](#usage-1)"
+13: "• other file 🔗 /docs/other%20file.md#setup" | "- [other file](docs/other%20file.md#setup)"
+14: "• html link 🔗 https://example.com/html" | "- <a href=\"https://example.com/html\">html link</a>"
+16: "## Usage" | "## Usage"
+18: "First usage." | "First usage."
+20: "## Usage" | "## Usage"
+22: "Second usage." | "Second usage."
+24: "## Code" | "## Code"
+26: "```go" | "```go"
+27: "fmt.Println(\"nested\")" | "fmt.Println(\"nested\")"
+28: "```" | "```"
+30: "tilde fence" | "~~~\ntilde fence\n~~~"
+32: "<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>" | "```html\n<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>\n```"
+34: "indented code block" | "    indented code block"
+36: "│ A quote with  code  and a link 🔗 https://example.com/q." | "> A quote with `code` and a [link](https://example.com/q)."
+38: " Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b[1]\n 日本                                 │ 🎉\n\n[1]: b https://example.com/b" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+39: "──────────────────────────────────────┼─────────────────────────────────────" | ""
+40: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b[1]\n 日本                                 │ 🎉\n\n[1]: b https://example.com/b" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+41: "日本                                 │ 🎉" | ""
+43: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b[1]\n 日本                                 │ 🎉\n\n[1]: b https://example.com/b" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+45: "1. one" | ""
+46: "2. two  2" | ""
+47: "• nested item" | "   - nested *item*"
+50: "--------" | ""
+52: "Text after a rule, then a final paragraph." | "Text after a rule, then a final paragraph."
+######## section 1
+== rendered
+
+  ## Links and anchors
+
+  • same file
+  • repeated
+  • other file 🔗 /docs/other%20file.md#setup
+  • html link 🔗 https://example.com/html
+== nodes
+link   src 2-2 col 2-33  shown 3-3 col 4-13  "same file -> #links-and-anchors"
+link   src 3-3 col 2-22  shown 4-4 col 4-12  "repeated -> #usage-1"
+link   src 4-4 col 2-42  shown 5-5 col 4-14  "other file -> docs/other%20file.md#setup"
+link   src 5-5 col 2-50  shown 6-6 col 4-13  "html link -> https://example.com/html"
+== copy per line
+1: "## Links and anchors" | "## Links and anchors"
+3: "• same file" | "- [same file](#links-and-anchors)"
+4: "• repeated" | "- [repeated](#usage-1)"
+5: "• other file 🔗 /docs/other%20file.md#setup" | "- [other file](docs/other%20file.md#setup)"
+6: "• html link 🔗 https://example.com/html" | "- <a href=\"https://example.com/html\">html link</a>"
+######## section 2
+== rendered
+
+  ## Usage
+
+  First usage.
+== nodes
+== copy per line
+1: "## Usage" | "## Usage"
+3: "First usage." | "First usage."
+######## section 3
+== rendered
+
+  ## Usage
+
+  Second usage.
+== nodes
+== copy per line
+1: "## Usage" | "## Usage"
+3: "Second usage." | "Second usage."
+######## section 4
+== rendered
+
+  ## Code
+
+    ```go
+    fmt.Println("nested")
+    ```
+
+    tilde fence
+
+    <img src="a.png" alt="x"> and <a href="u">t</a>
+
+    indented code block
+
+  │ A quote with  code  and a link 🔗 https://example.com/q.
+
+   Column                               │ Value
+  ──────────────────────────────────────┼─────────────────────────────────────
+    a                                   │ b[1]
+   日本                                 │ 🎉
+
+  [1]: b https://example.com/b
+
+  1. one
+  2. two  2
+    • nested item
+
+
+  --------
+
+  Text after a rule, then a final paragraph.
+== nodes
+block  src 2-6 col 0-0  shown 3-11 col -1--1  "```go\nfmt.Println(\"nested\")\n```"
+block  src 8-10 col 0-0  shown 7-11 col -1--1  "tilde fence"
+block  src 12-14 col 0-0  shown 9-11 col -1--1  "<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>"
+inline src 18-18 col 15-21  shown 13-13 col 18-22  "code"
+link   src 18-18 col 28-57  shown 13-13 col 30-34  "link -> https://example.com/q"
+inline src 22-22 col 2-5  shown 17-17 col 4-5  "a"
+link   src 22-22 col 11-37  shown 17-17 col 42-43  "b -> https://example.com/b"
+inline src 26-26 col 7-10  shown 23-23 col 10-11  "2"
+== copy per line
+1: "## Code" | "## Code"
+3: "```go" | "```go"
+4: "fmt.Println(\"nested\")" | "fmt.Println(\"nested\")"
+5: "```" | "```"
+7: "tilde fence" | "~~~\ntilde fence\n~~~"
+9: "<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>" | "```html\n<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>\n```"
+11: "indented code block" | "    indented code block"
+13: "│ A quote with  code  and a link 🔗 https://example.com/q." | "> A quote with `code` and a [link](https://example.com/q)."
+15: " Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b[1]\n 日本                                 │ 🎉\n\n[1]: b https://example.com/b" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+16: "──────────────────────────────────────┼─────────────────────────────────────" | ""
+17: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b[1]\n 日本                                 │ 🎉\n\n[1]: b https://example.com/b" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+18: "日本                                 │ 🎉" | ""
+20: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b[1]\n 日本                                 │ 🎉\n\n[1]: b https://example.com/b" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+22: "1. one" | ""
+23: "2. two  2" | ""
+24: "• nested item" | "   - nested *item*"
+27: "--------" | ""
+29: "Text after a rule, then a final paragraph." | "Text after a rule, then a final paragraph."
