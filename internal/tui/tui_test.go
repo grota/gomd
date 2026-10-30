@@ -950,6 +950,8 @@ func TestExtractNodes(t *testing.T) {
 			`span 0:0-0:8 "[a](b)"|span 0:13-0:28 "https://x.org"`},
 		{"code block without trailing blank lines", "```sh\nx\n\n```",
 			`block 0-3 sh "x"`},
+		{"unclosed fence", "```sh\nx",
+			`block 0-2 sh "x"`},
 		{"tags only in an HTML block", "<div>\n<a href=\"https://x.org\">a</a> `c` [m](https://y.org)\n</div>",
 			`link 1:0-1:29 "https://x.org"`},
 		{"image in a link", "[![i](a.png)](https://x.org)",

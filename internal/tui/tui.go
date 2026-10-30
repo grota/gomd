@@ -78,7 +78,7 @@ type codeNode struct {
 	content   string // raw code without fence lines / backticks; for links: URL
 	display   string // for links: the visible text glamour renders (e.g. link text, "alt 📷 path")
 	startLine int    // 0-based line index in sectionLines
-	endLine   int    // inclusive (== startLine for inline)
+	endLine   int    // inclusive (== startLine for inline); a fenced block's closing fence, len(lines) when it has none
 	inline    bool   // true for backtick inline code spans and links
 	heading   bool   // an inline code span on a heading line
 	indented  bool   // an indented code block: lines startLine..endLine are the body

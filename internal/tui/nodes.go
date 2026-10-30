@@ -674,7 +674,8 @@ func extractNodes(lines []string) []codeNode {
 			last := lineOf(back(segs.At(segs.Len()-1).Start, false))
 			if f, ok := x.(*ast.FencedCodeBlock); ok {
 				c.lang = string(f.Language(b))
-				first, last = first-1, min(last+1, len(lines)-1) // the fence lines
+				// The fence lines; with no closing fence, the line past the end.
+				first, last = first-1, last+1
 			} else {
 				c.indented = true
 			}
