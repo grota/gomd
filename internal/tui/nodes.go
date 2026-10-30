@@ -288,6 +288,75 @@ func (a *App) rebuildSection() {
 	a.codeNodes = extractCodeNodes(a.sectionLines)
 }
 
+// extractMoreCodeBlocks returns the code blocks the line scanner in
+// extractCodeNodes misses, found by goldmark: indented code blocks and
+// fenced blocks inside block quotes. A block on lines of one in found is
+// left out.
+func extractMoreCodeBlocks(lines []string, found []codeNode) []codeNode {
+	src := []byte(strings.Join(lines, "\n"))
+	off := make([]int, len(lines)) // byte offset of each line
+	for i := 1; i < len(lines); i++ {
+		off[i] = off[i-1] + len(lines[i-1]) + 1
+	}
+	lineOf := func(pos int) int { return sort.SearchInts(off, pos+1) - 1 }
+	taken := func(first, last int) bool {
+		for _, n := range found {
+			if n.kind == nodeCodeBlock && first <= n.endLine && last >= n.startLine {
+				return true
+			}
+		}
+		return false
+	}
+	inQuote := func(n ast.Node) bool {
+		for p := n.Parent(); p != nil; p = p.Parent() {
+			if _, ok := p.(*ast.Blockquote); ok {
+				return true
+			}
+		}
+		return false
+	}
+	var nodes []codeNode
+	doc := goldmark.New().Parser().Parse(text.NewReader(src))
+	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		var lang string
+		indented := false
+		switch b := n.(type) {
+		case *ast.CodeBlock:
+			indented = true
+		case *ast.FencedCodeBlock:
+			if !inQuote(b) {
+				return ast.WalkContinue, nil
+			}
+			lang = string(b.Language(src))
+		default:
+			return ast.WalkContinue, nil
+		}
+		segs := n.Lines()
+		var body strings.Builder
+		for i := 0; i < segs.Len(); i++ {
+			seg := segs.At(i)
+			body.Write(seg.Value(src))
+		}
+		content := strings.TrimRight(body.String(), "\n")
+		if strings.TrimSpace(content) == "" {
+			return ast.WalkSkipChildren, nil
+		}
+		first, last := lineOf(segs.At(0).Start), lineOf(segs.At(segs.Len()-1).Start)
+		if !indented { // the fence lines around the body
+			first, last = first-1, min(last+1, len(lines)-1)
+		}
+		if !taken(first, last) {
+			nodes = append(nodes, codeNode{kind: nodeCodeBlock, lang: lang, content: content,
+				startLine: first, endLine: last, indented: indented})
+		}
+		return ast.WalkSkipChildren, nil
+	})
+	return nodes
+}
+
 // extractCodeNodes finds all fenced code blocks and inline backtick spans in lines.
 func extractCodeNodes(lines []string) []codeNode {
 	var nodes []codeNode
@@ -343,6 +412,7 @@ func extractCodeNodes(lines []string) []codeNode {
 			}
 		}
 	}
+	nodes = append(nodes, extractMoreCodeBlocks(lines, nodes)...)
 	// Sort nodes by source position (line, then column) so that
 	// mapNodesToRenderedLines processes them in document order. Without this,
 	// inline code spans (extracted first) and link nodes (extracted second) on

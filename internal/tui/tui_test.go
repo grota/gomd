@@ -806,3 +806,17 @@ func TestExtractCodeNodes_EmptyAndListBlocks(t *testing.T) {
 		t.Fatalf("want only the list block, dedented by its fence: %+v", nodes)
 	}
 }
+
+func TestExtractCodeNodes_QuoteAndIndentedBlocks(t *testing.T) {
+	lines := strings.Split("> ```sh\n> echo q\n> ```\n\n    indented\n\ntext\n\n    ```\n    fenced or indented\n    ```\n", "\n")
+	var got []string
+	for _, n := range extractCodeNodes(lines) {
+		got = append(got, fmt.Sprintf("%d-%d %v %q", n.startLine, n.endLine, n.indented, n.content))
+	}
+	// The last block is a fence to the line scanner and indented code to
+	// goldmark: it is found once.
+	want := []string{`0-2 false "echo q"`, `4-4 true "indented"`, `8-10 false "fenced or indented"`}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}

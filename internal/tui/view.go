@@ -459,6 +459,8 @@ func placeNodesFromSource(m *sourceMap, nodes []codeNode, lines, rendered []stri
 	for i, n := range nodes {
 		var start, end int
 		switch line := lines[n.startLine]; {
+		case n.kind == nodeCodeBlock && n.indented:
+			start, end = off[n.startLine], off[n.endLine+1] // no fence lines
 		case n.kind == nodeCodeBlock:
 			start, end = off[n.startLine+1], off[n.endLine] // the body
 		case n.kind == nodeInlineCode:

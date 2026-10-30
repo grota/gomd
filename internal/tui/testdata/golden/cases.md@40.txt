@@ -73,10 +73,12 @@ block  src 16-18 col 0-0  shown 26-26 col -1--1  "the block after the wrapped on
 block  src 22-27 col 0-0  shown 30-33 col -1--1  "func a() {\n\n\treturn\n}"
 block  src 38-40 col 0-0  shown 41-41 col -1--1  "echo in-list"
 inline src 42-42 col 19-27  shown 43-43 col 22-28  "inline"
+block  src 46-48 col 0-0  shown 47-47 col -1--1  "echo in-quote"
 inline src 54-54 col 2-5  shown 53-53 col 4-5  "j"
 inline src 54-54 col 13-16  shown 53-53 col 28-29  "1"
 inline src 55-55 col 2-5  shown 54-54 col 4-5  "k"
 inline src 55-55 col 11-14  shown 54-54 col 26-27  "1"
+block  src 59-60 col 0-0  shown 58-59 col -1--1  "indented line one\nindented line two"
 == copy per line
 1: "Cases for  gomd -r  and the TUI" | "# Cases for `gomd -r` and the TUI"
 3: "Prose mentions x before the span  x" | "Prose mentions x before the span `x`"
@@ -194,10 +196,12 @@ block  src 16-18 col 0-0  shown 26-26 col -1--1  "the block after the wrapped on
 block  src 22-27 col 0-0  shown 30-33 col -1--1  "func a() {\n\n\treturn\n}"
 block  src 38-40 col 0-0  shown 41-41 col -1--1  "echo in-list"
 inline src 42-42 col 19-27  shown 43-43 col 22-28  "inline"
+block  src 46-48 col 0-0  shown 47-47 col -1--1  "echo in-quote"
 inline src 54-54 col 2-5  shown 53-53 col 4-5  "j"
 inline src 54-54 col 13-16  shown 53-53 col 28-29  "1"
 inline src 55-55 col 2-5  shown 54-54 col 4-5  "k"
 inline src 55-55 col 11-14  shown 54-54 col 26-27  "1"
+block  src 59-60 col 0-0  shown 58-59 col -1--1  "indented line one\nindented line two"
 == copy per line
 1: "Cases for  gomd -r  and the TUI" | "# Cases for `gomd -r` and the TUI"
 3: "Prose mentions x before the span  x" | "Prose mentions x before the span `x`"
@@ -301,6 +305,7 @@ block  src 2-7 col 0-0  shown 3-6 col -1--1  "func a() {\n\n\treturn\n}"
 == nodes
 block  src 4-6 col 0-0  shown 4-4 col -1--1  "echo in-list"
 inline src 8-8 col 19-27  shown 6-6 col 22-28  "inline"
+block  src 12-14 col 0-0  shown 10-10 col -1--1  "echo in-quote"
 == copy per line
 1: "## Nested blocks" | "## Nested blocks"
 3: "• A list item with code:" | "- A list item with code:"
@@ -339,6 +344,7 @@ inline src 5-5 col 11-14  shown 6-6 col 26-27  "1"
 
   The end.
 == nodes
+block  src 2-3 col 0-0  shown 3-4 col -1--1  "indented line one\nindented line two"
 == copy per line
 1: "## Indented code" | "## Indented code"
 3: "indented line one" | "    indented line one"
