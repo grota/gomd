@@ -1,6 +1,7 @@
 package parser_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/grota/gomd/internal/parser"
@@ -156,7 +157,26 @@ func TestLeadingThematicBreakIsNotFrontmatter(t *testing.T) {
 		t.Fatalf("content lost: %q, %d headings", doc.Content, len(doc.Headings))
 	}
 	md = "---\ntitle: a---b\n---\n# T\n"
-	if got := parser.ParseMarkdown(md).Content; got != "# T\n" {
+	if got := parser.ParseMarkdown(md).Content; got != "   \n            \n   \n# T\n" {
 		t.Fatalf("frontmatter with --- in a value: got %q", got)
+	}
+}
+
+func TestHeadingPositionsMatchTheFile(t *testing.T) {
+	md := "---\ntitle: x\n---\n\n# T\n"
+	h := parser.ParseMarkdown(md).Headings
+	if len(h) != 1 || h[0].Line != 5 || md[h[0].Offset:] != "# T\n" {
+		t.Fatalf("headings %+v do not point into the file", h)
+	}
+}
+
+func TestControlCharactersAreBlanked(t *testing.T) {
+	md := "# T\n\nsee \x1b]52;c;ZXZpbA==\x07 \u009b here\twith tab\r\n"
+	doc := parser.ParseMarkdown(md)
+	if strings.ContainsAny(doc.Content, "\x1b\x07\u009b") || len(doc.Content) != len(md) {
+		t.Fatalf("got %q", doc.Content)
+	}
+	if !strings.Contains(doc.Content, "\twith tab\r\n") {
+		t.Fatalf("tab or CRLF lost: %q", doc.Content)
 	}
 }

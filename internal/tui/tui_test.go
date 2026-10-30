@@ -609,3 +609,35 @@ func TestPreProcessLeavesCodeAlone(t *testing.T) {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
 }
+
+func TestExtractCodeNodes_NestedFence(t *testing.T) {
+	lines := strings.Split("````md\n```go\nx := 1\n```\n````\n~~~\n~~~~\n", "\n")
+	nodes := extractCodeNodes(lines)
+	if len(nodes) != 2 || nodes[0].content != "```go\nx := 1\n```" || nodes[0].lang != "md" || nodes[1].endLine != 6 {
+		t.Fatalf("got %+v", nodes)
+	}
+}
+
+func TestPercentEncodedAnchor(t *testing.T) {
+	a := NewApp(parser.ParseMarkdown("# Intro\n\n## Configuração rápida\n"), "f.md", "", config.Default())
+	if got := a.findHeadingByAnchor("configura%C3%A7%C3%A3o-r%C3%A1pida"); got != 1 {
+		t.Fatalf("findHeadingByAnchor = %d, want 1", got)
+	}
+}
+
+func TestFuzzyMatch(t *testing.T) {
+	for _, tt := range []struct {
+		text, pattern string
+		want          bool
+	}{
+		{"getting started", "gst", true},
+		{"getting started", "tsg", false},
+		{"configuração", "çã", true},
+		{"abc", "", true},
+		{"", "a", false},
+	} {
+		if got := fuzzyMatch(tt.text, tt.pattern); got != tt.want {
+			t.Errorf("fuzzyMatch(%q, %q) = %v", tt.text, tt.pattern, got)
+		}
+	}
+}

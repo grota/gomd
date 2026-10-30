@@ -206,7 +206,7 @@ func NewApp(doc *parser.Document, filename, filePath string, cfg config.Config) 
 // ─────────────────────────────────────────────
 
 type fileReloadMsg struct{ doc *parser.Document }
-type editorDoneMsg struct{}
+type editorDoneMsg struct{ err error }
 
 // openURL launches the configured opener on url and returns a status message.
 func (a *App) openURL(url string) string {
@@ -228,15 +228,16 @@ func (a *App) openURL(url string) string {
 	return "Opened: " + url
 }
 
-// openEditorCmd suspends the TUI, opens $EDITOR on filePath, then signals done.
+// openEditorCmd suspends the TUI, opens $EDITOR on filePath, then signals
+// done. $EDITOR may include arguments, e.g. "code --wait".
 func openEditorCmd(filePath string) tea.Cmd {
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "vi"
+	args := strings.Fields(os.Getenv("EDITOR"))
+	if len(args) == 0 {
+		args = []string{"vi"}
 	}
-	c := exec.Command(editor, filePath)
+	c := exec.Command(args[0], append(args[1:], filePath)...)
 	return tea.ExecProcess(c, func(err error) tea.Msg {
-		return editorDoneMsg{}
+		return editorDoneMsg{err}
 	})
 }
 
@@ -395,6 +396,9 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case editorDoneMsg:
 		a.reloadFromDisk("Reloaded after edit")
+		if msg.err != nil {
+			a.statusMsg = "Editor failed: " + msg.err.Error()
+		}
 		return a, nil
 
 	case tea.KeyPressMsg:

@@ -5,6 +5,8 @@ package parser
 
 import (
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -93,8 +95,7 @@ func (d *Document) ExtractSection(headingText string) (string, bool) {
 		return "", false
 	}
 
-	heading := d.Headings[headingIdx]
-	start := heading.Offset
+	start := d.Headings[headingIdx].Offset
 
 	// Skip the heading line itself
 	afterHeading := d.Content[start:]
@@ -103,17 +104,19 @@ func (d *Document) ExtractSection(headingText string) (string, bool) {
 		contentStart = start + nl + 1
 	}
 
-	// Find end: next heading at same or higher level
-	end := len(d.Content)
-	for i := headingIdx + 1; i < len(d.Headings); i++ {
-		if d.Headings[i].Level <= heading.Level {
-			end = d.Headings[i].Offset
-			break
+	section := strings.TrimSpace(d.Content[contentStart:d.SectionEnd(headingIdx)])
+	return section, true
+}
+
+// SectionEnd returns the byte offset where the section of heading i ends:
+// the next heading at the same or a higher level, or the end of the content.
+func (d *Document) SectionEnd(i int) int {
+	for _, h := range d.Headings[i+1:] {
+		if h.Level <= d.Headings[i].Level {
+			return h.Offset
 		}
 	}
-
-	section := strings.TrimSpace(d.Content[contentStart:end])
-	return section, true
+	return len(d.Content)
 }
 
 // RenderBoxTree renders a HeadingNode as a tree with box-drawing characters.
@@ -249,11 +252,13 @@ func offsetToLine(lineOffsets []int, offset int) int {
 	return lo // 1-based because lineOffsets[0] = 0 means line 1
 }
 
-// stripFrontmatter removes YAML frontmatter from the beginning of a markdown
+// blankFrontmatter blanks YAML frontmatter at the beginning of a markdown
 // document: a first line of exactly "---", a non-blank line after it, and a
-// closing line of exactly "---". A document opening with a thematic break
-// ("---" then a blank line) is left alone.
-func stripFrontmatter(content string) string {
+// closing line of exactly "---". Every byte but newlines becomes a space, so
+// the block renders as nothing while lines and byte offsets still match the
+// file. A document opening with a thematic break ("---" then a blank line) is
+// left alone.
+func blankFrontmatter(content string) string {
 	lines := strings.SplitAfter(content, "\n")
 	if len(lines) < 3 || strings.TrimRight(lines[0], "\r\n") != "---" || strings.TrimSpace(lines[1]) == "" {
 		return content
@@ -262,15 +267,44 @@ func stripFrontmatter(content string) string {
 	for _, l := range lines[1:] {
 		off += len(l)
 		if strings.TrimRight(l, "\r\n") == "---" {
-			return content[off:]
+			b := []byte(content[:off])
+			for i := range b {
+				if b[i] != '\n' {
+					b[i] = ' '
+				}
+			}
+			return string(b) + content[off:]
 		}
 	}
 	return content
 }
 
-// ParseMarkdown parses markdown content and returns a Document.
+// blankControls replaces terminal control characters other than tab,
+// newline and carriage return with spaces of the same byte length, so a
+// document cannot send escape sequences to the terminal and byte offsets
+// still match the file.
+func blankControls(s string) string {
+	isControl := func(r rune) bool { return unicode.IsControl(r) && r != '\t' && r != '\n' && r != '\r' }
+	if !strings.ContainsFunc(s, isControl) {
+		return s
+	}
+	var sb strings.Builder
+	for len(s) > 0 {
+		r, n := utf8.DecodeRuneInString(s)
+		if isControl(r) {
+			sb.WriteString(strings.Repeat(" ", n))
+		} else {
+			sb.WriteString(s[:n])
+		}
+		s = s[n:]
+	}
+	return sb.String()
+}
+
+// ParseMarkdown parses markdown content and returns a Document. Content keeps
+// the file's lines and byte offsets, with frontmatter and control characters
+// blanked.
 func ParseMarkdown(content string) *Document {
-	stripped := stripFrontmatter(content)
-	headings := parseMarkdownHeadings(stripped)
-	return &Document{Content: stripped, Headings: headings}
+	content = blankFrontmatter(blankControls(content))
+	return &Document{Content: content, Headings: parseMarkdownHeadings(content)}
 }

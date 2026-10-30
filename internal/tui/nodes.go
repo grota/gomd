@@ -278,19 +278,7 @@ func (a *App) rebuildSection() {
 		a.selectedIdx = len(a.doc.Headings) - 1
 	}
 
-	h := a.doc.Headings[a.selectedIdx]
-
-	// Byte range for section
-	start := h.Offset
-	end := len(a.doc.Content)
-	for i := a.selectedIdx + 1; i < len(a.doc.Headings); i++ {
-		if a.doc.Headings[i].Level <= h.Level {
-			end = a.doc.Headings[i].Offset
-			break
-		}
-	}
-
-	section := a.doc.Content[start:end]
+	section := a.doc.Content[a.doc.Headings[a.selectedIdx].Offset:a.doc.SectionEnd(a.selectedIdx)]
 	section = strings.TrimRight(section, "\n")
 	a.sectionLines = strings.Split(section, "\n")
 	a.codeNodes = extractCodeNodes(a.sectionLines)
@@ -307,10 +295,10 @@ func extractCodeNodes(lines []string) []codeNode {
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if !inBlock {
-			if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			if f := fenceRun(trimmed); f != "" {
 				inBlock = true
-				fence = trimmed[:3]
-				lang = strings.TrimSpace(trimmed[3:])
+				fence = f
+				lang = strings.TrimSpace(trimmed[len(f):])
 				bodyLines = nil
 				startLine = i
 			} else {
@@ -319,7 +307,9 @@ func extractCodeNodes(lines []string) []codeNode {
 				nodes = append(nodes, extractLinkNodes(line, i)...)
 			}
 		} else {
-			if strings.HasPrefix(trimmed, fence) {
+			// A closing fence is the opening character repeated at least as
+			// often, with nothing else on the line.
+			if strings.HasPrefix(trimmed, fence) && strings.Trim(trimmed, fence[:1]) == "" {
 				nodes = append(nodes, codeNode{
 					kind:      nodeCodeBlock,
 					lang:      lang,
@@ -348,6 +338,19 @@ func extractCodeNodes(lines []string) []codeNode {
 		return nodes[i].colStart < nodes[j].colStart
 	})
 	return nodes
+}
+
+// fenceRun returns the opening code fence that starts line, three or more
+// backticks or tildes, or "" when there is none.
+func fenceRun(line string) string {
+	if line == "" || line[0] != '`' && line[0] != '~' {
+		return ""
+	}
+	n := len(line) - len(strings.TrimLeft(line, line[:1]))
+	if n < 3 {
+		return ""
+	}
+	return line[:n]
 }
 
 // extractInlineNodes finds all `code` spans in a single line and returns them as codeNodes.

@@ -3,8 +3,11 @@ package tui
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -340,6 +343,9 @@ func (a *App) navGoForward() {
 
 // findHeadingByAnchor finds a heading index by GitHub-style anchor slug.
 func (a *App) findHeadingByAnchor(anchor string) int {
+	if s, err := url.PathUnescape(anchor); err == nil {
+		anchor = s // "#configura%C3%A7%C3%A3o"
+	}
 	anchor = strings.ToLower(anchor)
 	for i, h := range a.doc.Headings {
 		if headingToAnchor(h.Text) == anchor {
@@ -356,7 +362,7 @@ func headingToAnchor(text string) string {
 	for _, r := range text {
 		if r == ' ' || r == '-' {
 			sb.WriteByte('-')
-		} else if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+		} else if unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsMark(r) || r == '_' {
 			sb.WriteRune(r)
 		}
 	}
@@ -892,20 +898,13 @@ func (a *App) handleSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // fuzzyMatch checks if all characters in pattern appear in text in order.
 func fuzzyMatch(text, pattern string) bool {
-	ti := 0
 	for _, pc := range pattern {
-		found := false
-		for ti < len([]rune(text)) {
-			if []rune(text)[ti] == pc {
-				ti++
-				found = true
-				break
-			}
-			ti++
-		}
-		if !found {
+		i := strings.IndexRune(text, pc)
+		if i < 0 {
 			return false
 		}
+		_, n := utf8.DecodeRuneInString(text[i:])
+		text = text[i+n:]
 	}
 	return true
 }

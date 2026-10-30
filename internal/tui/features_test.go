@@ -228,6 +228,7 @@ func TestHeadingToAnchor(t *testing.T) {
 		{"Hello World!", "hello-world"},
 		{"C++ Guide", "c-guide"},
 		{"Under_score", "under_score"},
+		{"Configuração rápida", "configuração-rápida"},
 	}
 	for _, tt := range tests {
 		got := headingToAnchor(tt.input)

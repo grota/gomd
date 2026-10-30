@@ -378,7 +378,7 @@ func StyleConfigFromTheme(theme Theme) gansi.StyleConfig {
 				},
 				Margin: uintPtr(2),
 			},
-			Chroma: chromaForTheme(codeFg, codeBg, isLightColor(codeBg)),
+			Chroma: chromaForTheme(codeFg, codeBg, luminance(Color(codeBg)) >= 0.5),
 		},
 		Table: gansi.StyleTable{},
 		DefinitionDescription: gansi.StylePrimitive{
@@ -406,12 +406,6 @@ func BGOpen(hex string) string {
 		return ""
 	}
 	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r, g, b)
-}
-
-// isLightColor reports whether a "#rrggbb" color is light (simplified sRGB luminance).
-func isLightColor(hex string) bool {
-	r, g, b, ok := parseHex(hex)
-	return ok && 0.299*float64(r)+0.587*float64(g)+0.114*float64(b) > 128
 }
 
 // chromaForTheme returns a full Chroma token color config appropriate for light
