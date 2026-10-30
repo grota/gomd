@@ -14,6 +14,19 @@ Open work only. Finished items are removed; git history has the details.
       themes need the full palette kept and the built-in Ocean themes need a
       hand-picked one. Decide after test-driving the 2026-10-13 colour changes.
 
+## Known bugs
+
+- [ ] **Link URLs with some non-ASCII characters break the rendering.**
+      Glamour writes a link's URL raw into an OSC 8 hyperlink.
+      `charmbracelet/x/ansi` (v0.11.7, still in v0.11.9) reads byte 0x9C as
+      the C1 string terminator even inside UTF-8, so a URL holding "✓"
+      (E2 9C 93), Cyrillic "М" (D0 9C) or Greek "Μ" (CE 9C) ends the escape
+      early: the hyperlink target is corrupt and the rest of the URL shows
+      as text, repeated by glamour's word wrap. The source map then loses its
+      place for the rest of the document (gopls `doc/contributing.md`: 41 of
+      its nodes). Report upstream; a gomd workaround would percent-encode
+      those characters in link destinations before rendering.
+
 ## Unconfirmed checks
 
 Earlier notes left these open, and nothing records a result.
