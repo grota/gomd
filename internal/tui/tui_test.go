@@ -895,3 +895,14 @@ func TestTableBordersStayAlignedWithLinks(t *testing.T) {
 		t.Fatalf("table borders at columns %v:\n%s", cols, ansi.Strip(strings.Join(lines, "\n")))
 	}
 }
+
+func TestNoNodesOnLinkDefinitions(t *testing.T) {
+	lines := strings.Split("See [#12][] and `code`.\n\n[#12]: https://example.com/pull/12\n[guide]: <https://example.com/g> \"The guide\"\n[x]: not a definition, `kept`\n", "\n")
+	var got []string
+	for _, n := range extractCodeNodes(lines) {
+		got = append(got, n.content)
+	}
+	if want := "code|kept"; strings.Join(got, "|") != want {
+		t.Fatalf("nodes %q, want %s", got, want)
+	}
+}

@@ -404,7 +404,11 @@ func extractCodeNodes(lines []string) []codeNode {
 				startLine = i
 				indent = len(line) - len(strings.TrimLeft(line, " "))
 			} else {
-				// Scan for inline backtick spans and links (including on heading lines)
+				// Scan for inline backtick spans and links (including on heading
+				// lines). A link reference definition is not shown, so it has none.
+				if linkDefRe.MatchString(line) {
+					continue
+				}
 				inline := extractInlineNodes(line, i)
 				if strings.HasPrefix(trimmed, "#") {
 					for j := range inline {
@@ -454,6 +458,10 @@ func extractCodeNodes(lines []string) []codeNode {
 	})
 	return nodes
 }
+
+// linkDefRe matches a link reference definition line ("[1]: https://x
+// "title""), which glamour does not show.
+var linkDefRe = regexp.MustCompile(`^ {0,3}\[[^\]]+\]:[ \t]*\S+([ \t]+("[^"]*"|'[^']*'|\([^)]*\)))?[ \t]*$`)
 
 // fenceRun returns the opening code fence that starts line, three or more
 // backticks or tildes, or "" when there is none.
