@@ -38,6 +38,10 @@ An autolink <https://example.com/auto>, a bare https://example.com/bare.
 Ending a sentence: https://example.com/end, or (https://example.com/paren).
 Mail <someone@example.com> and bare someone@example.com.
 
+Side by side: [one](https://example.com/1) [two](https://example.com/2),
+[same](https://example.com/1) [url](https://example.com/1), [anchor](#images)
+[then](https://example.com/3), and [a link](https://example.com/4) <https://example.com/5>.
+
 ## Images
 
 An ![inline image](img/a.png) and a linked one:

@@ -237,10 +237,12 @@ var linkGlyphRe = regexp.MustCompile(`(\x1b\]8;;\x07)((?:\x1b\[[0-9;]*m)*)([ \t]
 // glyph would push them out of line.
 func PostProcessLinks(s string) string {
 	lines := strings.Split(s, "\n")
+	prev := ""
 	for i, l := range lines {
 		if !isTableLine(strings.TrimSpace(ansi.Strip(l))) {
-			lines[i] = linkGlyphRe.ReplaceAllString(l, "${1} 🔗${2}${3}${4}")
+			lines[i] = glyphOnLine(l, prev)
 		}
+		prev = l
 	}
 	for i := 0; i+1 < len(lines); i++ {
 		glyphAcrossLines(lines, i)
@@ -248,35 +250,62 @@ func PostProcessLinks(s string) string {
 	return strings.Join(lines, "\n")
 }
 
+// glyphOnLine adds the link glyph between a link's text and its URL when
+// both are on line l, a space apart; prev is the line before, where the
+// link's text may start.
+func glyphOnLine(l, prev string) string {
+	var b strings.Builder
+	last := 0
+	for _, m := range linkGlyphRe.FindAllStringSubmatchIndex(l, -1) {
+		if urlOfLink(l[m[1]-len("\x1b]8;id="):], prev+l[:m[0]]) {
+			b.WriteString(l[last:m[3]])
+			b.WriteString(" 🔗")
+			last = m[3]
+		}
+	}
+	return b.String() + l[last:]
+}
+
+// hyperlinkRe matches the start of a hyperlink: its id and URL.
+var hyperlinkRe = regexp.MustCompile(`^\x1b\]8;id=([^;\x07]*);([^\x07]*)\x07`)
+
+// urlOfLink reports whether s starts with the hyperlink of a link's URL
+// whose text is in before: it shows the start of its URL, and before opens
+// a hyperlink with its id (glamour gives a link's text and URL one id; a
+// linked image's text opens the link's before its own). A wrapped link text
+// goes on with the same id but shows the text, and two links to one URL
+// share it.
+func urlOfLink(s, before string) bool {
+	m := hyperlinkRe.FindStringSubmatch(s)
+	if m == nil || !strings.Contains(before, "\x1b]8;id="+m[1]+";") {
+		return false
+	}
+	shown, _, _ := strings.Cut(s[len(m[0]):], "\x1b]8;;\x07")
+	shown = strings.TrimSpace(ansi.Strip(shown))
+	return shown != "" && strings.HasPrefix(imageCaptionPath(m[2]), shown)
+}
+
 // linkEndRe matches the end of a hyperlink ending a line, with only styles
-// and spaces after it; urlStartRe the start of a hyperlink beginning one.
-// Group 1 of linkEndRe is the hyperlink's id; groups 2 and 3 of urlStartRe
-// are its id and URL.
+// and spaces after it (group 1); urlStartRe the styles and spaces before a
+// hyperlink beginning one.
 var (
-	linkEndRe  = regexp.MustCompile(`\x1b\]8;id=([^;\x07]*);[^\x07]*\x07(?:[^\x1b]|\x1b\[[0-9;]*m)*\x1b\]8;;\x07((?:\x1b\[[0-9;]*m| )*)$`)
-	urlStartRe = regexp.MustCompile(`^((?:\x1b\[[0-9;]*m| )*)\x1b\]8;id=([^;\x07]*);([^\x07]*)\x07`)
+	linkEndRe  = regexp.MustCompile(`\x1b\]8;;\x07((?:\x1b\[[0-9;]*m| )*)$`)
+	urlStartRe = regexp.MustCompile(`^((?:\x1b\[[0-9;]*m| )*)\x1b\]8;id=`)
 )
 
 // glyphAcrossLines adds the link glyph to a link whose text ends line i and
 // whose URL starts line i+1: after the text when line i has room in its
-// trailing spaces, else before the URL when line i+1 has. The URL is shown
-// with the text's hyperlink id, as a wrapped text goes on with; it is told
-// apart by showing the start of the URL.
+// trailing spaces, else before the URL when line i+1 has.
 func glyphAcrossLines(lines []string, i int) {
 	end := linkEndRe.FindStringSubmatchIndex(lines[i])
 	start := urlStartRe.FindStringSubmatchIndex(lines[i+1])
-	if end == nil || start == nil || lines[i][end[2]:end[3]] != lines[i+1][start[4]:start[5]] ||
+	if end == nil || start == nil || !urlOfLink(lines[i+1][start[1]-len("\x1b]8;id="):], lines[i]) ||
 		isTableLine(strings.TrimSpace(ansi.Strip(lines[i]))) {
-		return
-	}
-	shown, _, _ := strings.Cut(lines[i+1][start[1]:], "\x1b]8;;\x07")
-	if shown = strings.TrimSpace(ansi.Strip(shown)); shown == "" ||
-		!strings.HasPrefix(imageCaptionPath(lines[i+1][start[6]:start[7]]), shown) {
 		return
 	}
 	const glyph = " 🔗" // three cells
 	if l, ok := dropTrailingSpaces(lines[i], 3); ok {
-		lines[i] = l[:end[4]] + glyph + l[end[4]:]
+		lines[i] = l[:end[2]] + glyph + l[end[2]:]
 	} else if l, ok := dropTrailingSpaces(lines[i+1], 3); ok {
 		lines[i+1] = l[:start[3]] + "🔗 " + l[start[3]:]
 	}
