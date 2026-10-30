@@ -76,14 +76,14 @@ type codeNode struct {
 	kind      nodeKind
 	lang      string
 	content   string // raw code without fence lines / backticks; for links: URL
-	display   string // for links: the visible text glamour renders (e.g. link text, "alt 📷 path")
+	display   string // for links: the link text as written, or for images the caption glamour shows ("alt 📷 path")
 	startLine int    // 0-based line index in sectionLines
 	endLine   int    // inclusive (== startLine for inline); a fenced block's closing fence, len(lines) when it has none
 	inline    bool   // true for backtick inline code spans and links
 	heading   bool   // an inline code span on a heading line
 	indented  bool   // an indented code block: lines startLine..endLine are the body
 	colStart  int    // byte offset of opening backtick/bracket in the line (inline only)
-	colEnd    int    // byte offset just past closing backtick/paren (inline only)
+	colEnd    int    // byte offset just past closing backtick/paren, from startLine's start (inline only)
 }
 
 // nodeRenderLoc records where a codeNode appears in the glamour-rendered output.

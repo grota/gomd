@@ -458,6 +458,12 @@ func placeNodesFromSource(m *sourceMap, nodes []codeNode, lines, rendered []stri
 	}
 	for i, n := range nodes {
 		var start, end int
+		var tag []int // the parts of an <a> tag, which may span lines
+		if n.kind == nodeLink {
+			if t := aTagRe.FindStringSubmatchIndex(m.src[off[n.startLine]+n.colStart : off[n.startLine]+n.colEnd]); t != nil && t[0] == 0 {
+				tag = t
+			}
+		}
 		switch line := lines[n.startLine]; {
 		case n.kind == nodeCodeBlock && n.indented:
 			start, end = off[n.startLine], off[n.endLine+1] // no fence lines
@@ -470,13 +476,8 @@ func placeNodesFromSource(m *sourceMap, nodes []codeNode, lines, rendered []stri
 		case line[n.colStart] == '[': // the text, not the URL
 			start = off[n.startLine] + n.colStart + 1
 			end = start + len(n.display)
-		case len(line) > n.colStart+2 && strings.EqualFold(line[n.colStart:n.colStart+2], "<a") &&
-			(line[n.colStart+2] == ' ' || line[n.colStart+2] == '\t'): // the text between the tags
-			m := aTagRe.FindStringSubmatchIndex(line[n.colStart:n.colEnd])
-			if m == nil {
-				continue
-			}
-			start, end = off[n.startLine]+n.colStart+m[4], off[n.startLine]+n.colStart+m[5]
+		case tag != nil: // the text between the tags
+			start, end = off[n.startLine]+n.colStart+tag[4], off[n.startLine]+n.colStart+tag[5]
 		default: // <img>, autolinks and bare URLs
 			start, end = off[n.startLine]+n.colStart, off[n.startLine]+n.colEnd
 		}
