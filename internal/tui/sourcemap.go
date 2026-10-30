@@ -325,7 +325,7 @@ func (m *sourceMap) addDestination(u0 int, markEnd *int, add func(start, end int
 	switch {
 	case i < len(s) && s[i] == '(':
 		d := i + 1
-		for d < len(s) && s[d] == ' ' {
+		for d < len(s) && strings.IndexByte(" \t\r\n", s[d]) >= 0 { // a line break may come before it
 			d++
 		}
 		e := d

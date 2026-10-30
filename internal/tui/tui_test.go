@@ -861,6 +861,29 @@ func TestWrappedTableCellsArePlaced(t *testing.T) {
 	}
 }
 
+func TestLinkDestinationOnNextLineIsPlaced(t *testing.T) {
+	// The destination starts on the line after "(", as CommonMark allows.
+	md := "A [fork](\nhttps://github.com/go-yaml/yaml/) of\n`one`, kept by [YAML](\n  https://github.com/yaml/).\n"
+	cfg := config.Default()
+	cfg.Images.Enabled = false
+	a := NewApp(parser.ParseMarkdown(md), "f.md", "", cfg)
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	a.ensureRenderedLines()
+	locs := make([]nodeRenderLoc, len(a.codeNodes))
+	for i := range locs {
+		locs[i] = nodeRenderLoc{firstLine: -1, lastLine: -1, spanCol: -1, spanColEnd: -1}
+	}
+	placeNodesFromSource(a.srcMap, a.codeNodes, a.sectionLines, a.renderedLines, locs)
+	if len(a.codeNodes) != 3 {
+		t.Fatalf("%d nodes, want 3", len(a.codeNodes))
+	}
+	for i, n := range a.codeNodes {
+		if locs[i].firstLine < 0 {
+			t.Errorf("%q not placed", n.content)
+		}
+	}
+}
+
 func TestTableArtInCodeIsNotReadByColumn(t *testing.T) {
 	// A code block drawing a table pairs with no markdown table: the
 	// document is aligned in source order.
