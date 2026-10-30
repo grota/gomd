@@ -877,3 +877,21 @@ func TestTableArtInCodeIsNotReadByColumn(t *testing.T) {
 		t.Fatalf("code block placed at %+v", loc)
 	}
 }
+
+func TestTableBordersStayAlignedWithLinks(t *testing.T) {
+	md := "| Command | Description |\n| ------- | ----------- |\n| [attach](attach.md) | Attach streams |\n| plain | No link here |\n"
+	cfg := config.Default()
+	cfg.Images.Enabled = false
+	a := NewApp(parser.ParseMarkdown(md), "f.md", "", cfg)
+	lines := a.renderGlamour(md, 70)
+	cols := map[int]bool{}
+	for _, l := range lines {
+		s := ansi.Strip(l)
+		if i := strings.IndexAny(s, "│┼"); i >= 0 {
+			cols[ansi.StringWidth(s[:i])] = true
+		}
+	}
+	if len(cols) != 1 {
+		t.Fatalf("table borders at columns %v:\n%s", cols, ansi.Strip(strings.Join(lines, "\n")))
+	}
+}

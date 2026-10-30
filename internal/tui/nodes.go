@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"charm.land/glamour/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
@@ -231,8 +232,16 @@ var linkGlyphRe = regexp.MustCompile(`(\x1b\]8;;\x07)((?:\x1b\[[0-9;]*m)*)([ \t]
 
 // PostProcessLinks adds a link glyph between the text and URL portions of
 // rendered links. It should be called on the full rendered output string.
+// Table rows are left alone: glamour has laid out their borders, and the
+// glyph would push them out of line.
 func PostProcessLinks(s string) string {
-	return linkGlyphRe.ReplaceAllString(s, "${1} 🔗${2}${3}${4}")
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		if !isTableLine(strings.TrimSpace(ansi.Strip(l))) {
+			lines[i] = linkGlyphRe.ReplaceAllString(l, "${1} 🔗${2}${3}${4}")
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // renderGlamour renders a markdown string through glamour and returns the output

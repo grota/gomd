@@ -40,7 +40,7 @@
 
    Column                               │ Value
   ──────────────────────────────────────┼─────────────────────────────────────
-    a                                   │ b 🔗 https://example.com/b
+    a                                   │ b https://example.com/b
    日本                                 │ 🎉
 
   1. one
@@ -99,10 +99,10 @@ inline src 54-54 col 7-10  shown 44-44 col 10-11  "2"
 32: "<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>" | "```html\n<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>\n```"
 34: "indented code block" | "    indented code block"
 36: "│ A quote with  code  and a link 🔗 https://example.com/q." | "> A quote with `code` and a [link](https://example.com/q)."
-38: " Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b 🔗 https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+38: " Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
 39: "──────────────────────────────────────┼─────────────────────────────────────" | ""
-40: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b 🔗 https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
-41: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b 🔗 https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+40: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+41: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
 43: "1. one" | "1. one"
 44: "2. two  2" | "2. two `2`"
 45: "• nested item" | "   - nested *item*"
@@ -150,7 +150,7 @@ inline src 54-54 col 7-10  shown 44-44 col 10-11  "2"
 
    Column                               │ Value
   ──────────────────────────────────────┼─────────────────────────────────────
-    a                                   │ b 🔗 https://example.com/b
+    a                                   │ b https://example.com/b
    日本                                 │ 🎉
 
   1. one
@@ -209,10 +209,10 @@ inline src 49-49 col 7-10  shown 44-44 col 10-11  "2"
 32: "<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>" | "```html\n<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>\n```"
 34: "indented code block" | "    indented code block"
 36: "│ A quote with  code  and a link 🔗 https://example.com/q." | "> A quote with `code` and a [link](https://example.com/q)."
-38: " Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b 🔗 https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+38: " Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
 39: "──────────────────────────────────────┼─────────────────────────────────────" | ""
-40: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b 🔗 https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
-41: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b 🔗 https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+40: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+41: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
 43: "1. one" | "1. one"
 44: "2. two  2" | "2. two `2`"
 45: "• nested item" | "   - nested *item*"
@@ -277,7 +277,7 @@ link   src 5-5 col 2-50  shown 6-6 col 4-13  "html link -> https://example.com/h
 
    Column                               │ Value
   ──────────────────────────────────────┼─────────────────────────────────────
-    a                                   │ b 🔗 https://example.com/b
+    a                                   │ b https://example.com/b
    日本                                 │ 🎉
 
   1. one
@@ -307,10 +307,10 @@ inline src 26-26 col 7-10  shown 21-21 col 10-11  "2"
 9: "<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>" | "```html\n<img src=\"a.png\" alt=\"x\"> and <a href=\"u\">t</a>\n```"
 11: "indented code block" | "    indented code block"
 13: "│ A quote with  code  and a link 🔗 https://example.com/q." | "> A quote with `code` and a [link](https://example.com/q)."
-15: " Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b 🔗 https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+15: " Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
 16: "──────────────────────────────────────┼─────────────────────────────────────" | ""
-17: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b 🔗 https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
-18: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b 🔗 https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+17: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
+18: "Column                               │ Value\n──────────────────────────────────────┼─────────────────────────────────────\n  a                                   │ b https://example.com/b\n 日本                                 │ 🎉" | "| Column | Value |\n| ------ | ----- |\n| `a`    | [b](https://example.com/b) |\n| 日本   | 🎉    |"
 20: "1. one" | "1. one"
 21: "2. two  2" | "2. two `2`"
 22: "• nested item" | "   - nested *item*"
