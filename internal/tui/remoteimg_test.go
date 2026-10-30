@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image"
 	"image/png"
 	"net/http"
@@ -95,8 +96,8 @@ func TestRemoteImageRefusals(t *testing.T) {
 		}
 	}
 	srv, _ := imageServer(t, []byte("<html>not an image</html>"), false)
-	if _, err := r.download(context.Background(), srv.URL+"/page.png"); err == nil || !strings.Contains(err.Error(), "not an image") {
-		t.Errorf("want a not-an-image error, got %v", err)
+	if _, err := r.download(context.Background(), srv.URL+"/page.png"); !errors.Is(err, errUnsupportedImage) {
+		t.Errorf("want an unsupported-image error, got %v", err)
 	}
 	if _, err := r.download(context.Background(), srv.URL+"/missing.png"); err == nil || !strings.Contains(err.Error(), "404") {
 		t.Errorf("want a 404 error, got %v", err)
@@ -184,6 +185,47 @@ func TestStaleRemoteImageShownWhileRefreshing(t *testing.T) {
 	fetch := RemoteImageFetcher(cfg.Images, func(err error) { warned = err })
 	if got := fetch(url); got != path || warned == nil {
 		t.Fatalf("render mode offline: got %q, warning %v", got, warned)
+	}
+}
+
+func TestUnsupportedRemoteImages(t *testing.T) {
+	r := testRemote(t, 1)
+	read := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/badge": // SVG declared, and over the size limit: refused from the header
+			w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
+			w.Header().Set("Content-Length", "2000000")
+			read++
+			w.Write(make([]byte, 2000000))
+		case "/photo.webp": // declared as bytes, refused once it does not decode
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(append([]byte("RIFF\x00\x00\x00\x00WEBPVP8 "), make([]byte, 64)...))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	for _, path := range []string{"/badge", "/photo.webp"} {
+		if _, err := r.download(context.Background(), srv.URL+path); !errors.Is(err, errUnsupportedImage) {
+			t.Errorf("%s: want an unsupported-image error, got %v", path, err)
+		}
+	}
+	if entries, _ := os.ReadDir(r.dir); len(entries) != 0 {
+		t.Errorf("unsupported images cached: %d files", len(entries))
+	}
+
+	// Neither render mode nor the TUI reports them as failures.
+	var warned error
+	fetch := RemoteImageFetcher(config.ImageConfig{Remote: true, RemoteMaxMB: 1}, func(err error) { warned = err })
+	if got := fetch(srv.URL + "/badge"); got != "" || warned != nil {
+		t.Errorf("render mode: got %q, warning %v", got, warned)
+	}
+	cfg := config.Default()
+	cfg.Images.Enabled = true
+	a := NewApp(parser.ParseMarkdown("![b]("+srv.URL+"/badge)\n"), "d.md", "", cfg)
+	a.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	a.Update(a.downloadCmd(srv.URL + "/badge")())
+	if a.statusMsg != "" || !a.downloads[srv.URL+"/badge"] {
+		t.Errorf("TUI: status %q, retry pending %v", a.statusMsg, !a.downloads[srv.URL+"/badge"])
 	}
 }
 

@@ -1,14 +1,19 @@
 package tui
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"image"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -29,6 +34,13 @@ const (
 	remoteImageMaxAge     = 30 * 24 * time.Hour // cleanup removes copies older than this
 	remoteImageCacheBytes = 100 << 20           // cleanup keeps the cache below this size
 )
+
+// errUnsupportedImage reports a download in a format gomd cannot show. It is
+// expected (most README badges are SVG), so it is not reported as a failure.
+var errUnsupportedImage = errors.New("not a PNG, JPEG or GIF image")
+
+// shownImageTypes are the media types of the formats gomd decodes.
+var shownImageTypes = []string{"image/png", "image/jpeg", "image/gif"}
 
 // remoteImagesDir is a variable so tests can point it at a temp dir.
 var remoteImagesDir = func() string {
@@ -76,7 +88,7 @@ func (r *remoteImages) cached(url string) (path string, fresh bool) {
 }
 
 // download fetches url into the cache and returns the file. It refuses
-// anything over maxBytes and anything that is not an image.
+// anything over maxBytes and anything gomd cannot decode.
 func (r *remoteImages) download(ctx context.Context, url string) (string, error) {
 	r.clean.Do(r.cleanup)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -91,6 +103,13 @@ func (r *remoteImages) download(ctx context.Context, url string) (string, error)
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("%s: %s", url, resp.Status)
 	}
+	// A declared type gomd cannot show (SVG badges, WebP, HTML error pages)
+	// is refused before the body is read. Other types, possibly mislabelled,
+	// go through the decode check below.
+	if mt, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type")); err == nil &&
+		(mt == "text/html" || strings.HasPrefix(mt, "image/") && !slices.Contains(shownImageTypes, mt)) {
+		return "", fmt.Errorf("%s: %w (%s)", url, errUnsupportedImage, mt)
+	}
 	tooLarge := fmt.Errorf("%s: larger than %d MB (images.remote_max_mb)", url, r.maxBytes>>20)
 	if resp.ContentLength > r.maxBytes {
 		return "", tooLarge
@@ -102,8 +121,10 @@ func (r *remoteImages) download(ctx context.Context, url string) (string, error)
 	if int64(len(data)) > r.maxBytes {
 		return "", tooLarge
 	}
-	if !strings.HasPrefix(http.DetectContentType(data), "image/") {
-		return "", fmt.Errorf("%s: not an image", url)
+	// The bytes are already in memory: keep them only when they decode, so
+	// the cache holds nothing that cannot be shown.
+	if _, _, err := image.DecodeConfig(bytes.NewReader(data)); err != nil {
+		return "", fmt.Errorf("%s: %w", url, errUnsupportedImage)
 	}
 	if err := os.MkdirAll(r.dir, 0o755); err != nil {
 		return "", err
@@ -182,7 +203,9 @@ func RemoteImageFetcher(cfg config.ImageConfig, warn func(error)) func(url strin
 		defer cancel()
 		got, err := r.download(ctx, url)
 		if err != nil {
-			warn(err)
+			if !errors.Is(err, errUnsupportedImage) {
+				warn(err)
+			}
 			return path
 		}
 		return got
@@ -221,7 +244,9 @@ func (a *App) downloadCmd(url string) tea.Cmd {
 // image uploaded from the old one.
 func (a *App) handleImageDownloaded(msg imageDownloadedMsg) {
 	if msg.err != nil {
-		a.statusMsg = "Image download failed: " + msg.err.Error()
+		if !errors.Is(msg.err, errUnsupportedImage) {
+			a.statusMsg = "Image download failed: " + msg.err.Error()
+		}
 		return
 	}
 	delete(a.downloads, msg.url)
