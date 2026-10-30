@@ -318,12 +318,12 @@ func (a *App) rebuildSection() {
 }
 
 // sectionNodes returns the nodes of lines while extractNodes replaces the
-// line scanner one kind at a time: code blocks from extractNodes, code spans
-// and links from extractCodeNodes.
+// line scanner one kind at a time: code blocks and code spans from
+// extractNodes, links from extractCodeNodes.
 func sectionNodes(lines []string) []codeNode {
 	var nodes []codeNode
 	for _, n := range extractNodes(lines) {
-		if n.kind == nodeCodeBlock {
+		if n.kind != nodeLink {
 			nodes = append(nodes, n)
 		}
 	}
@@ -337,8 +337,7 @@ func sectionNodes(lines []string) []codeNode {
 	return nodes
 }
 
-// extractCodeNodes finds the inline backtick spans and links in lines,
-// outside fenced code blocks.
+// extractCodeNodes finds the links in lines, outside fenced code blocks.
 func extractCodeNodes(lines []string) []codeNode {
 	var nodes []codeNode
 	var fence string // the opening fence of the block lines are in
@@ -356,14 +355,6 @@ func extractCodeNodes(lines []string) []codeNode {
 		case linkDefRe.MatchString(line):
 			// A link reference definition is not shown, so it has none.
 		default:
-			// Inline backtick spans and links, heading lines included.
-			inline := extractInlineNodes(line, i)
-			if strings.HasPrefix(trimmed, "#") {
-				for j := range inline {
-					inline[j].heading = true
-				}
-			}
-			nodes = append(nodes, inline...)
 			nodes = append(nodes, extractLinkNodes(line, i)...)
 		}
 	}
@@ -385,66 +376,6 @@ func fenceRun(line string) string {
 		return ""
 	}
 	return line[:n]
-}
-
-// extractInlineNodes finds all `code` spans in a single line and returns them as codeNodes.
-func extractInlineNodes(line string, lineIdx int) []codeNode {
-	var nodes []codeNode
-	i := 0
-	for i < len(line) {
-		if line[i] != '`' {
-			i++
-			continue
-		}
-		// Count opening backticks
-		j := i
-		for j < len(line) && line[j] == '`' {
-			j++
-		}
-		tick := line[i:j] // one or more backticks
-		// Find matching closing sequence
-		k := j
-		for k < len(line) {
-			closeStart := strings.Index(line[k:], tick)
-			if closeStart == -1 {
-				break
-			}
-			closeStart += k
-			// Make sure it's not longer than tick (e.g. `` inside ``` context)
-			// Check that the char before or after isn't another backtick
-			closeEnd := closeStart + len(tick)
-			// If surrounded by more backticks, skip
-			if closeStart > 0 && line[closeStart-1] == '`' {
-				k = closeStart + 1
-				continue
-			}
-			if closeEnd < len(line) && line[closeEnd] == '`' {
-				k = closeEnd
-				continue
-			}
-			// Found a valid span
-			inner := line[j:closeStart]
-			// Trim single leading/trailing space per CommonMark
-			if len(inner) > 2 && inner[0] == ' ' && inner[len(inner)-1] == ' ' {
-				inner = inner[1 : len(inner)-1]
-			}
-			nodes = append(nodes, codeNode{
-				kind:      nodeInlineCode,
-				lang:      "",
-				content:   inner,
-				startLine: lineIdx,
-				endLine:   lineIdx,
-				inline:    true,
-				colStart:  i,
-				colEnd:    closeEnd,
-			})
-			i = closeEnd
-			goto nextChar
-		}
-		i = j
-	nextChar:
-	}
-	return nodes
 }
 
 // linkDestination drops an optional title from a link's parenthesised part:
