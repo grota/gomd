@@ -579,3 +579,37 @@ func TestAspectOf(t *testing.T) {
 		}
 	}
 }
+
+func TestPlaceImages_TableImagesAfterTheTable(t *testing.T) {
+	dir := t.TempDir()
+	f, err := os.Create(filepath.Join(dir, "a.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewRGBA(image.Rect(0, 0, 16, 16))); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	lines := []string{
+		"   a   │ b",
+		"  ─────┼─────",
+		"   x   │ pic 📷 /a.png",
+		"   y   │ z",
+		"",
+		"  │ A quote with pic 📷 /a.png",
+		"  after",
+	}
+	md := "| a | b |\n| - | - |\n| x | ![pic](a.png) |\n| y | z |\n\n> A quote with ![pic](a.png)\n\nafter\n"
+	out, _ := placeImages(lines, md, filepath.Join(dir, "d.md"), 40, true, imageCache{}, nil)
+	var shape []string
+	for _, l := range out {
+		if isImageRow(l) {
+			l = "IMG"
+		}
+		shape = append(shape, strings.TrimSpace(l))
+	}
+	want := "a   │ b|─────┼─────|x   │ pic 📷 /a.png|y   │ z|IMG||│ A quote with pic 📷 /a.png|IMG|after"
+	if got := strings.Join(shape, "|"); got != want {
+		t.Fatalf("got  %s\nwant %s", got, want)
+	}
+}

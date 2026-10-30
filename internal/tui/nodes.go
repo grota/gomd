@@ -27,6 +27,9 @@ func (a *App) ensureGlamourRenderer(innerW int) interface{ Render(string) (strin
 		glamour.WithStyles(StyleConfigFromTheme(a.theme)),
 		glamour.WithWordWrap(innerW),
 		glamour.WithChromaFormatter("terminal16m"),
+		// Links in tables stay in their cell, as everywhere else, instead of
+		// footnotes under the table that the source map cannot follow.
+		glamour.WithInlineTableLinks(true),
 	)
 	if err != nil {
 		return nil

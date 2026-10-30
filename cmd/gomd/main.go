@@ -280,6 +280,7 @@ func renderToStdout(doc *parser.Document, mdPath string, cfg config.Config, dark
 		glamour.WithStyles(style),
 		glamour.WithWordWrap(width),
 		glamour.WithChromaFormatter("terminal16m"),
+		glamour.WithInlineTableLinks(true), // as the TUI shows them
 	)
 	if err != nil {
 		return fmt.Errorf("glamour renderer: %w", err)

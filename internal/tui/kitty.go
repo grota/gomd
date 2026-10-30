@@ -303,9 +303,15 @@ func placeImages(lines []string, mdContent, mdPath string, maxCols int, keepCapt
 		return lines, uploads
 	}
 
-	var out []string
+	// Images whose caption is in a table cell are drawn when the table ends,
+	// so the table is not split.
+	var out, afterTable []string
 	for _, line := range lines {
 		stripped := strings.TrimSpace(ansiStripRe.ReplaceAllString(line, ""))
+		if len(afterTable) > 0 && !isTableLine(stripped) {
+			out = append(out, afterTable...)
+			afterTable = nil
+		}
 		// A line holding only one image's caption.
 		var standalone *entry
 		for cp, e := range entries {
@@ -342,10 +348,21 @@ func placeImages(lines []string, mdContent, mdPath string, maxCols int, keepCapt
 		}
 		sort.Slice(hits, func(i, j int) bool { return hits[i].at < hits[j].at })
 		for _, h := range hits {
-			out = append(out, h.img.indentedRows()...)
+			if isTableLine(stripped) {
+				afterTable = append(afterTable, h.img.indentedRows()...)
+			} else {
+				out = append(out, h.img.indentedRows()...)
+			}
 		}
 	}
-	return out, uploads
+	return append(out, afterTable...), uploads
+}
+
+// isTableLine reports whether a rendered line, without its styles and outer
+// spaces, is a row or rule of a table: a cell border after the first cell.
+// A quote line starts with the border, so it is not one.
+func isTableLine(s string) bool {
+	return strings.Contains(s, "┼") || strings.Contains(s, "│") && !strings.HasPrefix(s, "│")
 }
 
 // RenderImages places images into render-mode output and returns the text to
