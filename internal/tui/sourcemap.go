@@ -81,33 +81,40 @@ func (m *sourceMap) sourceLineAt(p textPos) int {
 }
 
 // place returns where the visible characters of source bytes [start, end)
-// are shown: the first and last rendered line, and the columns [col0, col1)
-// they span on the first line. ok is false when none of them is shown.
-func (m *sourceMap) place(start, end int) (first, last, col0, col1 int, ok bool) {
+// are shown: the first and last rendered line, and for each line from first
+// to last the columns [col0, col1) they span, {-1, -1} on a line showing
+// none. ok is false when none of them is shown.
+func (m *sourceMap) place(start, end int) (first, last int, cols [][2]int, ok bool) {
 	u0 := sort.Search(len(m.units), func(i int) bool { return m.units[i].start >= start })
 	u1 := sort.Search(len(m.units), func(i int) bool { return m.units[i].start >= end })
-	var lo, hi textPos // the first and last matched cell
+	first, last = -1, -1
 	for u := u0; u < u1; u++ {
 		if c := m.unitCell[u]; c >= 0 {
-			p := m.cells[c].pos
-			if !ok || before(p, lo) {
-				lo = p
+			l := m.cells[c].pos.line
+			if first < 0 || l < first {
+				first = l
 			}
-			if !ok || before(hi, p) {
-				hi = p
-			}
-			ok = true
+			last = max(last, l)
 		}
 	}
-	if !ok {
-		return 0, 0, 0, 0, false
+	if first < 0 {
+		return 0, 0, nil, false
+	}
+	cols = make([][2]int, last-first+1)
+	for i := range cols {
+		cols[i] = [2]int{-1, -1}
 	}
 	for u := u0; u < u1; u++ {
-		if c := m.unitCell[u]; c >= 0 && m.cells[c].pos.line == lo.line {
-			col1 = max(col1, m.cells[c].pos.col+m.cells[c].w)
+		if c := m.unitCell[u]; c >= 0 {
+			p, w := m.cells[c].pos, m.cells[c].w
+			lc := &cols[p.line-first]
+			if lc[0] < 0 || p.col < lc[0] {
+				lc[0] = p.col
+			}
+			lc[1] = max(lc[1], p.col+w)
 		}
 	}
-	return lo.line, hi.line, lo.col, col1, true
+	return first, last, cols, true
 }
 
 // buildSourceMap maps rendered, the render of the markdown src. It reads

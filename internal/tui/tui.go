@@ -93,6 +93,9 @@ type nodeRenderLoc struct {
 	// For inline nodes: display-column offsets for highlighting (used by highlightSpanInLine).
 	spanCol    int // display column of span start (-1 if not found)
 	spanColEnd int // display column just past span end
+	// For an inline node the source map shows on more lines: its columns on
+	// each line after the first, {-1, -1} on a line showing none of it.
+	more [][2]int
 	// Byte offsets within the stripped line — used internally by mapNodesToRenderedLines
 	// for the searchFromCol cursor (strings.Index returns byte offsets).
 	spanColByte    int

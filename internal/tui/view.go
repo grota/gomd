@@ -481,18 +481,20 @@ func placeNodesFromSource(m *sourceMap, nodes []codeNode, lines, rendered []stri
 		default: // <img>, autolinks and bare URLs
 			start, end = off[n.startLine]+n.colStart, off[n.startLine]+n.colEnd
 		}
-		first, last, col0, col1, ok := m.place(start, end)
+		first, last, cols, ok := m.place(start, end)
 		if !ok {
 			continue
 		}
 		locs[i].firstLine, locs[i].lastLine = first, last
 		if n.inline {
+			col0, col1 := cols[0][0], cols[0][1]
 			// Glamour shows a relative image path rooted ("a.png" as
 			// "/a.png"); that "/" has no source, so take it in.
 			if strings.HasPrefix(n.display, "/") && col0 > 0 && ansi.Cut(ansi.Strip(rendered[first]), col0-1, col0) == "/" {
 				col0--
 			}
 			locs[i].spanCol, locs[i].spanColEnd = col0, col1
+			locs[i].more = cols[1:]
 		}
 	}
 }
@@ -987,10 +989,16 @@ func applyNodeHighlights(lines []string, nodes []codeNode, selIdx int, info []no
 			}
 
 			if n.inline {
-				// Surgical span highlight — only colour the backtick content.
+				// Surgical span highlight — only colour the backtick content,
+				// on each line it is shown on.
 				li := loc.firstLine
 				if li < len(out) {
 					out[li] = highlightSpanInLine(out[li], loc.spanCol, loc.spanColEnd, style)
+				}
+				for k, c := range loc.more {
+					if li := loc.firstLine + 1 + k; li < len(out) && c[0] >= 0 {
+						out[li] = highlightSpanInLine(out[li], c[0], c[1], style)
+					}
 				}
 			} else {
 				// Full-line background for all lines of the block.

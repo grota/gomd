@@ -83,8 +83,11 @@ func writeSection(text, styled *strings.Builder, a *App) {
 		}
 		fmt.Fprintf(text, "%-6s src %d-%d col %d-%d  shown %d-%d col %d-%d  %q", kinds[n.kind],
 			n.startLine, n.endLine, n.colStart, n.colEnd, loc.firstLine, loc.lastLine, loc.spanCol, loc.spanColEnd, label)
-		if n.inline && loc.firstLine >= 0 && loc.spanCol >= 0 { // the text highlighted on its first line
+		if n.inline && loc.firstLine >= 0 && loc.spanCol >= 0 { // the text highlighted on each line
 			fmt.Fprintf(text, " on %q", ansi.Cut(ansi.Strip(a.renderedLines[loc.firstLine]), loc.spanCol, loc.spanColEnd))
+			for k, c := range loc.more {
+				fmt.Fprintf(text, " + %q", ansi.Cut(ansi.Strip(a.renderedLines[loc.firstLine+1+k]), c[0], c[1]))
+			}
 		}
 		text.WriteString("\n")
 	}

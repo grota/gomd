@@ -993,3 +993,22 @@ func TestAnchorTagOverTwoLinesIsPlaced(t *testing.T) {
 		t.Fatalf("highlighted %q", got)
 	}
 }
+
+func TestWrappedSpanIsHighlightedOnEveryLine(t *testing.T) {
+	md := strings.Repeat("word ", 7) + "`a code span long enough to wrap` end.\n"
+	cfg := config.Default()
+	cfg.Images.Enabled = false
+	a := NewApp(parser.ParseMarkdown(md), "f.md", "", cfg)
+	a.Update(tea.WindowSizeMsg{Width: 52, Height: 20})
+	a.ensureRenderedLines()
+	loc := a.nodeRenderInfo[0]
+	if loc.lastLine != loc.firstLine+1 {
+		t.Fatalf("the span is not on two lines: %+v\n%s", loc, ansi.Strip(strings.Join(a.renderedLines, "\n")))
+	}
+	out := applyNodeHighlights(a.renderedLines, a.codeNodes, 0, a.nodeRenderInfo, a.theme, 50)
+	for li := loc.firstLine; li <= loc.lastLine; li++ {
+		if out[li] == a.renderedLines[li] {
+			t.Errorf("line %d not highlighted: %q", li, ansi.Strip(out[li]))
+		}
+	}
+}
