@@ -373,3 +373,24 @@ func TestCodeColoursReadableOnEveryTheme(t *testing.T) {
 		}
 	}
 }
+
+func TestCodeColorsFromPalette(t *testing.T) {
+	gt := ghosttyTheme{Background: "#1d1f21", Foreground: "#c5c8c6"}
+	for i := range gt.Palette {
+		gt.Palette[i] = "#808080"
+	}
+	gt.Palette[5] = "#b294bb" // magenta: keywords
+	gt.Palette[2] = "#202820" // green, too dark for the code background: strings
+	chroma := StyleConfigFromTheme(ghosttyToTheme("t", gt)).CodeBlock.Chroma
+	if got := *chroma.Keyword.Color; got != "#b294bb" {
+		t.Errorf("keyword %s, want the palette's magenta", got)
+	}
+	bg := Color(*chroma.Background.BackgroundColor)
+	if got := Color(*chroma.LiteralString.Color); got == "#202820" || contrast(got, bg) < 4.5 {
+		t.Errorf("string %s: not made readable on %s", got, bg)
+	}
+	builtin := StyleConfigFromTheme(themes["OceanDark"]).CodeBlock.Chroma
+	if got := *builtin.Keyword.Color; got == "#b294bb" || !strings.HasPrefix(got, "#") {
+		t.Errorf("built-in keyword %s", got)
+	}
+}

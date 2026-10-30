@@ -267,6 +267,8 @@ Key bindings use comma-separated values for multiple keys mapped to the same act
 
 gomd ships two built-in themes, **OceanDark** and **OceanLight**, and can use the 700+ themes of [iTerm2-Color-Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes) (MIT) in Ghostty format.
 
+With a Ghostty theme, code blocks take their colours from the theme's 16-colour palette (magenta keywords, green strings, blue functions), lightened or darkened where needed to stay readable on the code background. The built-in themes use glamour's code colours.
+
 `theme` uses Ghostty's format: `"light:A,dark:B"` picks a theme for each system appearance, and a single name is used in both. The default is `"light:OceanLight,dark:OceanDark"`.
 
 gomd follows the system's light or dark setting as reported by the terminal (mode 2031; Ghostty, and tmux 3.6+). It asks once at startup and switches live when the setting changes. Without an answer it uses the dark theme. Render mode (`-r`) asks only when its output is a terminal.

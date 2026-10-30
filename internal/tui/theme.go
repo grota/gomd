@@ -4,6 +4,7 @@ package tui
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -40,6 +41,9 @@ type Theme struct {
 	Code       Color
 	Search     Color
 	NodeSel    Color // selected node in interactive mode
+	// Palette is a Ghostty theme's 16 ANSI colours, which colour code; the
+	// built-in themes have none and keep glamour's code colours.
+	Palette [16]Color
 }
 
 var themes = map[string]Theme{
@@ -378,7 +382,7 @@ func StyleConfigFromTheme(theme Theme) gansi.StyleConfig {
 				},
 				Margin: uintPtr(2),
 			},
-			Chroma: chromaForTheme(codeFg, codeBg, luminance(Color(codeBg)) >= 0.5),
+			Chroma: chromaForTheme(codeFg, codeBg, luminance(Color(codeBg)) >= 0.5, theme.Palette),
 		},
 		Table: gansi.StyleTable{},
 		DefinitionDescription: gansi.StylePrimitive{
@@ -409,10 +413,11 @@ func BGOpen(hex string) string {
 }
 
 // chromaForTheme returns a full Chroma token color config appropriate for light
-// or dark backgrounds.  Colors are taken from glamour's built-in styles and
-// pushed towards black or white until readable on codeBg: 4.5:1 (WCAG AA),
-// 3:1 for comments so they stay dimmer than code.
-func chromaForTheme(fg, codeBg string, light bool) *gansi.Chroma {
+// or dark backgrounds. Colors are taken from the theme's palette when it has
+// one, else from glamour's built-in styles, and pushed towards black or white
+// until readable on codeBg: 4.5:1 (WCAG AA), 3:1 for comments so they stay
+// dimmer than code.
+func chromaForTheme(fg, codeBg string, light bool, palette [16]Color) *gansi.Chroma {
 	readable := func(color string, ratio float64) string {
 		if color == "" {
 			return ""
@@ -456,6 +461,42 @@ func chromaForTheme(fg, codeBg string, light bool) *gansi.Chroma {
 			p.Underline = boolPtr(true)
 		}
 		return p
+	}
+
+	if p := palette; !slices.Contains(p[:], "") {
+		// The usual mapping of terminal syntax themes (base16): magenta
+		// keywords, green strings, blue functions, yellow types, cyan
+		// builtins, bright red (often orange) numbers and constants.
+		c := func(i int) string { return string(p[i]) }
+		return &gansi.Chroma{
+			Text:                sp(fg),
+			Error:               spBg(fg, c(1)),
+			Comment:             dim(c(8)),
+			CommentPreproc:      sp(c(3)),
+			Keyword:             sp(c(5)),
+			KeywordReserved:     sp(c(5)),
+			KeywordNamespace:    sp(c(5)),
+			KeywordType:         sp(c(3)),
+			Operator:            sp(c(6)),
+			Punctuation:         sp(fg),
+			Name:                sp(fg),
+			NameBuiltin:         sp(c(6)),
+			NameTag:             sp(c(1)),
+			NameAttribute:       sp(c(3)),
+			NameClass:           spStyle(c(3), true, false, true),
+			NameConstant:        sp(c(9)),
+			NameDecorator:       sp(c(3)),
+			NameFunction:        sp(c(4)),
+			LiteralNumber:       sp(c(9)),
+			LiteralString:       sp(c(2)),
+			LiteralStringEscape: sp(c(6)),
+			GenericDeleted:      sp(c(1)),
+			GenericEmph:         spStyle("", false, true, false),
+			GenericInserted:     sp(c(2)),
+			GenericStrong:       spStyle("", true, false, false),
+			GenericSubheading:   dim(c(8)),
+			Background:          spBg("", codeBg),
+		}
 	}
 
 	if light {
