@@ -1012,3 +1012,19 @@ func TestWrappedSpanIsHighlightedOnEveryLine(t *testing.T) {
 		}
 	}
 }
+
+func TestLinkGlyphAcrossLines(t *testing.T) {
+	text := "see \x1b]8;id=1;https://x.io\x07docs\x1b]8;;\x07"
+	url := "\x1b]8;id=1;https://x.io\x07https://x.io\x1b]8;;\x07."
+	more := "\x1b]8;id=1;https://x.io\x07more text\x1b]8;;\x07"
+	for _, tc := range []struct{ name, in, want string }{
+		{"after the text", text + "    \n" + url, text + " 🔗 \n" + url},
+		{"before the URL", text + "\n" + url + "   ", text + "\n🔗 " + url},
+		{"no room", text + "\n" + url, text + "\n" + url},
+		{"wrapped link text", text + "    \n" + more + "    ", text + "    \n" + more + "    "},
+	} {
+		if got := PostProcessLinks(tc.in); got != tc.want {
+			t.Errorf("%s:\n got %q\nwant %q", tc.name, got, tc.want)
+		}
+	}
+}

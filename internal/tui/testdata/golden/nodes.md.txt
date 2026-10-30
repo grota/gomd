@@ -8,11 +8,11 @@
 
   ## Inline links
 
-  A plain link 🔗 https://example.com/plain and one with a title
+  A plain link 🔗 https://example.com/plain and one with a title 🔗
   https://example.com/title and an angle destination 🔗 https://example.com/with
   space.
 
-  A URL with parentheses
+  A URL with parentheses 🔗
   https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space
   before it 🔗 https://example.com/space.
 
@@ -21,14 +21,14 @@
 
   Nested brackets: [Become a backer 🔗 https://example.com/backer].
 
-  A link with  code  🔗 https://example.com/code and bold
+  A link with  code  🔗 https://example.com/code and bold 🔗
   https://example.com/bold.
 
   An anchor to a heading.
 
   ## Reference links
 
-  The full 🔗 https://example.com/ref, the collapsed
+  The full 🔗 https://example.com/ref, the collapsed 🔗
   https://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut
   forms, and an image badge 📷 https://example.com/badge.svg.
 
@@ -139,21 +139,21 @@ block  src 106-108 col 0-0  shown 87-87 col -1--1  "never closed"
 3: "Every syntax that gives a selectable node, and syntax that looks like one" | "Every syntax that gives a selectable node, and syntax that looks like one"
 4: "but does not." | "but does not."
 6: "## Inline links" | "## Inline links"
-8: "A plain link 🔗 https://example.com/plain and one with a title\nhttps://example.com/title" | "A [plain link](https://example.com/plain) and one with a\n[title](https://example.com/title \"The title\")"
-9: "title\nhttps://example.com/title and an angle destination 🔗 https://example.com/with\nspace" | "[title](https://example.com/title \"The title\") and an\n[angle destination](<https://example.com/with space>)"
+8: "A plain link 🔗 https://example.com/plain and one with a title 🔗\nhttps://example.com/title" | "A [plain link](https://example.com/plain) and one with a\n[title](https://example.com/title \"The title\")"
+9: "title 🔗\nhttps://example.com/title and an angle destination 🔗 https://example.com/with\nspace" | "[title](https://example.com/title \"The title\") and an\n[angle destination](<https://example.com/with space>)"
 10: "angle destination 🔗 https://example.com/with\nspace." | "[angle destination](<https://example.com/with space>)."
-12: "A URL with parentheses\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed" | "A URL with [parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)"
-13: "parentheses\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space\nbefore it 🔗 https://example.com/space" | "[parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)\nand a [space before it]( https://example.com/space)"
+12: "A URL with parentheses 🔗\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed" | "A URL with [parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)"
+13: "parentheses 🔗\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space\nbefore it 🔗 https://example.com/space" | "[parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)\nand a [space before it]( https://example.com/space)"
 14: "space\nbefore it 🔗 https://example.com/space." | "[space before it]( https://example.com/space)."
 16: "A link whose text goes on 🔗 https://example.com/two-lines and one whose" | "A [link whose text\ngoes on](https://example.com/two-lines) and one whose"
 17: "destination does: here 🔗 https://example.com/next-line." | "destination does: [here](\nhttps://example.com/next-line)."
 19: "Nested brackets: [Become a backer 🔗 https://example.com/backer]." | "Nested brackets: [[Become a backer](https://example.com/backer)]."
-21: "A link with  code  🔗 https://example.com/code and bold\nhttps://example.com/bold" | "A [link with `code`](https://example.com/code) and [**bold**](https://example.com/bold)"
-22: "bold\nhttps://example.com/bold." | "[**bold**](https://example.com/bold)."
+21: "A link with  code  🔗 https://example.com/code and bold 🔗\nhttps://example.com/bold" | "A [link with `code`](https://example.com/code) and [**bold**](https://example.com/bold)"
+22: "bold 🔗\nhttps://example.com/bold." | "[**bold**](https://example.com/bold)."
 24: "An anchor to a heading." | "An [anchor](#inline-links) to a heading."
 26: "## Reference links" | "## Reference links"
-28: "The full 🔗 https://example.com/ref, the collapsed\nhttps://example.com/collapsed" | "The [full][ref], the [collapsed][]"
-29: "collapsed\nhttps://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut" | "[collapsed][] and the [shortcut]"
+28: "The full 🔗 https://example.com/ref, the collapsed 🔗\nhttps://example.com/collapsed" | "The [full][ref], the [collapsed][]"
+29: "collapsed 🔗\nhttps://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut" | "[collapsed][] and the [shortcut]"
 30: "forms, and an image ![badge](https://example.com/badge.svg)." | "forms, and an image\n![badge][img]."
 32: "## Autolinks and bare URLs" | "## Autolinks and bare URLs"
 34: "An autolink https://example.com/auto, a bare https://example.com/bare." | "An autolink <https://example.com/auto>, a bare https://example.com/bare."
@@ -199,11 +199,11 @@ block  src 106-108 col 0-0  shown 87-87 col -1--1  "never closed"
 
   ## Inline links
 
-  A plain link 🔗 https://example.com/plain and one with a title
+  A plain link 🔗 https://example.com/plain and one with a title 🔗
   https://example.com/title and an angle destination 🔗 https://example.com/with
   space.
 
-  A URL with parentheses
+  A URL with parentheses 🔗
   https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space
   before it 🔗 https://example.com/space.
 
@@ -212,14 +212,14 @@ block  src 106-108 col 0-0  shown 87-87 col -1--1  "never closed"
 
   Nested brackets: [Become a backer 🔗 https://example.com/backer].
 
-  A link with  code  🔗 https://example.com/code and bold
+  A link with  code  🔗 https://example.com/code and bold 🔗
   https://example.com/bold.
 
   An anchor to a heading.
 
   ## Reference links
 
-  The full 🔗 https://example.com/ref, the collapsed
+  The full 🔗 https://example.com/ref, the collapsed 🔗
   https://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut
   forms, and an image badge 📷 https://example.com/badge.svg.
 
@@ -330,21 +330,21 @@ block  src 106-108 col 0-0  shown 87-87 col -1--1  "never closed"
 3: "Every syntax that gives a selectable node, and syntax that looks like one" | "Every syntax that gives a selectable node, and syntax that looks like one"
 4: "but does not." | "but does not."
 6: "## Inline links" | "## Inline links"
-8: "A plain link 🔗 https://example.com/plain and one with a title\nhttps://example.com/title" | "A [plain link](https://example.com/plain) and one with a\n[title](https://example.com/title \"The title\")"
-9: "title\nhttps://example.com/title and an angle destination 🔗 https://example.com/with\nspace" | "[title](https://example.com/title \"The title\") and an\n[angle destination](<https://example.com/with space>)"
+8: "A plain link 🔗 https://example.com/plain and one with a title 🔗\nhttps://example.com/title" | "A [plain link](https://example.com/plain) and one with a\n[title](https://example.com/title \"The title\")"
+9: "title 🔗\nhttps://example.com/title and an angle destination 🔗 https://example.com/with\nspace" | "[title](https://example.com/title \"The title\") and an\n[angle destination](<https://example.com/with space>)"
 10: "angle destination 🔗 https://example.com/with\nspace." | "[angle destination](<https://example.com/with space>)."
-12: "A URL with parentheses\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed" | "A URL with [parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)"
-13: "parentheses\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space\nbefore it 🔗 https://example.com/space" | "[parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)\nand a [space before it]( https://example.com/space)"
+12: "A URL with parentheses 🔗\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed" | "A URL with [parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)"
+13: "parentheses 🔗\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space\nbefore it 🔗 https://example.com/space" | "[parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)\nand a [space before it]( https://example.com/space)"
 14: "space\nbefore it 🔗 https://example.com/space." | "[space before it]( https://example.com/space)."
 16: "A link whose text goes on 🔗 https://example.com/two-lines and one whose" | "A [link whose text\ngoes on](https://example.com/two-lines) and one whose"
 17: "destination does: here 🔗 https://example.com/next-line." | "destination does: [here](\nhttps://example.com/next-line)."
 19: "Nested brackets: [Become a backer 🔗 https://example.com/backer]." | "Nested brackets: [[Become a backer](https://example.com/backer)]."
-21: "A link with  code  🔗 https://example.com/code and bold\nhttps://example.com/bold" | "A [link with `code`](https://example.com/code) and [**bold**](https://example.com/bold)"
-22: "bold\nhttps://example.com/bold." | "[**bold**](https://example.com/bold)."
+21: "A link with  code  🔗 https://example.com/code and bold 🔗\nhttps://example.com/bold" | "A [link with `code`](https://example.com/code) and [**bold**](https://example.com/bold)"
+22: "bold 🔗\nhttps://example.com/bold." | "[**bold**](https://example.com/bold)."
 24: "An anchor to a heading." | "An [anchor](#inline-links) to a heading."
 26: "## Reference links" | "## Reference links"
-28: "The full 🔗 https://example.com/ref, the collapsed\nhttps://example.com/collapsed" | "The [full][ref], the [collapsed][]"
-29: "collapsed\nhttps://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut" | "[collapsed][] and the [shortcut]"
+28: "The full 🔗 https://example.com/ref, the collapsed 🔗\nhttps://example.com/collapsed" | "The [full][ref], the [collapsed][]"
+29: "collapsed 🔗\nhttps://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut" | "[collapsed][] and the [shortcut]"
 30: "forms, and an image ![badge](https://example.com/badge.svg)." | "forms, and an image\n![badge][img]."
 32: "## Autolinks and bare URLs" | "## Autolinks and bare URLs"
 34: "An autolink https://example.com/auto, a bare https://example.com/bare." | "An autolink <https://example.com/auto>, a bare https://example.com/bare."
@@ -385,11 +385,11 @@ block  src 106-108 col 0-0  shown 87-87 col -1--1  "never closed"
 
   ## Inline links
 
-  A plain link 🔗 https://example.com/plain and one with a title
+  A plain link 🔗 https://example.com/plain and one with a title 🔗
   https://example.com/title and an angle destination 🔗 https://example.com/with
   space.
 
-  A URL with parentheses
+  A URL with parentheses 🔗
   https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space
   before it 🔗 https://example.com/space.
 
@@ -398,7 +398,7 @@ block  src 106-108 col 0-0  shown 87-87 col -1--1  "never closed"
 
   Nested brackets: [Become a backer 🔗 https://example.com/backer].
 
-  A link with  code  🔗 https://example.com/code and bold
+  A link with  code  🔗 https://example.com/code and bold 🔗
   https://example.com/bold.
 
   An anchor to a heading.
@@ -417,24 +417,24 @@ link   src 15-15 col 51-87  shown 16-16 col 53-57  "**bold** -> https://example.
 link   src 17-17 col 3-26  shown 19-19 col 5-11  "anchor -> #inline-links" on "anchor"
 == copy per line
 1: "## Inline links" | "## Inline links"
-3: "A plain link 🔗 https://example.com/plain and one with a title\nhttps://example.com/title" | "A [plain link](https://example.com/plain) and one with a\n[title](https://example.com/title \"The title\")"
-4: "title\nhttps://example.com/title and an angle destination 🔗 https://example.com/with\nspace" | "[title](https://example.com/title \"The title\") and an\n[angle destination](<https://example.com/with space>)"
+3: "A plain link 🔗 https://example.com/plain and one with a title 🔗\nhttps://example.com/title" | "A [plain link](https://example.com/plain) and one with a\n[title](https://example.com/title \"The title\")"
+4: "title 🔗\nhttps://example.com/title and an angle destination 🔗 https://example.com/with\nspace" | "[title](https://example.com/title \"The title\") and an\n[angle destination](<https://example.com/with space>)"
 5: "angle destination 🔗 https://example.com/with\nspace." | "[angle destination](<https://example.com/with space>)."
-7: "A URL with parentheses\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed" | "A URL with [parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)"
-8: "parentheses\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space\nbefore it 🔗 https://example.com/space" | "[parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)\nand a [space before it]( https://example.com/space)"
+7: "A URL with parentheses 🔗\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed" | "A URL with [parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)"
+8: "parentheses 🔗\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space\nbefore it 🔗 https://example.com/space" | "[parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)\nand a [space before it]( https://example.com/space)"
 9: "space\nbefore it 🔗 https://example.com/space." | "[space before it]( https://example.com/space)."
 11: "A link whose text goes on 🔗 https://example.com/two-lines and one whose" | "A [link whose text\ngoes on](https://example.com/two-lines) and one whose"
 12: "destination does: here 🔗 https://example.com/next-line." | "destination does: [here](\nhttps://example.com/next-line)."
 14: "Nested brackets: [Become a backer 🔗 https://example.com/backer]." | "Nested brackets: [[Become a backer](https://example.com/backer)]."
-16: "A link with  code  🔗 https://example.com/code and bold\nhttps://example.com/bold" | "A [link with `code`](https://example.com/code) and [**bold**](https://example.com/bold)"
-17: "bold\nhttps://example.com/bold." | "[**bold**](https://example.com/bold)."
+16: "A link with  code  🔗 https://example.com/code and bold 🔗\nhttps://example.com/bold" | "A [link with `code`](https://example.com/code) and [**bold**](https://example.com/bold)"
+17: "bold 🔗\nhttps://example.com/bold." | "[**bold**](https://example.com/bold)."
 19: "An anchor to a heading." | "An [anchor](#inline-links) to a heading."
 ######## section 2
 == rendered
 
   ## Reference links
 
-  The full 🔗 https://example.com/ref, the collapsed
+  The full 🔗 https://example.com/ref, the collapsed 🔗
   https://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut
   forms, and an image badge 📷 https://example.com/badge.svg.
 == nodes
@@ -444,8 +444,8 @@ link   src 2-2 col 43-53  shown 4-4 col 40-48  "shortcut -> https://example.com/
 link   src 3-3 col 0-13  shown 5-5 col 22-27  "badge 📷 https://example.com/badge.svg -> https://example.com/badge.svg" on "badge"
 == copy per line
 1: "## Reference links" | "## Reference links"
-3: "The full 🔗 https://example.com/ref, the collapsed\nhttps://example.com/collapsed" | "The [full][ref], the [collapsed][]"
-4: "collapsed\nhttps://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut" | "[collapsed][] and the [shortcut]"
+3: "The full 🔗 https://example.com/ref, the collapsed 🔗\nhttps://example.com/collapsed" | "The [full][ref], the [collapsed][]"
+4: "collapsed 🔗\nhttps://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut" | "[collapsed][] and the [shortcut]"
 5: "forms, and an image ![badge](https://example.com/badge.svg)." | "forms, and an image\n![badge][img]."
 ######## section 3
 == rendered

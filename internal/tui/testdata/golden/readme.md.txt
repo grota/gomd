@@ -267,7 +267,7 @@
 
   ### Images
 
-  gomd can render inline images using the Kitty graphics protocol
+  gomd can render inline images using the Kitty graphics protocol 🔗
   https://sw.kovidgoyal.net/kitty/graphics-protocol/. This works in terminals
   that support it: Ghostty, Kitty, and WezTerm.
 
@@ -623,8 +623,8 @@ inline src 274-274 col 414-421  shown 292-292 col 42-47  "reset" on "reset"
 262: "When no file argument is given,  gomd  reads from stdin if piped, otherwise" | "When no file argument is given, `gomd` reads from stdin if piped, otherwise"
 263: "prints help and exits." | "prints help and exits."
 265: "### Images" | "### Images"
-267: "gomd can render inline images using the Kitty graphics protocol\nhttps://sw.kovidgoyal.net/kitty/graphics-protocol/" | "gomd can render inline images using the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/)"
-268: "Kitty graphics protocol\nhttps://sw.kovidgoyal.net/kitty/graphics-protocol/. This works in terminals" | "[Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). This works in terminals"
+267: "gomd can render inline images using the Kitty graphics protocol 🔗\nhttps://sw.kovidgoyal.net/kitty/graphics-protocol/" | "gomd can render inline images using the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/)"
+268: "Kitty graphics protocol 🔗\nhttps://sw.kovidgoyal.net/kitty/graphics-protocol/. This works in terminals" | "[Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). This works in terminals"
 269: "that support it: Ghostty, Kitty, and WezTerm." | "that support it: **Ghostty**, **Kitty**, and **WezTerm**."
 271: "Image rendering is controlled by three settings, evaluated in this order:" | "Image rendering is controlled by three settings, evaluated in this order:"
 273: "1.  --no-images  flag: always disables images (highest priority)." | "1. **`--no-images`** flag: always disables images (highest priority)."
@@ -1571,7 +1571,7 @@ inline src 15-15 col 50-71  shown 20-20 col 47-66  "[ui.theme_override]" on "[ui
 
   ### Images
 
-  gomd can render inline images using the Kitty graphics protocol
+  gomd can render inline images using the Kitty graphics protocol 🔗
   https://sw.kovidgoyal.net/kitty/graphics-protocol/. This works in terminals
   that support it: Ghostty, Kitty, and WezTerm.
 
@@ -1622,8 +1622,8 @@ inline src 21-21 col 414-421  shown 33-33 col 42-47  "reset" on "reset"
 3: "When no file argument is given,  gomd  reads from stdin if piped, otherwise" | "When no file argument is given, `gomd` reads from stdin if piped, otherwise"
 4: "prints help and exits." | "prints help and exits."
 6: "### Images" | "### Images"
-8: "gomd can render inline images using the Kitty graphics protocol\nhttps://sw.kovidgoyal.net/kitty/graphics-protocol/" | "gomd can render inline images using the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/)"
-9: "Kitty graphics protocol\nhttps://sw.kovidgoyal.net/kitty/graphics-protocol/. This works in terminals" | "[Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). This works in terminals"
+8: "gomd can render inline images using the Kitty graphics protocol 🔗\nhttps://sw.kovidgoyal.net/kitty/graphics-protocol/" | "gomd can render inline images using the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/)"
+9: "Kitty graphics protocol 🔗\nhttps://sw.kovidgoyal.net/kitty/graphics-protocol/. This works in terminals" | "[Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). This works in terminals"
 10: "that support it: Ghostty, Kitty, and WezTerm." | "that support it: **Ghostty**, **Kitty**, and **WezTerm**."
 12: "Image rendering is controlled by three settings, evaluated in this order:" | "Image rendering is controlled by three settings, evaluated in this order:"
 14: "1.  --no-images  flag: always disables images (highest priority)." | "1. **`--no-images`** flag: always disables images (highest priority)."
@@ -1651,7 +1651,7 @@ inline src 21-21 col 414-421  shown 33-33 col 42-47  "reset" on "reset"
 
   ### Images
 
-  gomd can render inline images using the Kitty graphics protocol
+  gomd can render inline images using the Kitty graphics protocol 🔗
   https://sw.kovidgoyal.net/kitty/graphics-protocol/. This works in terminals
   that support it: Ghostty, Kitty, and WezTerm.
 
@@ -1698,8 +1698,8 @@ inline src 17-17 col 176-198  shown 25-25 col 25-45  "allow-passthrough on" on "
 inline src 17-17 col 414-421  shown 28-28 col 42-47  "reset" on "reset"
 == copy per line
 1: "### Images" | "### Images"
-3: "gomd can render inline images using the Kitty graphics protocol\nhttps://sw.kovidgoyal.net/kitty/graphics-protocol/" | "gomd can render inline images using the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/)"
-4: "Kitty graphics protocol\nhttps://sw.kovidgoyal.net/kitty/graphics-protocol/. This works in terminals" | "[Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). This works in terminals"
+3: "gomd can render inline images using the Kitty graphics protocol 🔗\nhttps://sw.kovidgoyal.net/kitty/graphics-protocol/" | "gomd can render inline images using the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/)"
+4: "Kitty graphics protocol 🔗\nhttps://sw.kovidgoyal.net/kitty/graphics-protocol/. This works in terminals" | "[Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). This works in terminals"
 5: "that support it: Ghostty, Kitty, and WezTerm." | "that support it: **Ghostty**, **Kitty**, and **WezTerm**."
 7: "Image rendering is controlled by three settings, evaluated in this order:" | "Image rendering is controlled by three settings, evaluated in this order:"
 9: "1.  --no-images  flag: always disables images (highest priority)." | "1. **`--no-images`** flag: always disables images (highest priority)."

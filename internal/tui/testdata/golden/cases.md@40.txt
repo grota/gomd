@@ -13,7 +13,7 @@
 
   A link whose text wraps across the
   edge of the pane this link text is
-  long enough to wrap
+  long enough to wrap 🔗
   https://example.com/wrap at narrow
   widths.
 
@@ -88,9 +88,9 @@ block  src 59-60 col 0-0  shown 58-59 col -1--1  "indented line one\nindented li
 8: "wrap point  wrapped span here  and" | "wrap point `wrapped span here` and"
 9: "continues after it with more words." | "continues after it with more words."
 11: "A link whose text wraps across the" | "A link whose text wraps across the"
-12: "edge of the pane this link text is\nlong enough to wrap\nhttps://example.com/wrap" | "edge of the pane [this link text is long enough to wrap](https://example.com/wrap)"
-13: "this link text is\nlong enough to wrap\nhttps://example.com/wrap" | "[this link text is long enough to wrap](https://example.com/wrap)"
-14: "this link text is\nlong enough to wrap\nhttps://example.com/wrap at narrow" | "[this link text is long enough to wrap](https://example.com/wrap) at narrow"
+12: "edge of the pane this link text is\nlong enough to wrap 🔗\nhttps://example.com/wrap" | "edge of the pane [this link text is long enough to wrap](https://example.com/wrap)"
+13: "this link text is\nlong enough to wrap 🔗\nhttps://example.com/wrap" | "[this link text is long enough to wrap](https://example.com/wrap)"
+14: "this link text is\nlong enough to wrap 🔗\nhttps://example.com/wrap at narrow" | "[this link text is long enough to wrap](https://example.com/wrap) at narrow"
 15: "widths." | "widths."
 17: "## Wrapped code" | "## Wrapped code"
 19: "short line" | "short line"
@@ -136,7 +136,7 @@ block  src 59-60 col 0-0  shown 58-59 col -1--1  "indented line one\nindented li
 
   A link whose text wraps across the
   edge of the pane this link text is
-  long enough to wrap
+  long enough to wrap 🔗
   https://example.com/wrap at narrow
   widths.
 
@@ -211,9 +211,9 @@ block  src 59-60 col 0-0  shown 58-59 col -1--1  "indented line one\nindented li
 8: "wrap point  wrapped span here  and" | "wrap point `wrapped span here` and"
 9: "continues after it with more words." | "continues after it with more words."
 11: "A link whose text wraps across the" | "A link whose text wraps across the"
-12: "edge of the pane this link text is\nlong enough to wrap\nhttps://example.com/wrap" | "edge of the pane [this link text is long enough to wrap](https://example.com/wrap)"
-13: "this link text is\nlong enough to wrap\nhttps://example.com/wrap" | "[this link text is long enough to wrap](https://example.com/wrap)"
-14: "this link text is\nlong enough to wrap\nhttps://example.com/wrap at narrow" | "[this link text is long enough to wrap](https://example.com/wrap) at narrow"
+12: "edge of the pane this link text is\nlong enough to wrap 🔗\nhttps://example.com/wrap" | "edge of the pane [this link text is long enough to wrap](https://example.com/wrap)"
+13: "this link text is\nlong enough to wrap 🔗\nhttps://example.com/wrap" | "[this link text is long enough to wrap](https://example.com/wrap)"
+14: "this link text is\nlong enough to wrap 🔗\nhttps://example.com/wrap at narrow" | "[this link text is long enough to wrap](https://example.com/wrap) at narrow"
 15: "widths." | "widths."
 17: "## Wrapped code" | "## Wrapped code"
 19: "short line" | "short line"

@@ -242,7 +242,81 @@ func PostProcessLinks(s string) string {
 			lines[i] = linkGlyphRe.ReplaceAllString(l, "${1} 🔗${2}${3}${4}")
 		}
 	}
+	for i := 0; i+1 < len(lines); i++ {
+		glyphAcrossLines(lines, i)
+	}
 	return strings.Join(lines, "\n")
+}
+
+// linkEndRe matches the end of a hyperlink ending a line, with only styles
+// and spaces after it; urlStartRe the start of a hyperlink beginning one.
+// Group 1 of linkEndRe is the hyperlink's id; groups 2 and 3 of urlStartRe
+// are its id and URL.
+var (
+	linkEndRe  = regexp.MustCompile(`\x1b\]8;id=([^;\x07]*);[^\x07]*\x07(?:[^\x1b]|\x1b\[[0-9;]*m)*\x1b\]8;;\x07((?:\x1b\[[0-9;]*m| )*)$`)
+	urlStartRe = regexp.MustCompile(`^((?:\x1b\[[0-9;]*m| )*)\x1b\]8;id=([^;\x07]*);([^\x07]*)\x07`)
+)
+
+// glyphAcrossLines adds the link glyph to a link whose text ends line i and
+// whose URL starts line i+1: after the text when line i has room in its
+// trailing spaces, else before the URL when line i+1 has. The URL is shown
+// with the text's hyperlink id, as a wrapped text goes on with; it is told
+// apart by showing the start of the URL.
+func glyphAcrossLines(lines []string, i int) {
+	end := linkEndRe.FindStringSubmatchIndex(lines[i])
+	start := urlStartRe.FindStringSubmatchIndex(lines[i+1])
+	if end == nil || start == nil || lines[i][end[2]:end[3]] != lines[i+1][start[4]:start[5]] ||
+		isTableLine(strings.TrimSpace(ansi.Strip(lines[i]))) {
+		return
+	}
+	shown, _, _ := strings.Cut(lines[i+1][start[1]:], "\x1b]8;;\x07")
+	if shown = strings.TrimSpace(ansi.Strip(shown)); shown == "" ||
+		!strings.HasPrefix(imageCaptionPath(lines[i+1][start[6]:start[7]]), shown) {
+		return
+	}
+	const glyph = " 🔗" // three cells
+	if l, ok := dropTrailingSpaces(lines[i], 3); ok {
+		lines[i] = l[:end[4]] + glyph + l[end[4]:]
+	} else if l, ok := dropTrailingSpaces(lines[i+1], 3); ok {
+		lines[i+1] = l[:start[3]] + "🔗 " + l[start[3]:]
+	}
+}
+
+// dropTrailingSpaces removes the last n spaces of line, keeping its styles,
+// when it ends with at least n of them.
+func dropTrailingSpaces(line string, n int) (string, bool) {
+	var b strings.Builder
+	var state byte
+	type tok struct {
+		s     string
+		space bool
+	}
+	var toks []tok
+	for rest := line; len(rest) > 0; {
+		seq, w, k, st := ansi.DecodeSequence(rest, state, nil)
+		state = st
+		toks = append(toks, tok{seq, w > 0 && seq == " "})
+		rest = rest[k:]
+	}
+	drop := map[int]bool{}
+	for j := len(toks) - 1; j >= 0 && len(drop) < n; j-- {
+		switch {
+		case toks[j].space:
+			drop[j] = true
+		case strings.HasPrefix(toks[j].s, "\x1b"):
+		default:
+			return line, false
+		}
+	}
+	if len(drop) < n {
+		return line, false
+	}
+	for j, t := range toks {
+		if !drop[j] {
+			b.WriteString(t.s)
+		}
+	}
+	return b.String(), true
 }
 
 // renderGlamour renders a markdown string through glamour and returns the output
