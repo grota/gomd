@@ -137,11 +137,22 @@ func (m *sourceMap) collect() {
 			}
 		}
 	}
+	// addAt adds text glamour shows that is not written at that spot in the
+	// source, standing for the source position at.
+	addAt := func(text string, at int) {
+		for _, r := range text {
+			if !unicode.IsSpace(r) && ansi.StringWidth(string(r)) > 0 {
+				m.units = append(m.units, srcUnit{r, at, at, cur})
+			}
+		}
+	}
 	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
-			switch n.(type) {
-			case *ast.Link, *ast.Image:
-				m.addDestination(linkU0[n], &markEnd, add)
+			switch n := n.(type) {
+			case *ast.Link:
+				m.addDestination(linkU0[n], &markEnd, add, addAt, n.Destination)
+			case *ast.Image:
+				m.addDestination(linkU0[n], &markEnd, add, addAt, n.Destination)
 			}
 			if n == curNode {
 				m.closeElem(cur, curU0, n, markEnd)
@@ -174,9 +185,7 @@ func (m *sourceMap) collect() {
 					num++
 				}
 				if marker, ok := m.itemMarker(n); ok {
-					for _, r := range strconv.Itoa(num) + "." {
-						m.units = append(m.units, srcUnit{r, marker, marker, cur})
-					}
+					addAt(strconv.Itoa(num)+".", marker)
 				}
 			}
 		case *ast.FencedCodeBlock, *ast.CodeBlock, *ast.HTMLBlock:
@@ -228,8 +237,10 @@ func hasRawHTML(n ast.Node) bool {
 
 // addDestination adds the destination of the link or image whose text
 // starts at unit u0 as visible characters, since glamour shows it, and
-// records where the link's markup ends.
-func (m *sourceMap) addDestination(u0 int, markEnd *int, add func(start, end int)) {
+// records where the link's markup ends. A reference link ("[text][ref]",
+// "[text][]", "[text]") shows dest, its definition's URL, which is written
+// elsewhere: addAt adds it at the end of the link's markup.
+func (m *sourceMap) addDestination(u0 int, markEnd *int, add func(start, end int), addAt func(text string, at int), dest []byte) {
 	s := m.src
 	i := 0 // where to look for the closing ']'
 	if len(m.units) > 0 {
@@ -269,12 +280,17 @@ func (m *sourceMap) addDestination(u0 int, markEnd *int, add func(start, end int
 		if k := strings.IndexByte(s[e:], ')'); k >= 0 {
 			*markEnd = e + k + 1
 		}
+		return
 	case i < len(s) && s[i] == '[':
+		*markEnd = i
 		if k := strings.IndexByte(s[i:], ']'); k >= 0 {
 			*markEnd = i + k + 1
 		}
 	default:
 		*markEnd = i
+	}
+	if len(dest) > 0 && dest[0] != '#' { // glamour hides "#anchor" destinations
+		addAt(string(dest), *markEnd)
 	}
 }
 
