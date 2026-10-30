@@ -62,6 +62,16 @@ const (
 	closeMarks = "*_~`>"
 )
 
+// sourceLineAt returns the 0-based line of src holding the first source
+// character rendered at p or after it, or -1 when there is none.
+func (m *sourceMap) sourceLineAt(p textPos) int {
+	c := sort.Search(len(m.cells), func(i int) bool { return !before(m.cells[i].pos, p) })
+	if c == len(m.cells) {
+		return -1
+	}
+	return strings.Count(m.src[:m.units[m.cells[c].unit].start], "\n")
+}
+
 // buildSourceMap maps rendered, the render of the markdown src. It reads
 // src as glamour does, after PreProcessMarkdown, and maps every offset back.
 func buildSourceMap(src string, rendered []string) *sourceMap {

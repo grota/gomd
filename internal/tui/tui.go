@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -337,17 +338,59 @@ func (a *App) openURL(url string) string {
 	return "Opened: " + url
 }
 
-// openEditorCmd suspends the TUI, opens $EDITOR on filePath, then signals
-// done. $EDITOR may include arguments, e.g. "code --wait".
-func openEditorCmd(filePath string) tea.Cmd {
-	args := strings.Fields(os.Getenv("EDITOR"))
-	if len(args) == 0 {
-		args = []string{"vi"}
-	}
-	c := exec.Command(args[0], append(args[1:], filePath)...)
+// openEditorCmd suspends the TUI, opens $EDITOR on filePath at line (1-based,
+// 0 for none), then signals done. $EDITOR may include arguments, e.g.
+// "code --wait".
+func openEditorCmd(filePath string, line int) tea.Cmd {
+	args := editorArgs(strings.Fields(os.Getenv("EDITOR")), filePath, line)
+	c := exec.Command(args[0], args[1:]...)
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return editorDoneMsg{err}
 	})
+}
+
+// editorArgs returns the command line that opens path at line in editor
+// ($EDITOR split into words; vi when empty). Editors whose syntax for a line
+// is not known get the path alone.
+func editorArgs(editor []string, path string, line int) []string {
+	if len(editor) == 0 {
+		editor = []string{"vi"}
+	}
+	args := slices.Clone(editor)
+	if line <= 0 {
+		return append(args, path)
+	}
+	n := strconv.Itoa(line)
+	switch filepath.Base(editor[0]) {
+	case "vi", "vim", "nvim", "view", "gvim", "nano", "pico", "emacs", "emacsclient", "kak", "micro", "joe", "mg", "ne":
+		return append(args, "+"+n, path)
+	case "code", "code-insiders", "codium", "cursor", "windsurf":
+		return append(args, "--goto", path+":"+n)
+	case "subl", "zed", "hx", "helix":
+		return append(args, path+":"+n)
+	}
+	return append(args, path)
+}
+
+// editorLine returns the line of the file (1-based) to open the editor at:
+// the current content search match when it is on screen, else the first
+// line shown, else the selected heading's line.
+func (a *App) editorLine() int {
+	first := 1
+	if a.selectedIdx >= 0 && a.selectedIdx < len(a.doc.Headings) {
+		first = a.doc.Headings[a.selectedIdx].Line
+	}
+	a.ensureRenderedLines()
+	p := textPos{a.contentOffset, 0}
+	if i := a.contentSearchIdx; a.contentSearchQuery != "" && i < len(a.contentSearchMatches) {
+		if m := a.contentSearchMatches[i]; m.line >= a.contentOffset && m.line < a.contentOffset+a.contentHeight() {
+			p = textPos{m.line, m.colStart}
+		}
+	}
+	if l := a.sourceMap().sourceLineAt(p); l >= 0 {
+		return first + l
+	}
+	return first
 }
 
 // reloadDelay is how long the watched file must stay unchanged before it is

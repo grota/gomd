@@ -48,7 +48,7 @@ interactive mode:
 - **Themes** — 700+ Ghostty themes with a live-preview picker (`T`), and separate light and dark themes that follow the system appearance
 - **CLI mode** — list, tree, count, extract sections non-interactively
 - **File watcher** — auto-reloads on change
-- **Editor integration** — `e` opens the source file in `$EDITOR`
+- **Editor integration** — `e` opens the source file in `$EDITOR` at the current content search match when it is on screen, otherwise at the first line shown. The line is passed as `+N` (vi, vim, nvim, nano, emacs, kak, micro, joe, mg, ne), `--goto file:N` (VS Code, VSCodium, Cursor, Windsurf) or `file:N` (Sublime Text, Zed, Helix); other editors open the file at its top
 - **Configurable link opener** — set `opener` in config to customize how URLs are opened
 - **Image rendering** — local images in the TUI and render mode via Kitty Unicode placeholders (Kitty, Ghostty), including inside tmux
 - **HTML tag support** — `<img>` and `<a>` HTML tags are rendered as images and links alongside native markdown syntax
@@ -100,31 +100,31 @@ Images are rendered as `alt 📷 path` and links as `text 🔗 url`. HTML `<img>
 
 #### Key bindings
 
-| Key                 | Action                                      |
-| ------------------- | ------------------------------------------- |
-| `j` / `↓`           | Next heading                                |
-| `k` / `↑`           | Previous heading                            |
-| `gg` / `G`          | Jump to root / last heading                 |
-| `H` / `M` / `L`     | Jump to top / mid / bottom of visible area  |
-| `zz` / `zt` / `zb`  | Center / top / bottom selection in viewport |
-| `Ctrl+D` / `Ctrl+U` | Half page down / up                         |
-| `/`                 | Search headings (fuzzy) or content          |
-| `n` / `N`           | Next / previous search match                |
-| `Tab`               | Switch focus (sidebar ↔ content)            |
-| `w`                 | Toggle sidebar                              |
-| `i`                 | Enter interactive mode                      |
-| `f`                 | Jump mode (EasyMotion labels)               |
-| `Ctrl+O`            | Navigate back                               |
-| `Ctrl+I`            | Navigate forward                            |
-| `e`                 | Open in `$EDITOR`                           |
-| `r`                 | Reload file                                 |
-| `T`                 | Theme picker (selection is saved to config) |
-| `?`                 | Help                                        |
-| `q` / `Ctrl+C`      | Quit                                        |
-| Mouse click         | Select sidebar heading                      |
-| Scroll wheel        | Scroll content                              |
-| Mouse drag          | Select content text and copy it (see below) |
-| `y` after a drag    | Copy the selection's markdown source        |
+| Key                 | Action                                              |
+| ------------------- | --------------------------------------------------- |
+| `j` / `↓`           | Next heading                                        |
+| `k` / `↑`           | Previous heading                                    |
+| `gg` / `G`          | Jump to root / last heading                         |
+| `H` / `M` / `L`     | Jump to top / mid / bottom of visible area          |
+| `zz` / `zt` / `zb`  | Center / top / bottom selection in viewport         |
+| `Ctrl+D` / `Ctrl+U` | Half page down / up                                 |
+| `/`                 | Search headings (fuzzy) or content                  |
+| `n` / `N`           | Next / previous search match                        |
+| `Tab`               | Switch focus (sidebar ↔ content)                    |
+| `w`                 | Toggle sidebar                                      |
+| `i`                 | Enter interactive mode                              |
+| `f`                 | Jump mode (EasyMotion labels)                       |
+| `Ctrl+O`            | Navigate back                                       |
+| `Ctrl+I`            | Navigate forward                                    |
+| `e`                 | Open in `$EDITOR` at the shown line or search match |
+| `r`                 | Reload file                                         |
+| `T`                 | Theme picker (selection is saved to config)         |
+| `?`                 | Help                                                |
+| `q` / `Ctrl+C`      | Quit                                                |
+| Mouse click         | Select sidebar heading                              |
+| Scroll wheel        | Scroll content                                      |
+| Mouse drag          | Select content text and copy it (see below)         |
+| `y` after a drag    | Copy the selection's markdown source                |
 
 Dragging over the content copies the selected text to the system clipboard, as rendered. A selected image caption is copied as the image's markdown, `![alt](path)`. While the selection is shown, `y` copies its markdown source instead. Hold `Shift` while dragging to use the terminal's own selection.
 

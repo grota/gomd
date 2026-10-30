@@ -86,7 +86,7 @@ func (a *App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case config.KeyMatches(k, km.Edit):
 		if a.filepath != "" {
-			return a, openEditorCmd(a.filepath)
+			return a, openEditorCmd(a.filepath, a.editorLine())
 		}
 		a.statusMsg = "No file to edit"
 		return a, nil

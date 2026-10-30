@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -730,5 +731,70 @@ func TestWatcherReadsASaveOnceComplete(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("no reload")
+	}
+}
+
+func TestEditorArgs(t *testing.T) {
+	for _, tt := range []struct {
+		editor string
+		want   string
+	}{
+		{"", "vi +7 f.md"},
+		{"nvim", "nvim +7 f.md"},
+		{"/usr/bin/vim -u NONE", "/usr/bin/vim -u NONE +7 f.md"},
+		{"code --wait", "code --wait --goto f.md:7"},
+		{"hx", "hx f.md:7"},
+		{"unknown-editor", "unknown-editor f.md"},
+	} {
+		if got := strings.Join(editorArgs(strings.Fields(tt.editor), "f.md", 7), " "); got != tt.want {
+			t.Errorf("%q: got %q, want %q", tt.editor, got, tt.want)
+		}
+	}
+	if got := strings.Join(editorArgs([]string{"nvim"}, "f.md", 0), " "); got != "nvim f.md" {
+		t.Errorf("no line: got %q", got)
+	}
+}
+
+func TestEditorLine(t *testing.T) {
+	var sb strings.Builder
+	sb.WriteString("---\ntitle: x\n---\n\n# Top\n\n")
+	for i := 1; i <= 60; i++ {
+		fmt.Fprintf(&sb, "Paragraph %d.\n\n", i)
+	}
+	sb.WriteString("## Tail\n\nNeedle here.\n")
+	cfg := config.Default()
+	cfg.Images.Enabled = false
+	a := NewApp(parser.ParseMarkdown(sb.String()), "f.md", "f.md", cfg)
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	a.View()
+	// File lines: front matter 1-3, blank 4, "# Top" 5, blank 6, then
+	// "Paragraph i." on line 5+2i, "## Tail" on 127, "Needle here." on 129.
+	if got := a.editorLine(); got != 5 {
+		t.Errorf("top of the document: line %d, want 5", got)
+	}
+	a.scrollContent(10)
+	a.View()
+	var n int
+	for i := a.contentOffset; n == 0 && i < len(a.renderedLines); i++ {
+		fmt.Sscanf(strings.TrimSpace(ansi.Strip(a.renderedLines[i])), "Paragraph %d.", &n)
+	}
+	if got := a.editorLine(); n == 0 || got != 5+2*n {
+		t.Errorf("scrolled: line %d, want %d (Paragraph %d)", got, 5+2*n, n)
+	}
+	a.contentSearchQuery = "needle"
+	a.findContentSearchMatches()
+	a.scrollToContentMatch(0)
+	if got := a.editorLine(); got != 129 {
+		t.Errorf("search match: line %d, want 129", got)
+	}
+	a.contentOffset = 0 // the match is now off screen
+	if got := a.editorLine(); got != 5 {
+		t.Errorf("match off screen: line %d, want the first shown line 5", got)
+	}
+	a.contentSearchQuery, a.contentSearchMatches = "", nil
+	a.navigateTo(1)
+	a.View()
+	if got := a.editorLine(); got != 127 {
+		t.Errorf("section: line %d, want 127", got)
 	}
 }

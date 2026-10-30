@@ -1109,7 +1109,7 @@ func (a *App) overlayHelp(background string) string {
 	global := []helpEntry{
 		{fmtKeys(km.ToggleFocus), "Toggle focus sidebar ↔ content"},
 		{fmtKeys(km.ToggleSidebar), "Hide / show sidebar"},
-		{fmtKeys(km.Edit), "Open file in $EDITOR"},
+		{fmtKeys(km.Edit), "Open file in $EDITOR at the shown line or search match"},
 		{fmtKeys(km.Reload), "Reload file"},
 		{fmtKeys(km.ThemePicker), "Open theme picker"},
 		{fmtKeys(km.NavBack) + " / " + fmtKeys(km.NavForward), "Navigate back / forward"},
