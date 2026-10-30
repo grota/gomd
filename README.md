@@ -1,63 +1,42 @@
-<div align="center">
-  <h1>gomd</h1>
-</div>
+# gomd
 
-A terminal markdown viewer with interactive element selection and vim-style navigation.
+**A markdown viewer for the terminal that lets you _use_ the document, not just read it.**
 
-<br>
-<br>
+[![CI](https://github.com/grota/gomd/actions/workflows/ci.yml/badge.svg)](https://github.com/grota/gomd/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/grota/gomd)](https://github.com/grota/gomd/releases/latest)
+[![Go version](https://img.shields.io/github/go-mod/go-version/grota/gomd)](go.mod)
+[![License: MIT](https://img.shields.io/github/license/grota/gomd)](LICENSE)
 
-Think [glow](https://github.com/charmbracelet/glow) but with more interactivity with the markdown document.
+Think [glow](https://github.com/charmbracelet/glow), plus an outline to navigate, vim keys, and every code block, code span and link one keystroke away from your clipboard or browser.
 
-## Screenshots
+<img width="1536" height="1022" alt="gomd: outline sidebar and rendered document" src="https://github.com/user-attachments/assets/0f0db041-0dc3-4d35-8ee1-d89701707aff" />
 
-<div align="center">
-normal mode:
-</div>
+## Highlights
 
-<img width="1536" height="1022" alt="gomd screenshot 1" src="https://github.com/user-attachments/assets/0f0db041-0dc3-4d35-8ee1-d89701707aff" />
+- **Outline and content side by side.** A heading sidebar (fuzzy search, breadcrumb title) next to the rendered section, with vim-style navigation.
+- **Every element is selectable.** Interactive mode (`i`) steps through code blocks, inline code, links and images: `y` copies, `Enter` opens.
+- **Jump labels.** `f` puts EasyMotion-style labels on every element; type one to land on it.
+- **Copy what you see, or its source.** Drag to copy the rendered text; press `y` to copy the exact markdown behind it instead, snapped to whole links, code spans and tables. On Kitty and Ghostty 1.4+ the drag copy also carries rich HTML, images included, for pasting into mail or documents.
+- **Follow links.** `#anchors` jump to their heading, links to local `.md` files open in gomd, and `Ctrl+O` / `Ctrl+I` walk back and forth through the history.
+- **Images in the terminal.** Local and remote images, drawn on Kitty and Ghostty, even inside tmux.
+- **700+ themes.** Ghostty themes with a live-preview picker, a theme for light and one for dark following the system appearance, and code coloured with each theme's own palette.
+- **Edit at the right line.** `e` opens `$EDITOR` at the line you are looking at.
+- **Scriptable.** Render to stdout, or list, count and extract headings and sections, as text or JSON.
 
----
+<details>
+<summary><b>More screenshots</b>: jump mode and interactive mode</summary>
 
-<div align="center">
-jump mode:
-</div>
+<p align="center"><b>Jump mode</b></p>
+<img width="1536" height="1020" alt="gomd jump mode: labels on every selectable element" src="https://github.com/user-attachments/assets/ba477053-48d4-4380-b682-8f2bf39b72b2" />
 
-<img width="1536" height="1020" alt="gomd screenshot 2" src="https://github.com/user-attachments/assets/ba477053-48d4-4380-b682-8f2bf39b72b2" />
+<p align="center"><b>Interactive mode</b></p>
+<img width="1536" height="1020" alt="gomd interactive mode: a selected code block" src="https://github.com/user-attachments/assets/d0c03603-662a-4092-ad15-e03c8c1f6aaa" />
 
----
-
-<div align="center">
-interactive mode:
-</div>
-
-<img width="1536" height="1020" alt="gomd screenshot 3" src="https://github.com/user-attachments/assets/d0c03603-662a-4092-ad15-e03c8c1f6aaa" />
-
-## Features
-
-- **Interactive TUI** — dual-pane layout: outline sidebar + rendered content
-- **Vim-style navigation** — `j`/`k`, `gg`/`G`, `/` search
-- **Fuzzy search** — sidebar heading search uses fuzzy matching (characters in order)
-- **Breadcrumb bar** — title shows current heading path (e.g., `gomd — file.md > Section > Subsection`)
-- **Interactive mode** (`i`) — cycle through code blocks, inline code spans, and links; copy with `y`, open links with `Enter` (works in any sub-mode)
-- **Jump mode** (`f`) — EasyMotion-style labels to quickly jump to any selectable element
-- **Navigation history** — `Ctrl+O` / `Ctrl+I` for back/forward navigation, across headings and files
-- **Link following** — `Enter` on `#anchor` links jumps to the referenced heading (GitHub slugs, including `-1` suffixes for repeated headings); on a link to a local `.md` file (`docs/setup.md#install`) it opens that file in gomd
-- **Mouse support** — click sidebar headings, scroll content with mouse wheel, drag over content to select and copy it
-- **Responsive sidebar** — width auto-adjusts based on heading text length
-- **Themes** — 700+ Ghostty themes with a live-preview picker (`T`), and separate light and dark themes that follow the system appearance
-- **CLI mode** — list, tree, count, extract sections non-interactively
-- **File watcher** — auto-reloads on change
-- **Editor integration** — `e` opens the source file in `$EDITOR` at the current content search match when it is on screen, otherwise at the first line shown. The line is passed as `+N` (vi, vim, nvim, nano, emacs, kak, micro, joe, mg, ne), `--goto file:N` (VS Code, VSCodium, Cursor, Windsurf) or `file:N` (Sublime Text, Zed, Helix); other editors open the file at its top
-- **Configurable link opener** — set `opener` in config to customize how URLs are opened
-- **Image rendering** — local images in the TUI and render mode via Kitty Unicode placeholders (Kitty, Ghostty), including inside tmux
-- **HTML tag support** — `<img>` and `<a>` HTML tags are rendered as images and links alongside native markdown syntax
+</details>
 
 ## Installation
 
-Download the [latest release](https://github.com/grota/gomd/releases/latest) from this project.
-
-Or via go install:
+Download a binary from the [latest release](https://github.com/grota/gomd/releases/latest), or install with Go (1.26 or newer):
 
 ```bash
 go install github.com/grota/gomd/cmd/gomd@latest
@@ -71,113 +50,151 @@ cd gomd
 go build ./cmd/gomd
 ```
 
-Requires Go 1.26+.
+## Quick start
 
-## Usage
-
-### Interactive TUI
-
-```
-gomd file.md          # open a file
-gomd some/dir/        # open first .md in directory (alphabetical)
-cat file.md | gomd    # read from stdin
-gomd                  # print help
+```bash
+gomd README.md              # open a file in the viewer
+gomd docs/                  # open the first .md file of a folder (alphabetical)
+cat notes.md | gomd         # read from stdin
+gomd -r README.md           # render to stdout, no viewer
+gomd -l README.md           # list the headings
+gomd -s Installation doc.md # print one section
 ```
 
-### Render Mode
+With no file and nothing on stdin, gomd prints its help. Press `?` in the viewer for the key bindings.
 
-Render mode (`-r` / `--render`) outputs rendered markdown to stdout without launching the TUI. Useful for piping, previewing, or printing.
+## The viewer
 
-```
-gomd file.md -r                        # render to stdout with background
-gomd file.md -r --disable-background   # render without background (for piping)
-gomd file.md -r --no-images            # render without images
-```
-
-Background color is emitted by default so the output looks correct in the terminal. Use `--disable-background` when piping to other tools or files, since ANSI background sequences can interfere with downstream processing.
-
-Images are rendered as `alt 📷 path` and links as `text 🔗 url`. HTML `<img>` and `<a>` tags are converted to their markdown equivalents before rendering.
-
-#### Key bindings
+### Keys
 
 | Key                 | Action                                              |
 | ------------------- | --------------------------------------------------- |
-| `j` / `↓`           | Next heading                                        |
-| `k` / `↑`           | Previous heading                                    |
-| `gg` / `G`          | Jump to root / last heading                         |
-| `H` / `M` / `L`     | Jump to top / mid / bottom of visible area          |
-| `zz` / `zt` / `zb`  | Center / top / bottom selection in viewport         |
+| `j` / `↓`           | Next heading (sidebar) or scroll down (content)     |
+| `k` / `↑`           | Previous heading or scroll up                       |
+| `gg` / `G`          | Whole document / last heading, or top / bottom      |
 | `Ctrl+D` / `Ctrl+U` | Half page down / up                                 |
+| `H` / `M` / `L`     | Top / middle / bottom of the visible area           |
+| `zz` / `zt` / `zb`  | Center / top / bottom the selection in the view     |
 | `/`                 | Search headings (fuzzy) or content                  |
 | `n` / `N`           | Next / previous search match                        |
-| `Tab`               | Switch focus (sidebar ↔ content)                    |
-| `w`                 | Toggle sidebar                                      |
-| `i`                 | Enter interactive mode                              |
-| `f`                 | Jump mode (EasyMotion labels)                       |
-| `Ctrl+O`            | Navigate back                                       |
-| `Ctrl+I`            | Navigate forward                                    |
+| `Tab`               | Switch focus between sidebar and content            |
+| `w`                 | Show or hide the sidebar                            |
+| `i`                 | Interactive mode                                    |
+| `f`                 | Jump mode                                           |
+| `Ctrl+O` / `Ctrl+I` | Back / forward in the history                       |
 | `e`                 | Open in `$EDITOR` at the shown line or search match |
-| `r`                 | Reload file                                         |
-| `T`                 | Theme picker (selection is saved to config)         |
+| `r`                 | Reload the file (it also reloads on change)         |
+| `T`                 | Theme picker                                        |
 | `?`                 | Help                                                |
 | `q` / `Ctrl+C`      | Quit                                                |
-| Mouse click         | Select sidebar heading                              |
-| Scroll wheel        | Scroll content                                      |
-| Mouse drag          | Select content text and copy it (see below)         |
-| `y` after a drag    | Copy the selection's markdown source                |
 
-Dragging over the content copies the selected text to the system clipboard, as rendered. A selected image caption is copied as the image's markdown, `![alt](path)`. While the selection is shown, `y` copies its markdown source instead. Hold `Shift` while dragging to use the terminal's own selection.
+The sidebar sizes itself to the headings. The mouse works too: click a heading in the sidebar, scroll the content with the wheel, drag over it to select. The keys can be changed in the [configuration](#configuration).
 
-The selection snaps to whole bold, italic and strikethrough spans, inline code, links, images, tables and HTML blocks, so both copies cover what is highlighted. The markdown copy also takes a line's prefix (`- `, `> `, `## `) when the selection starts before the line's text, and a code block's fences when it covers the whole block.
+### Interactive mode
 
-Every copy carries plain text sent through OSC 52, so it also works over SSH. Inside tmux gomd hands it to `tmux load-buffer -w`, which forwards it to the terminal when `set-clipboard` is `on` or `external` and the terminal has the `clipboard` feature:
+`i` selects the elements of the current section one at a time: code blocks, inline code, links and images. `m` cycles which kinds are visited.
+
+| Key                | Action                                                             |
+| ------------------ | ------------------------------------------------------------------ |
+| `j` / `k`          | Next / previous element                                            |
+| `m`                | Cycle the kinds: ALL → CODE → INLINE → LINKS                       |
+| `H` / `M` / `L`    | Top / middle / bottom visible element                              |
+| `zz` / `zt` / `zb` | Center / top / bottom the element in the view                      |
+| `y`                | Copy the element (leaves the mode in CODE and INLINE)              |
+| `Enter`            | Open a link: in the browser, at its heading, or a local `.md` file |
+| `Esc`              | Leave interactive mode                                             |
+
+### Jump mode
+
+`f` labels every selectable element on screen. Type a label to select that element in interactive mode; `Esc` cancels.
+
+### Selecting and copying
+
+Dragging over the content copies the selected text, as shown, to the system clipboard. While the selection is shown, `y` copies its markdown source instead. The selection snaps to whole bold, italic and strikethrough spans, inline code, links, images, tables and HTML blocks, so both copies cover what is highlighted. The markdown copy also takes a line's prefix (`- `, `> `, `## `) when the selection starts before the line's text, and a code block's fences when it covers the whole block. A selected image caption is copied as `![alt](path)`. Hold `Shift` while dragging to use the terminal's own selection.
+
+Copies go through OSC 52, so they work over SSH. Inside tmux, gomd hands them to `tmux load-buffer -w`, which forwards them to the terminal when `set-clipboard` is `on` or `external` and the terminal has the `clipboard` feature:
 
 ```tmux
 set -s set-clipboard external
 set -as terminal-features ',xterm*:clipboard'
 ```
 
-On a terminal with the Kitty clipboard protocol (OSC 5522: kitty, Ghostty 1.4+), the drag copy also carries the selection as HTML, with local images up to 5 MB inlined, so applications that paste rich text (office suites, mail clients) get the formatting and the images, while terminals and editors still get the plain text. gomd detects the protocol from the terminal's name and version (`TERM_PROGRAM`, `TERM_PROGRAM_VERSION`, `KITTY_WINDOW_ID`, or tmux's `client_termtype`). Inside tmux it goes through passthrough, so it needs `allow-passthrough on`, as images do.
+On terminals with the Kitty clipboard protocol (OSC 5522: kitty, Ghostty 1.4+), a drag copy also carries the selection as HTML, with local images up to 5 MB inlined. Applications that paste rich text (office suites, mail clients) get the formatting and the images; terminals and editors still get plain text. gomd recognises these terminals from `TERM_PROGRAM`, `TERM_PROGRAM_VERSION`, `KITTY_WINDOW_ID`, or tmux's `client_termtype`. Inside tmux this needs `allow-passthrough on`, as images do.
 
-**Untested corner case, OSC 5522 inside tmux:** the terminal answers each OSC 5522 copy with a status reply. Outside tmux gomd ignores it, but tmux may pass it on as typed characters, and gomd acts on keys such as `q` (quit) or `e` (edit). If gomd reacts on its own right after a drag copy, please open an issue.
+### Links, history and your editor
 
-`Ctrl+I` is indistinguishable from `Tab` on terminals without the Kitty keyboard protocol, so there it toggles focus instead of navigating forward. Rebind `nav_forward` if that matters to you.
+`Enter` on a link opens it with the configured `opener` (`xdg-open` on Linux, `open` on macOS). A `#anchor` link jumps to its heading (GitHub slugs, `-1` suffixes for repeated headings included), and a link to a local `.md` file, such as `docs/setup.md#install`, opens that file in gomd. `Ctrl+O` and `Ctrl+I` go back and forward across headings and files.
 
-#### Interactive mode (`i`)
+`e` opens the file in `$EDITOR` (`vi` when unset) at the current content search match when it is on screen, otherwise at the first line shown. The line is passed as `+N` (vi, vim, nvim, nano, emacs, kak, micro, joe, mg, ne), `--goto file:N` (VS Code, VSCodium, Cursor, Windsurf) or `file:N` (Sublime Text, Zed, Helix); other editors open the file at its top.
 
-Cycles through selectable nodes in the current section: fenced code blocks, inline code spans, and links. Press `m` to cycle sub-modes.
+## Render mode
 
-| Key                | Action                                                                                             |
-| ------------------ | -------------------------------------------------------------------------------------------------- |
-| `j` / `k`          | Next / previous node                                                                               |
-| `m`                | Cycle sub-mode (ALL → CODE → INLINE → LINKS)                                                       |
-| `H` / `M` / `L`    | Jump to top / mid / bottom visible node                                                            |
-| `zz` / `zt` / `zb` | Center / top / bottom node in viewport                                                             |
-| `y`                | Copy node content (exits in CODE and INLINE sub-modes)                                             |
-| `Enter`            | Open link (any sub-mode; external: browser; `#anchor`: jump to heading; local `.md`: open in gomd) |
-| `Esc`              | Exit interactive mode                                                                              |
-
-#### Jump mode (`f`)
-
-Shows short labels next to all selectable elements. Type a label to jump directly to that element (enters interactive ALL mode). Press `Esc` to cancel.
-
-### CLI mode
+`-r` (`--render`) prints the rendered document to stdout, without the viewer: for previews, pagers and pipes.
 
 ```bash
-gomd -l file.md                  # list headings
-gomd --tree file.md              # heading tree
-gomd -l -L 2 file.md             # only h2 headings
-gomd -l --filter "install" file.md  # filter by text (combines with -L)
-gomd -l -o json file.md          # headings as JSON
-gomd --count file.md             # count by level
-gomd -s "Installation" file.md   # extract section
+gomd -r file.md                       # with the theme's background
+gomd -r --disable-background file.md  # without it, for pipes and files
+gomd -r --no-images file.md           # captions instead of images
+gomd -r --theme Dracula file.md       # any theme by name
 ```
+
+HTML `<a>` and `<img>` tags count as links and images. Links show as `text 🔗 url` and images as `alt 📷 path`, with the image drawn below on terminals that support it. The background is on by default so the output looks right in the terminal; turn it off when another program reads the output.
+
+## CLI mode
+
+```bash
+gomd -l file.md                     # list headings
+gomd -l -L 2 file.md                # only level 2 headings
+gomd -l --filter install file.md    # filter by text (combines with -L)
+gomd -l -o json file.md             # headings as JSON
+gomd --tree file.md                 # heading tree
+gomd --count file.md                # headings per level
+gomd -s Installation file.md        # print a section
+```
+
+## Images
+
+gomd draws local and remote images, in the viewer and in render mode, on terminals with [Kitty Unicode placeholders](https://sw.kovidgoyal.net/kitty/graphics-protocol/#unicode-placeholders): **Kitty** and **Ghostty**, recognised from `KITTY_WINDOW_ID`, `TERM_PROGRAM` and `TERM`. In the viewer the caption line (`alt 📷 path`) stays selectable and the image is drawn below it. Images are off with `--no-images` or `enabled = false` in the [configuration](#configuration).
+
+**tmux**: gomd asks tmux which terminal the client uses, and draws images when it is Kitty or Ghostty and `allow-passthrough` is `on`. Images then scroll and survive window switches like text. tmux must pass 24-bit colour to the terminal (`terminal-features` with `RGB`, the default for most setups), because the image id travels in the text colour.
+
+**Remote images** (`http://`, `https://`) are downloaded into the user cache directory (`~/.cache/gomd/images/` on Linux), one file per URL. In the viewer they appear when their download finishes; render mode waits up to 15 seconds per image.
+
+- A copy is used for 7 days, then downloaded again; until then, or when the download fails (offline), the old copy is shown.
+- Copies older than 30 days are removed, and the oldest go first when the cache passes 100 MB.
+- gomd shows PNG, JPEG and GIF. Other formats, such as the SVG of most README badges, keep their caption; they are refused from the response's `Content-Type` or when the bytes do not decode, are not reported as failures, and are requested again on each start.
+- A download over `remote_max_mb` is refused, and a failed download is not retried until gomd restarts.
+
+Fetching an image tells its server that the document was opened. Set `remote = false` to keep gomd offline; images then show as their caption.
+
+## Themes
+
+gomd ships two themes, **OceanDark** and **OceanLight**, and can use the 700+ themes of [iTerm2-Color-Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes) (MIT) in Ghostty format. With one of those, code blocks take their colours from the theme's 16-colour palette (magenta keywords, green strings, blue functions), lightened or darkened where needed to stay readable on the code background.
+
+The `theme` setting uses Ghostty's format: `"light:A,dark:B"` picks a theme for each system appearance, and a single name is used for both. The default is `"light:OceanLight,dark:OceanDark"`. gomd follows the system's light or dark setting as reported by the terminal (mode 2031: Ghostty, and tmux 3.6+). It asks once at startup and switches live when the setting changes; without an answer it uses the dark theme. Render mode asks only when its output is a terminal.
+
+### Theme picker
+
+`T` opens the picker with a **Dark** and a **Light** tab. Dark lists the darkest backgrounds first, Light the lightest first, with the built-in theme at the top. Typing filters the list (fuzzy, like the heading search), and the screen previews the highlighted theme live. `●` marks the tab of the current system appearance; if the system switches while the picker is open, the picker says which theme will be used when it closes.
+
+| Key                            | Action                                    |
+| ------------------------------ | ----------------------------------------- |
+| `↑` / `↓`, `Ctrl+P` / `Ctrl+N` | Move                                      |
+| `PgUp` / `PgDn`                | Move a page                               |
+| `Backspace` / `Ctrl+U`         | Delete a character / clear the filter     |
+| `Tab`                          | Switch between Dark and Light             |
+| `Enter`                        | Save the theme for that tab to the config |
+| `Esc`                          | Cancel and restore the theme              |
+
+These keys are fixed, since every other key goes into the filter. Saving changes only the `theme` line of the config file, so its comments and other settings stay.
+
+### Downloads
+
+The Ghostty themes come from a pinned release, verified by SHA-256 and cached in the user cache directory (`~/.cache/gomd/themes/` on Linux). gomd downloads them the first time the picker opens, or at startup when `theme` names a theme that is not cached yet; it waits at most 5 seconds, and on failure uses the Ocean themes with a warning. A name that is neither built-in nor in the pinned set is an error.
 
 ## Configuration
 
-Config file: `~/.config/gomd/config.toml` on Linux, `~/Library/Application Support/gomd/config.toml` on macOS. An invalid file is ignored with a warning.
-
-All settings are optional — only specify what you want to override.
+The config file is `~/.config/gomd/config.toml` on Linux and `~/Library/Application Support/gomd/config.toml` on macOS. Every setting is optional; an invalid file is ignored with a warning. These are the defaults:
 
 ```toml
 [ui]
@@ -188,8 +205,7 @@ content_border = "always" # or "with_sidebar": no content border while the sideb
 opener = "xdg-open"       # command to open URLs, may include arguments (macOS default: "open")
 
 [ui.theme_override]
-# Override individual colors of the active theme (hex values).
-# Any field left empty keeps the theme default.
+# Override single colours of every theme (hex values); empty keeps the theme's.
 # border = "#504945"
 # selected = "#3c3836"
 # heading1 = "#fabd2f"
@@ -200,7 +216,7 @@ opener = "xdg-open"       # command to open URLs, may include arguments (macOS d
 # foreground = "#ebdbb2"
 # statusbar = "#3c3836"
 # highlight = "#fe8019"
-# code = "#1d2021"       # tint of selectable nodes in interactive mode
+# code = "#1d2021"       # tint of selectable elements in interactive mode
 # search = "#fb4934"
 # nodesel = "#8ec07c"
 
@@ -251,7 +267,7 @@ jump_high = "H"
 jump_mid = "M"
 jump_low = "L"
 
-# Interactive (node-select) mode
+# Interactive mode
 node_select = "i"
 node_next = "j,down,tab"
 node_prev = "k,up,shift+tab"
@@ -261,64 +277,15 @@ node_open = "enter"
 node_exit = "esc,q,i"
 ```
 
-Key bindings use comma-separated values for multiple keys mapped to the same action. Key names follow bubbletea conventions (e.g., `ctrl+d`, `shift+tab`, `pgdown`, `space`, `esc`). A two-character entry such as `gg` is a key sequence. `Esc` always cancels search, jump mode and the theme picker.
+A key setting takes comma-separated keys for the same action. Key names follow bubbletea (`ctrl+d`, `shift+tab`, `pgdown`, `space`, `esc`), and a two-character entry such as `gg` is a key sequence. `Esc` always cancels search, jump mode and the theme picker.
 
-## Themes
+## Known issues
 
-gomd ships two built-in themes, **OceanDark** and **OceanLight**, and can use the 700+ themes of [iTerm2-Color-Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes) (MIT) in Ghostty format.
-
-With a Ghostty theme, code blocks take their colours from the theme's 16-colour palette (magenta keywords, green strings, blue functions), lightened or darkened where needed to stay readable on the code background. The built-in themes use glamour's code colours.
-
-`theme` uses Ghostty's format: `"light:A,dark:B"` picks a theme for each system appearance, and a single name is used in both. The default is `"light:OceanLight,dark:OceanDark"`.
-
-gomd follows the system's light or dark setting as reported by the terminal (mode 2031; Ghostty, and tmux 3.6+). It asks once at startup and switches live when the setting changes. Without an answer it uses the dark theme. Render mode (`-r`) asks only when its output is a terminal.
-
-### Theme picker
-
-`T` opens the picker with a **Dark** and a **Light** tab (`Tab` switches). Dark lists the darkest backgrounds first, Light the lightest first, with the built-in theme at the top. Typing filters the list (fuzzy, like the heading search), and the screen previews the highlighted theme live.
-
-| Key                            | Action                                           |
-| ------------------------------ | ------------------------------------------------ |
-| `↑` / `↓`, `Ctrl+P` / `Ctrl+N` | Move                                             |
-| `PgUp` / `PgDn`                | Move a page                                      |
-| `Backspace` / `Ctrl+U`         | Delete a character / clear the filter            |
-| `Tab`                          | Switch between Dark and Light                    |
-| `Enter`                        | Save the theme for that tab's mode to the config |
-| `Esc`                          | Cancel and restore the theme                     |
-
-These keys are fixed, since every other key goes into the filter.
-
-`●` marks the tab of the current system appearance. If the system switches while the picker is open, the picker notes that the light (or dark) theme will be used when it closes.
-
-### Downloads
-
-The Ghostty themes come from a pinned release, verified by SHA-256 and cached in the user cache directory (`~/.cache/gomd/themes/` on Linux). gomd downloads it the first time the picker opens, and at startup when `theme` names a theme that is not cached yet (waiting at most 5 seconds; on failure it uses the Ocean themes and prints a warning). A name that is neither built-in nor in the pinned set is an error.
-
-`[ui.theme_override]` colours apply to every theme.
-
-## Input resolution
-
-When no file argument is given, `gomd` reads from stdin if piped, otherwise prints help and exits.
-
-### Images
-
-gomd shows local and remote images in the TUI and in render mode (`-r`) on terminals with [Kitty Unicode placeholder](https://sw.kovidgoyal.net/kitty/graphics-protocol/#unicode-placeholders) support: **Kitty** and **Ghostty**. In the TUI, the caption line (`alt 📷 path`) stays selectable and the image is drawn below it.
-
-Images are on when the terminal is detected as Kitty or Ghostty, unless turned off with the **`--no-images`** flag or in the config file:
-
-```toml
-[images]
-enabled = true       # default
-remote = true        # default: download http(s) images
-remote_max_mb = 10   # default: larger remote images are not downloaded
-```
-
-gomd detects Kitty or Ghostty from `KITTY_WINDOW_ID`, `TERM_PROGRAM` and `TERM`.
-
-**tmux**: gomd asks tmux which terminal the client uses and shows images when it is Kitty or Ghostty and `allow-passthrough` is `on` (needed to upload the image). Images scroll and survive window switches like text. tmux must pass 24-bit colour to the terminal (`terminal-features` with `RGB`, the default for most setups), because the image id is encoded in the text colour.
-
-**Remote images** (`http://`, `https://`) are downloaded into the user cache directory (`~/.cache/gomd/images/` on Linux), one file per URL, and shown like local files. In the TUI the download runs in the background and the image appears when it is done; render mode waits for it, up to 15 seconds per image. A copy is used for 7 days, then downloaded again; until then, or when the download fails (offline), the old copy is shown. Copies older than 30 days are removed, and the oldest go first when the cache passes 100 MB. gomd shows PNG, JPEG and GIF. Other formats, such as the SVG of most README badges, are refused from the response's `Content-Type` before the body is read, or when the downloaded bytes do not decode; they keep their caption and are not reported as failures, but they are requested again on each start. A download over `remote_max_mb` is refused too, and a failed download is not retried until gomd restarts. Fetching an image tells its server that the document was opened, so set `remote = false` to keep gomd offline; images then show as their caption.
+- **`Ctrl+I` is `Tab`** on terminals without the Kitty keyboard protocol, so there it switches focus instead of going forward in the history. Rebind `nav_forward` if you need it.
+- **Ghostty with a single theme reports "light"** to the light/dark query, so gomd picks its light theme on a dark system. Use a `light:A,dark:B` pair in the Ghostty config until [ghostty-org/ghostty#13605](https://github.com/ghostty-org/ghostty/pull/13605) is released.
+- **Link URLs with some non-ASCII characters** (such as `✓`, Cyrillic `М` or Greek `Μ`) show garbled, and their link opens a corrupted address, because of a bug in the terminal library ([charmbracelet/x#848](https://github.com/charmbracelet/x/issues/848)).
+- **Untested: OSC 5522 inside tmux.** The terminal answers each rich copy with a status reply, which tmux may pass on as typed keys, and gomd acts on keys such as `q` (quit) or `e` (edit). If gomd reacts on its own right after a drag copy, please open an issue.
 
 ## License
 
-MIT
+[MIT](LICENSE)
