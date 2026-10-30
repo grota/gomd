@@ -244,7 +244,8 @@ type imageCache map[string]kittyImage
 // only a caption is replaced by the image; a line with other text always
 // keeps it. Images missing from cache are loaded and added, and their upload
 // sequences are returned for the caller to send before the rows are shown.
-func placeImages(lines []string, mdContent, mdPath string, maxCols int, keepCaption bool, cache imageCache) ([]string, []string) {
+// remote, when set, maps an http(s) image to a local copy ("" for none yet).
+func placeImages(lines []string, mdContent, mdPath string, maxCols int, keepCaption bool, cache imageCache, remote func(url string) string) ([]string, []string) {
 	images := parser.ExtractImages(mdContent)
 	if len(images) == 0 || maxCols < 1 {
 		return lines, nil
@@ -271,6 +272,9 @@ func placeImages(lines []string, mdContent, mdPath string, maxCols int, keepCapt
 			continue
 		}
 		resolved := ResolveImagePath(im.Src, absMdPath)
+		if resolved == "" && remote != nil && isRemoteImage(im.Src) {
+			resolved = remote(im.Src)
+		}
 		if resolved == "" {
 			continue
 		}
@@ -346,8 +350,8 @@ func placeImages(lines []string, mdContent, mdPath string, maxCols int, keepCapt
 
 // RenderImages places images into render-mode output and returns the text to
 // print: the uploads first, then the rendered lines with placeholder rows.
-func RenderImages(rendered, mdContent, mdPath string, maxCols int) string {
-	lines, uploads := placeImages(strings.Split(rendered, "\n"), mdContent, mdPath, maxCols, false, imageCache{})
+func RenderImages(rendered, mdContent, mdPath string, maxCols int, remote func(url string) string) string {
+	lines, uploads := placeImages(strings.Split(rendered, "\n"), mdContent, mdPath, maxCols, false, imageCache{}, remote)
 	return strings.Join(uploads, "") + strings.Join(lines, "\n")
 }
 

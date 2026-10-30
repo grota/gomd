@@ -242,7 +242,11 @@ func (a *App) renderGlamour(markdown string, innerW int) []string {
 	}
 	if a.cfg.Images.Enabled {
 		var uploads []string
-		lines, uploads = placeImages(lines, markdown, a.filepath, innerW-4, true, a.images)
+		var remote func(string) string
+		if a.remote != nil {
+			remote = a.remoteImage
+		}
+		lines, uploads = placeImages(lines, markdown, a.filepath, innerW-4, true, a.images, remote)
 		a.pendingUploads = append(a.pendingUploads, uploads...)
 	}
 	return lines

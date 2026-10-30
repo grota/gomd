@@ -336,7 +336,7 @@ func TestPlaceImages_KeepsSurroundingText(t *testing.T) {
 	src := "![logo](logo.png)\n\nBefore ![logo](logo.png) after\n"
 	rendered := "  logo 📷 /logo.png  \n  Before logo 📷 /logo.png after\n  plain line"
 
-	out, uploads := placeImages(strings.Split(rendered, "\n"), src, md, 40, false, imageCache{})
+	out, uploads := placeImages(strings.Split(rendered, "\n"), src, md, 40, false, imageCache{}, nil)
 	if len(uploads) != 1 {
 		t.Errorf("want 1 upload for one image used twice, got %d", len(uploads))
 	}
@@ -368,7 +368,7 @@ func TestPlaceImages_SharedPathDifferentForms(t *testing.T) {
 	// part of another caption.
 	src := "![one](./a.png)\n\n![](a.png)\n\n![two](a.png \"title\")\n"
 	rendered := "  one 📷 /a.png\n  /a.png\n  two 📷 /a.png"
-	out, _ := placeImages(strings.Split(rendered, "\n"), src, filepath.Join(dir, "d.md"), 40, false, imageCache{})
+	out, _ := placeImages(strings.Split(rendered, "\n"), src, filepath.Join(dir, "d.md"), 40, false, imageCache{}, nil)
 	for i, l := range out {
 		if !isImageRow(l) {
 			t.Errorf("line %d not replaced by an image: %q", i, l)
@@ -388,14 +388,14 @@ func TestPlaceImages_KeepCaptionAndCache(t *testing.T) {
 	f.Close()
 	cache := imageCache{}
 	lines := []string{"  pic 📷 /a.png"}
-	out, uploads := placeImages(lines, "![pic](a.png)", filepath.Join(dir, "d.md"), 40, true, cache)
+	out, uploads := placeImages(lines, "![pic](a.png)", filepath.Join(dir, "d.md"), 40, true, cache, nil)
 	if out[0] != lines[0] || len(out) != 3 || len(uploads) != 1 {
 		t.Fatalf("keepCaption: want caption + 2 rows and 1 upload, got %q, %d uploads", out, len(uploads))
 	}
 	if w := ansi.StringWidth(out[1]); w != 6 {
 		t.Errorf("placeholder row width %d, want 2 margin + 4 cells", w)
 	}
-	if _, again := placeImages(lines, "![pic](a.png)", filepath.Join(dir, "d.md"), 40, true, cache); len(again) != 0 {
+	if _, again := placeImages(lines, "![pic](a.png)", filepath.Join(dir, "d.md"), 40, true, cache, nil); len(again) != 0 {
 		t.Errorf("cached image uploaded again")
 	}
 }
@@ -527,7 +527,7 @@ func TestPlaceImages_NewWidthFreesTheOldSize(t *testing.T) {
 	cache := imageCache{}
 	lines := []string{"  pic 📷 /a.png"}
 	place := func(cols int) []string {
-		_, uploads := placeImages(lines, "![pic](a.png)", filepath.Join(dir, "d.md"), cols, true, cache)
+		_, uploads := placeImages(lines, "![pic](a.png)", filepath.Join(dir, "d.md"), cols, true, cache, nil)
 		return uploads
 	}
 	place(40)

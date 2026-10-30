@@ -54,7 +54,9 @@ type ThemeOverrideConfig struct {
 
 // ImageConfig holds image rendering settings.
 type ImageConfig struct {
-	Enabled bool `toml:"enabled"`
+	Enabled     bool `toml:"enabled"`
+	Remote      bool `toml:"remote"`        // download http(s) images into the cache
+	RemoteMaxMB int  `toml:"remote_max_mb"` // largest remote image downloaded, in MB
 }
 
 // KeysConfig holds user-customizable key bindings.
@@ -220,7 +222,9 @@ func Default() Config {
 			ContentBorder: ContentBorderAlways,
 		},
 		Images: ImageConfig{
-			Enabled: true,
+			Enabled:     true,
+			Remote:      true,
+			RemoteMaxMB: 10,
 		},
 		Keys: DefaultKeys(),
 	}

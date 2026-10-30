@@ -93,6 +93,11 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	checkChoice("ui.content_border", &cfg.UI.ContentBorder, config.ContentBorderAlways, config.ContentBorderWithSidebar)
 	// Image uploads are escape sequences: never write them into a pipe or file.
 	cfg.Images.Enabled = cfg.Images.Enabled && !flagNoImages && term.IsTerminal(int(os.Stdout.Fd())) && tui.IsKittySupported()
+	if cfg.Images.RemoteMaxMB < 1 {
+		def := config.Default().Images.RemoteMaxMB
+		fmt.Fprintf(os.Stderr, "Warning: images.remote_max_mb %d is below 1, using %d\n", cfg.Images.RemoteMaxMB, def)
+		cfg.Images.RemoteMaxMB = def
+	}
 
 	doc := parser.ParseMarkdown(inp.Content)
 
@@ -298,7 +303,10 @@ func renderToStdout(doc *parser.Document, mdPath string, cfg config.Config, dark
 	}
 
 	if cfg.Images.Enabled {
-		out = tui.RenderImages(out, content, mdPath, max(width-4, 1))
+		remote := tui.RemoteImageFetcher(cfg.Images, func(err error) {
+			fmt.Fprintln(os.Stderr, "Warning: image not downloaded:", err)
+		})
+		out = tui.RenderImages(out, content, mdPath, max(width-4, 1), remote)
 	}
 
 	fmt.Print(out)

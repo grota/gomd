@@ -206,6 +206,8 @@ opener = "xdg-open"       # command to open URLs, may include arguments (macOS d
 
 [images]
 enabled = true
+remote = true        # download http(s) images
+remote_max_mb = 10   # largest remote image downloaded, in MB
 
 [keys]
 # Shared
@@ -298,20 +300,22 @@ When no file argument is given, `gomd` reads from stdin if piped, otherwise prin
 
 ### Images
 
-gomd shows local images in the TUI and in render mode (`-r`) on terminals with [Kitty Unicode placeholder](https://sw.kovidgoyal.net/kitty/graphics-protocol/#unicode-placeholders) support: **Kitty** and **Ghostty**. In the TUI, the caption line (`alt 📷 path`) stays selectable and the image is drawn below it.
+gomd shows local and remote images in the TUI and in render mode (`-r`) on terminals with [Kitty Unicode placeholder](https://sw.kovidgoyal.net/kitty/graphics-protocol/#unicode-placeholders) support: **Kitty** and **Ghostty**. In the TUI, the caption line (`alt 📷 path`) stays selectable and the image is drawn below it.
 
 Images are on when the terminal is detected as Kitty or Ghostty, unless turned off with the **`--no-images`** flag or in the config file:
 
 ```toml
 [images]
-enabled = true   # default
+enabled = true       # default
+remote = true        # default: download http(s) images
+remote_max_mb = 10   # default: larger remote images are not downloaded
 ```
 
 gomd detects Kitty or Ghostty from `KITTY_WINDOW_ID`, `TERM_PROGRAM` and `TERM`.
 
 **tmux**: gomd asks tmux which terminal the client uses and shows images when it is Kitty or Ghostty and `allow-passthrough` is `on` (needed to upload the image). Images scroll and survive window switches like text. tmux must pass 24-bit colour to the terminal (`terminal-features` with `RGB`, the default for most setups), because the image id is encoded in the text colour.
 
-Only local image files are supported (relative or absolute paths). URLs are not fetched; they display as text.
+**Remote images** (`http://`, `https://`) are downloaded into the user cache directory (`~/.cache/gomd/images/` on Linux), one file per URL, and shown like local files. In the TUI the download runs in the background and the image appears when it is done; render mode waits for it, up to 15 seconds per image. A copy is used for 7 days, then downloaded again; until then, or when the download fails (offline), the old copy is shown. Copies older than 30 days are removed, and the oldest go first when the cache passes 100 MB. A download over `remote_max_mb` or that is not an image is refused, and a failed download is not retried until gomd restarts. Fetching an image tells its server that the document was opened, so set `remote = false` to keep gomd offline; images then show as their caption.
 
 ## License
 

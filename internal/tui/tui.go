@@ -138,6 +138,12 @@ type App struct {
 	images         imageCache // uploaded images, freed on exit
 	pendingUploads []string   // uploads produced by the last render, sent by Update
 
+	// Remote images: nil when off. downloads holds the URLs being downloaded
+	// or whose download failed; pendingDownloads the ones Update must start.
+	remote           *remoteImages
+	downloads        map[string]bool
+	pendingDownloads []string
+
 	// rendered lines cache — rebuilt when section or width changes
 	renderedLinesWidth int // innerW for which renderedLines was built
 	renderedLinesIdx   int // selectedIdx for which renderedLines was built
@@ -195,7 +201,11 @@ func NewApp(doc *parser.Document, filename, filePath string, cfg config.Config) 
 		selectedIdx:   -1, // start on the root (Document) node
 		sidebarHidden: cfg.UI.SidebarHidden,
 		images:        imageCache{},
+		downloads:     map[string]bool{},
 		dark:          true,
+	}
+	if cfg.Images.Enabled {
+		a.remote = newRemoteImages(cfg.Images)
 	}
 	var err error
 	if a.themeSetting, err = ParseThemeSetting(cfg.UI.Theme); err != nil {
@@ -535,6 +545,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = tea.Batch(cmd, tea.Raw(strings.Join(a.pendingUploads, "")))
 			a.pendingUploads = nil
 		}
+		for _, url := range a.pendingDownloads {
+			cmd = tea.Batch(cmd, a.downloadCmd(url))
+		}
+		a.pendingDownloads = nil
 	}
 	return m, cmd
 }
@@ -558,6 +572,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.setDark(false)
 	case themesDownloadedMsg:
 		a.handleThemesDownloaded(msg)
+	case imageDownloadedMsg:
+		a.handleImageDownloaded(msg)
 
 	case editorDoneMsg:
 		a.reloadFromDisk("Reloaded after edit")
