@@ -102,9 +102,9 @@ func walkCorpus(root string, f func(path string, src []byte)) {
 	})
 }
 
-// TestCorpusExtractors compares the nodes of the line scanner
-// (extractCodeNodes) and of goldmark (extractNodes) on the documents under
-// GOMD_CORPUS, while the second replaces the first. It counts the nodes
+// TestCorpusExtractors compares the nodes gomd uses (sectionNodes) with
+// those of goldmark (extractNodes) on the documents under GOMD_CORPUS, while
+// the second replaces the line scanner one node kind at a time. It counts the nodes
 // alike, the nodes found by one only, and the nodes differing in a field,
 // by kind; GOMD_SHOW=<text> prints examples of the counts whose name holds
 // it. It checks nothing and skips without GOMD_CORPUS.
@@ -131,7 +131,7 @@ func TestCorpusExtractors(t *testing.T) {
 		for _, n := range extractNodes(lines) {
 			byKey[key(n)] = n
 		}
-		for _, o := range extractCodeNodes(lines) {
+		for _, o := range sectionNodes(lines) {
 			k := kinds[o.kind]
 			n, ok := byKey[key(o)]
 			if !ok {

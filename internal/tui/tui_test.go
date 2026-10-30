@@ -55,7 +55,7 @@ func TestExtractCodeNodes_FencedBlock(t *testing.T) {
 		"",
 		"Some prose.",
 	}
-	nodes := extractCodeNodes(lines)
+	nodes := sectionNodes(lines)
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 node (fenced), got %d", len(nodes))
 	}
@@ -72,7 +72,7 @@ func TestExtractCodeNodes_InlineCode(t *testing.T) {
 	lines := []string{
 		"Use `useState` and `useEffect` in your component.",
 	}
-	nodes := extractCodeNodes(lines)
+	nodes := sectionNodes(lines)
 	if len(nodes) != 2 {
 		t.Fatalf("expected 2 inline nodes, got %d", len(nodes))
 	}
@@ -87,7 +87,7 @@ func TestExtractCodeNodes_InlineCode(t *testing.T) {
 func TestExtractCodeNodes_HeadingWithBacktick(t *testing.T) {
 	// Headings are no longer extracted as nodes, but inline code within them is
 	lines := []string{"## `useCallback` hook"}
-	nodes := extractCodeNodes(lines)
+	nodes := sectionNodes(lines)
 	if len(nodes) != 1 {
 		t.Fatalf("expected 1 inline code node from heading, got %d", len(nodes))
 	}
@@ -98,7 +98,7 @@ func TestExtractCodeNodes_HeadingWithBacktick(t *testing.T) {
 
 func TestExtractCodeNodes_NoNodes(t *testing.T) {
 	lines := []string{"Just plain prose.", "", "No code here."}
-	nodes := extractCodeNodes(lines)
+	nodes := sectionNodes(lines)
 	if len(nodes) != 0 {
 		t.Errorf("expected 0 nodes, got %d", len(nodes))
 	}
@@ -172,7 +172,7 @@ More text after.
 
 func TestMapNodes_InlineCodeFound(t *testing.T) {
 	lines := strings.Split(strings.TrimRight(testMD, "\n"), "\n")
-	nodes := extractCodeNodes(lines)
+	nodes := sectionNodes(lines)
 	_, stripped := renderStripped(t, testMD, 80)
 	info := mapNodesToRenderedLines(nodes, stripped)
 
@@ -205,7 +205,7 @@ func TestMapNodes_InlineCodeFound(t *testing.T) {
 
 func TestMapNodes_FencedBlockBounds(t *testing.T) {
 	lines := strings.Split(strings.TrimRight(testMD, "\n"), "\n")
-	nodes := extractCodeNodes(lines)
+	nodes := sectionNodes(lines)
 	_, stripped := renderStripped(t, testMD, 80)
 	info := mapNodesToRenderedLines(nodes, stripped)
 
@@ -242,7 +242,7 @@ func TestMapNodes_InlineSpanDisplayCols(t *testing.T) {
 	// Bullet lines have multibyte chars; display cols must differ from byte offsets.
 	src := "## H\n\n• Use `useState` in your component.\n"
 	lines := strings.Split(strings.TrimRight(src, "\n"), "\n")
-	nodes := extractCodeNodes(lines)
+	nodes := sectionNodes(lines)
 	_, stripped := renderStripped(t, src, 80)
 	info := mapNodesToRenderedLines(nodes, stripped)
 
@@ -288,7 +288,7 @@ func TestMapNodes_InlineNotInsideFencedBlock(t *testing.T) {
 		"Use `SlowList` carefully.\n"
 
 	lines := strings.Split(strings.TrimRight(src, "\n"), "\n")
-	nodes := extractCodeNodes(lines)
+	nodes := sectionNodes(lines)
 	_, stripped := renderStripped(t, src, 80)
 	info := mapNodesToRenderedLines(nodes, stripped)
 
@@ -343,7 +343,7 @@ func TestMapNodes_FullREADME(t *testing.T) {
 	}
 	src := string(content)
 	lines := strings.Split(src, "\n")
-	nodes := extractCodeNodes(lines)
+	nodes := sectionNodes(lines)
 
 	rendered, stripped := renderStripped(t, src, 140)
 	locs := mapNodesToRenderedLines(nodes, rendered)
@@ -616,7 +616,7 @@ func TestPreProcessLeavesCodeAlone(t *testing.T) {
 
 func TestExtractCodeNodes_NestedFence(t *testing.T) {
 	lines := strings.Split("````md\n```go\nx := 1\n```\n````\n~~~\ny\n~~~~\n", "\n")
-	nodes := extractCodeNodes(lines)
+	nodes := sectionNodes(lines)
 	if len(nodes) != 2 || nodes[0].content != "```go\nx := 1\n```" || nodes[0].lang != "md" || nodes[1].content != "y" || nodes[1].endLine != 7 {
 		t.Fatalf("got %+v", nodes)
 	}
@@ -801,7 +801,7 @@ func TestEditorLine(t *testing.T) {
 
 func TestExtractCodeNodes_EmptyAndListBlocks(t *testing.T) {
 	lines := strings.Split("```\n```\n\n- item:\n\n  ```sh\n  echo a\n    indented\n  ```\n", "\n")
-	nodes := extractCodeNodes(lines)
+	nodes := sectionNodes(lines)
 	if len(nodes) != 1 || nodes[0].content != "echo a\n  indented" {
 		t.Fatalf("want only the list block, dedented by its fence: %+v", nodes)
 	}
@@ -810,12 +810,12 @@ func TestExtractCodeNodes_EmptyAndListBlocks(t *testing.T) {
 func TestExtractCodeNodes_QuoteAndIndentedBlocks(t *testing.T) {
 	lines := strings.Split("> ```sh\n> echo q\n> ```\n\n    indented\n\ntext\n\n    ```\n    fenced or indented\n    ```\n", "\n")
 	var got []string
-	for _, n := range extractCodeNodes(lines) {
+	for _, n := range sectionNodes(lines) {
 		got = append(got, fmt.Sprintf("%d-%d %v %q", n.startLine, n.endLine, n.indented, n.content))
 	}
-	// The last block is a fence to the line scanner and indented code to
-	// goldmark: it is found once.
-	want := []string{`0-2 false "echo q"`, `4-4 true "indented"`, `8-10 false "fenced or indented"`}
+	// The last block is indented code, fence lines included, as glamour shows
+	// it.
+	want := []string{`0-2 false "echo q"`, `4-4 true "indented"`, "8-10 true \"```\\nfenced or indented\\n```\""}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
@@ -922,7 +922,7 @@ func TestTableBordersStayAlignedWithLinks(t *testing.T) {
 func TestNoNodesOnLinkDefinitions(t *testing.T) {
 	lines := strings.Split("See [#12][] and `code`.\n\n[#12]: https://example.com/pull/12\n[guide]: <https://example.com/g> \"The guide\"\n[x]: not a definition, `kept`\n", "\n")
 	var got []string
-	for _, n := range extractCodeNodes(lines) {
+	for _, n := range sectionNodes(lines) {
 		got = append(got, n.content)
 	}
 	if want := "code|kept"; strings.Join(got, "|") != want {

@@ -303,7 +303,7 @@ func (a *App) rebuildSection() {
 	if a.selectedIdx < 0 || len(a.doc.Headings) == 0 {
 		content := strings.TrimRight(a.doc.Content, "\n")
 		a.sectionLines = strings.Split(content, "\n")
-		a.codeNodes = extractCodeNodes(a.sectionLines)
+		a.codeNodes = sectionNodes(a.sectionLines)
 		return
 	}
 
@@ -314,149 +314,59 @@ func (a *App) rebuildSection() {
 	section := a.doc.Content[a.doc.Headings[a.selectedIdx].Offset:a.doc.SectionEnd(a.selectedIdx)]
 	section = strings.TrimRight(section, "\n")
 	a.sectionLines = strings.Split(section, "\n")
-	a.codeNodes = extractCodeNodes(a.sectionLines)
+	a.codeNodes = sectionNodes(a.sectionLines)
 }
 
-// extractMoreCodeBlocks returns the code blocks the line scanner in
-// extractCodeNodes misses, found by goldmark: indented code blocks and
-// fenced blocks inside block quotes. A block on lines of one in found is
-// left out.
-func extractMoreCodeBlocks(lines []string, found []codeNode) []codeNode {
-	src := []byte(strings.Join(lines, "\n"))
-	off := make([]int, len(lines)) // byte offset of each line
-	for i := 1; i < len(lines); i++ {
-		off[i] = off[i-1] + len(lines[i-1]) + 1
-	}
-	lineOf := func(pos int) int { return sort.SearchInts(off, pos+1) - 1 }
-	taken := func(first, last int) bool {
-		for _, n := range found {
-			if n.kind == nodeCodeBlock && first <= n.endLine && last >= n.startLine {
-				return true
-			}
-		}
-		return false
-	}
-	inQuote := func(n ast.Node) bool {
-		for p := n.Parent(); p != nil; p = p.Parent() {
-			if _, ok := p.(*ast.Blockquote); ok {
-				return true
-			}
-		}
-		return false
-	}
+// sectionNodes returns the nodes of lines while extractNodes replaces the
+// line scanner one kind at a time: code blocks from extractNodes, code spans
+// and links from extractCodeNodes.
+func sectionNodes(lines []string) []codeNode {
 	var nodes []codeNode
-	doc := goldmark.New().Parser().Parse(text.NewReader(src))
-	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
-			return ast.WalkContinue, nil
-		}
-		var lang string
-		indented := false
-		switch b := n.(type) {
-		case *ast.CodeBlock:
-			indented = true
-		case *ast.FencedCodeBlock:
-			if !inQuote(b) {
-				return ast.WalkContinue, nil
-			}
-			lang = string(b.Language(src))
-		default:
-			return ast.WalkContinue, nil
-		}
-		segs := n.Lines()
-		var body strings.Builder
-		for i := 0; i < segs.Len(); i++ {
-			seg := segs.At(i)
-			body.Write(seg.Value(src))
-		}
-		content := strings.TrimRight(body.String(), "\n")
-		if strings.TrimSpace(content) == "" {
-			return ast.WalkSkipChildren, nil
-		}
-		first, last := lineOf(segs.At(0).Start), lineOf(segs.At(segs.Len()-1).Start)
-		if !indented { // the fence lines around the body
-			first, last = first-1, min(last+1, len(lines)-1)
-		}
-		if !taken(first, last) {
-			nodes = append(nodes, codeNode{kind: nodeCodeBlock, lang: lang, content: content,
-				startLine: first, endLine: last, indented: indented})
-		}
-		return ast.WalkSkipChildren, nil
-	})
-	return nodes
-}
-
-// extractCodeNodes finds all fenced code blocks and inline backtick spans in lines.
-func extractCodeNodes(lines []string) []codeNode {
-	var nodes []codeNode
-	inBlock := false
-	var fence, lang string
-	var bodyLines []string
-	var startLine, indent int
-
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if !inBlock {
-			if f := fenceRun(trimmed); f != "" {
-				inBlock = true
-				fence = f
-				lang = strings.TrimSpace(trimmed[len(f):])
-				bodyLines = nil
-				startLine = i
-				indent = len(line) - len(strings.TrimLeft(line, " "))
-			} else {
-				// Scan for inline backtick spans and links (including on heading
-				// lines). A link reference definition is not shown, so it has none.
-				if linkDefRe.MatchString(line) {
-					continue
-				}
-				inline := extractInlineNodes(line, i)
-				if strings.HasPrefix(trimmed, "#") {
-					for j := range inline {
-						inline[j].heading = true
-					}
-				}
-				nodes = append(nodes, inline...)
-				nodes = append(nodes, extractLinkNodes(line, i)...)
-			}
-		} else {
-			// A closing fence is the opening character repeated at least as
-			// often, with nothing else on the line.
-			if strings.HasPrefix(trimmed, fence) && strings.Trim(trimmed, fence[:1]) == "" {
-				// A block with no text has nothing to show or copy.
-				if content := strings.Join(bodyLines, "\n"); strings.TrimSpace(content) != "" {
-					nodes = append(nodes, codeNode{
-						kind:      nodeCodeBlock,
-						lang:      lang,
-						content:   content,
-						startLine: startLine,
-						endLine:   i,
-					})
-				}
-				inBlock = false
-				fence = ""
-				lang = ""
-				bodyLines = nil
-			} else {
-				// As in CommonMark, the body loses up to the fence's
-				// indentation (a block inside a list item).
-				n := min(indent, len(line)-len(strings.TrimLeft(line, " ")))
-				bodyLines = append(bodyLines, line[n:])
-			}
+	for _, n := range extractNodes(lines) {
+		if n.kind == nodeCodeBlock {
+			nodes = append(nodes, n)
 		}
 	}
-	nodes = append(nodes, extractMoreCodeBlocks(lines, nodes)...)
-	// Sort nodes by source position (line, then column) so that
-	// mapNodesToRenderedLines processes them in document order. Without this,
-	// inline code spans (extracted first) and link nodes (extracted second) on
-	// the same line may be out of column order, causing the forward-scanning
-	// mapper to skip earlier occurrences.
+	nodes = append(nodes, extractCodeNodes(lines)...)
 	sort.SliceStable(nodes, func(i, j int) bool {
 		if nodes[i].startLine != nodes[j].startLine {
 			return nodes[i].startLine < nodes[j].startLine
 		}
 		return nodes[i].colStart < nodes[j].colStart
 	})
+	return nodes
+}
+
+// extractCodeNodes finds the inline backtick spans and links in lines,
+// outside fenced code blocks.
+func extractCodeNodes(lines []string) []codeNode {
+	var nodes []codeNode
+	var fence string // the opening fence of the block lines are in
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case fence != "":
+			// A closing fence is the opening character repeated at least as
+			// often, with nothing else on the line.
+			if strings.HasPrefix(trimmed, fence) && strings.Trim(trimmed, fence[:1]) == "" {
+				fence = ""
+			}
+		case fenceRun(trimmed) != "":
+			fence = fenceRun(trimmed)
+		case linkDefRe.MatchString(line):
+			// A link reference definition is not shown, so it has none.
+		default:
+			// Inline backtick spans and links, heading lines included.
+			inline := extractInlineNodes(line, i)
+			if strings.HasPrefix(trimmed, "#") {
+				for j := range inline {
+					inline[j].heading = true
+				}
+			}
+			nodes = append(nodes, inline...)
+			nodes = append(nodes, extractLinkNodes(line, i)...)
+		}
+	}
 	return nodes
 }
 
