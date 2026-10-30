@@ -137,8 +137,8 @@ func buildSourceMap(src string, rendered []string) *sourceMap {
 }
 
 // collect walks the goldmark AST, parsed as glamour parses it, for the
-// visible characters, the elements and the fenced code blocks. HTML blocks
-// count as visible: glamour shows their text, so their tags go unmatched.
+// visible characters, the elements and the fenced code blocks. Of an HTML
+// block, glamour shows the text between the tags, without the comments.
 func (m *sourceMap) collect() {
 	b := []byte(m.src)
 	doc := goldmark.New(goldmark.WithExtensions(extension.GFM, extension.DefinitionList)).Parser().Parse(text.NewReader(b))
@@ -205,6 +205,14 @@ func (m *sourceMap) collect() {
 			for p := n.PreviousSibling(); p != nil; p = p.PreviousSibling() {
 				col++
 			}
+		case *ast.Heading:
+			// gomd's style shows a level 2 to 6 heading after its "##" to
+			// "######" (StyleConfigFromTheme), whatever the source has (a
+			// setext heading has none): without them, the map could match
+			// the prefix to a "#" in the text ("{#id}") and skip ahead.
+			if n.Level >= 2 && n.Lines().Len() > 0 {
+				addAt(strings.Repeat("#", n.Level), lineStart(m.src, n.Lines().At(0).Start))
+			}
 		case *ast.ListItem:
 			// Glamour numbers an ordered list itself (its start plus the
 			// item's position), whatever numbers the source has. That number
@@ -219,7 +227,36 @@ func (m *sourceMap) collect() {
 					addAt(strconv.Itoa(num)+".", marker)
 				}
 			}
-		case *ast.FencedCodeBlock, *ast.CodeBlock, *ast.HTMLBlock:
+		case *ast.HTMLBlock:
+			inTag, inComment := false, false
+			for i := 0; i < n.Lines().Len(); i++ {
+				seg := n.Lines().At(i)
+				from := seg.Start
+				for j := seg.Start; j < seg.Stop; j++ {
+					switch {
+					case inComment:
+						if strings.HasPrefix(m.src[j:], "-->") {
+							inComment, from = false, j+3
+							j += 2
+						}
+					case inTag:
+						if m.src[j] == '>' {
+							inTag, from = false, j+1
+						}
+					case strings.HasPrefix(m.src[j:], "<!--"):
+						add(from, j)
+						inComment = true
+						j += 3
+					case m.src[j] == '<':
+						add(from, j)
+						inTag = true
+					}
+				}
+				if !inTag && !inComment {
+					add(from, seg.Stop)
+				}
+			}
+		case *ast.FencedCodeBlock, *ast.CodeBlock:
 			lines := n.Lines()
 			u0 := len(m.units)
 			for i := 0; i < lines.Len(); i++ {
@@ -335,8 +372,13 @@ func (m *sourceMap) closeElem(e, u0 int, n ast.Node, markEnd int) {
 	s := m.src
 	start, end := m.units[u0].start, m.units[len(m.units)-1].end
 	switch n := n.(type) {
-	case *east.Table, *ast.HTMLBlock:
+	case *east.Table:
 		m.elems[e].start, m.elems[e].end = lineStart(s, start), lineEnd(s, end)
+		return
+	case *ast.HTMLBlock: // all its lines, also those with tags alone
+		lines := n.Lines()
+		m.elems[e].start = lineStart(s, min(start, lines.At(0).Start))
+		m.elems[e].end = lineEnd(s, max(end, lines.At(lines.Len()-1).Start))
 		return
 	case *ast.Paragraph, *ast.Heading, *ast.TextBlock:
 		lines := n.Lines()
