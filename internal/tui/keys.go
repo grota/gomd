@@ -834,8 +834,9 @@ func (a *App) ensureRenderedLines() {
 	a.renderedLinesIdx = a.selectedIdx
 	a.renderedLinesWidth = w
 	a.sel = nil // its positions index the old lines
-	a.srcMap = nil
+	a.srcMap = buildSourceMap(markdown, a.renderedLines)
 	a.nodeRenderInfo = mapNodesToRenderedLines(a.codeNodes, a.renderedLines)
+	placeNodesFromSource(a.srcMap, a.codeNodes, a.sectionLines, a.renderedLines, a.nodeRenderInfo)
 	// Match positions index into renderedLines, so recompute them for the new render.
 	a.findContentSearchMatches()
 	a.clampContentOffset()

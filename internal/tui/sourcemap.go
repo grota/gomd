@@ -72,6 +72,25 @@ func (m *sourceMap) sourceLineAt(p textPos) int {
 	return strings.Count(m.src[:m.units[m.cells[c].unit].start], "\n")
 }
 
+// place returns where the visible characters of source bytes [start, end)
+// are shown: the first and last rendered line, and the columns [col0, col1)
+// they span on the first line. ok is false when none of them is shown.
+func (m *sourceMap) place(start, end int) (first, last, col0, col1 int, ok bool) {
+	u0 := sort.Search(len(m.units), func(i int) bool { return m.units[i].start >= start })
+	u1 := sort.Search(len(m.units), func(i int) bool { return m.units[i].start >= end })
+	c0 := sort.Search(len(m.cells), func(i int) bool { return m.cells[i].unit >= u0 })
+	c1 := sort.Search(len(m.cells), func(i int) bool { return m.cells[i].unit >= u1 }) - 1
+	if c0 > c1 {
+		return 0, 0, 0, 0, false
+	}
+	first, last = m.cells[c0].pos.line, m.cells[c1].pos.line
+	col0 = m.cells[c0].pos.col
+	for c := c0; c <= c1 && m.cells[c].pos.line == first; c++ {
+		col1 = m.cells[c].pos.col + m.cells[c].w
+	}
+	return first, last, col0, col1, true
+}
+
 // buildSourceMap maps rendered, the render of the markdown src. It reads
 // src as glamour does, after PreProcessMarkdown, and maps every offset back.
 func buildSourceMap(src string, rendered []string) *sourceMap {
@@ -110,7 +129,9 @@ func (m *sourceMap) collect() {
 	linkU0 := map[ast.Node]int{}
 	add := func(start, end int) {
 		for i, r := range m.src[start:end] {
-			if !unicode.IsSpace(r) {
+			// Zero-width runes (a variation selector, a combining accent) are
+			// part of the rendered cell of the character before them.
+			if !unicode.IsSpace(r) && ansi.StringWidth(string(r)) > 0 {
 				m.units = append(m.units, srcUnit{r, start + i, start + i + utf8.RuneLen(r), cur})
 			}
 		}
@@ -212,7 +233,9 @@ func (m *sourceMap) addDestination(u0 int, markEnd *int, add func(start, end int
 				}
 			}
 		}
-		add(d, e)
+		if d >= len(s) || s[d] != '#' { // glamour hides "#anchor" destinations
+			add(d, e)
+		}
 		if k := strings.IndexByte(s[e:], ')'); k >= 0 {
 			*markEnd = e + k + 1
 		}
@@ -293,9 +316,13 @@ func (m *sourceMap) align(rendered []string) {
 		if strings.ContainsRune(s, kitty.Placeholder) {
 			continue
 		}
+		// Measure by grapheme cluster, as the terminal and highlightSpans do:
+		// "🖼️" (an emoji and a variation selector) takes two columns.
 		col := 0
-		for _, r := range s {
-			w := ansi.StringWidth(string(r))
+		for rest := s; len(rest) > 0; {
+			cluster, w, n, _ := ansi.DecodeSequence(rest, 0, nil)
+			rest = rest[n:]
+			r, _ := utf8.DecodeRuneInString(cluster)
 			if !unicode.IsSpace(r) && w > 0 {
 				cells = append(cells, rc{r, textPos{i, col}, w})
 				if m.lineFirst[i] < 0 {

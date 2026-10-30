@@ -445,6 +445,51 @@ func byteColToDisplayCol(s string, byteOff int) int {
 	return lipgloss.Width(s[:byteOff])
 }
 
+// placeNodesFromSource replaces the placement in locs, found by searching
+// the rendered text, with the one the source map gives: the screen cells
+// matched to the node's visible source characters. It keeps the search's
+// placement for a node with no matched cell, and for HTML links, whose text
+// and URL all map to the start of the tag. rendered is the section's
+// rendered lines.
+func placeNodesFromSource(m *sourceMap, nodes []codeNode, lines, rendered []string, locs []nodeRenderLoc) {
+	off := make([]int, len(lines)+1) // byte offset of each line in the section
+	for i, l := range lines {
+		off[i+1] = off[i] + len(l) + 1
+	}
+	for i, n := range nodes {
+		var start, end int
+		switch line := lines[n.startLine]; {
+		case n.kind == nodeCodeBlock:
+			start, end = off[n.startLine+1], off[n.endLine] // the body
+		case n.kind == nodeInlineCode:
+			start, end = off[n.startLine]+n.colStart, off[n.startLine]+n.colEnd
+		case strings.HasPrefix(line[n.colStart:], "!["): // the caption: alt and path
+			start, end = off[n.startLine]+n.colStart+2, off[n.startLine]+n.colEnd
+		case line[n.colStart] == '[': // the text, not the URL
+			start = off[n.startLine] + n.colStart + 1
+			end = start + len(n.display)
+		case len(line) > n.colStart+2 && strings.EqualFold(line[n.colStart:n.colStart+2], "<a") &&
+			(line[n.colStart+2] == ' ' || line[n.colStart+2] == '\t'):
+			continue
+		default: // <img>, autolinks and bare URLs
+			start, end = off[n.startLine]+n.colStart, off[n.startLine]+n.colEnd
+		}
+		first, last, col0, col1, ok := m.place(start, end)
+		if !ok {
+			continue
+		}
+		locs[i].firstLine, locs[i].lastLine = first, last
+		if n.inline {
+			// Glamour shows a relative image path rooted ("a.png" as
+			// "/a.png"); that "/" has no source, so take it in.
+			if strings.HasPrefix(n.display, "/") && col0 > 0 && ansi.Cut(ansi.Strip(rendered[first]), col0-1, col0) == "/" {
+				col0--
+			}
+			locs[i].spanCol, locs[i].spanColEnd = col0, col1
+		}
+	}
+}
+
 func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLoc {
 	result := make([]nodeRenderLoc, len(nodes))
 	// Pre-strip ANSI from all rendered lines once.
