@@ -1,0 +1,588 @@
+######## section -1
+== rendered
+
+   Nodes
+
+  Every syntax that gives a selectable node, and syntax that looks like one
+  but does not.
+
+  ## Inline links
+
+  A plain link 🔗 https://example.com/plain and one with a title
+  https://example.com/title and an angle destination 🔗 https://example.com/with
+  space.
+
+  A URL with parentheses
+  https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space
+  before it 🔗 https://example.com/space.
+
+  A link whose text goes on 🔗 https://example.com/two-lines and one whose
+  destination does: here 🔗 https://example.com/next-line.
+
+  Nested brackets: [Become a backer 🔗 https://example.com/backer].
+
+  A link with  code  🔗 https://example.com/code and bold
+  https://example.com/bold.
+
+  An anchor to a heading.
+
+  ## Reference links
+
+  The full 🔗 https://example.com/ref, the collapsed
+  https://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut
+  forms, and an image badge 📷 https://example.com/badge.svg.
+
+  ## Autolinks and bare URLs
+
+  An autolink https://example.com/auto, a bare https://example.com/bare.
+  Ending a sentence: https://example.com/end, or (https://example.com/paren).
+  Mail someone@example.com and bare someone@example.com.
+
+  ## Images
+
+  An inline image 📷 /img/a.png and a linked one: badge 📷
+  https://example.com/b.svg 🔗 https://example.com/target.
+
+  ## HTML
+
+  Inline anchor tag 🔗 https://example.com/a-tag and image tag 📷 /img/tag.png in
+  a paragraph.
+  [![Logo](img/logo.png)](https://example.com/block-a)
+    Text with `code` and [markdown](https://example.com/md) in an HTML block.
+  ## Code spans
+
+  A  span , a  span with ` inside , and  `  a backtick alone.
+
+  A span that  goes on the next line  here.
+
+   Operator                             │ Meaning
+  ──────────────────────────────────────┼─────────────────────────────────────
+    a | b                               │ either
+    [x](y)                              │ no link
+
+  Not a link inside code:  https://example.com/in-code  and  [t](u) .
+
+  ### Heading with  code
+
+  ## Code blocks
+
+    fmt.Println("fenced")
+
+    tilde fence
+
+    trailing blank line follows
+
+
+  • A list item:
+    echo in-list
+
+
+  │ Quoted:
+  │
+  │   in quote
+
+    indented code
+    and its second line
+
+
+  Unclosed at the end:
+
+    never closed
+== nodes
+link   src 7-7 col 2-41  shown 8-8 col 4-14  "plain link -> https://example.com/plain" on "plain link"
+link   src 8-8 col 0-46  shown 8-8 col 59-64  "title -> https://example.com/title" on "title"
+link   src 9-9 col 0-53  shown 9-9 col 35-52  "angle destination -> <https://example.com/with" on "angle destination"
+link   src 11-11 col 11-81  shown 12-12 col 13-24  "parentheses -> https://en.wikipedia.org/wiki/Magic_number_(programming" on "parentheses"
+link   src 12-12 col 6-51  shown 13-14 col 73-78  "space before it -> " on "space"
+link   src 15-15 col 9-38  shown 16-16 col 31-60  "https://example.com/two-lines -> https://example.com/two-lines" on "https://example.com/two-lines"
+link   src 16-16 col 0-29  shown 17-17 col 28-57  "https://example.com/next-line -> https://example.com/next-line" on "https://example.com/next-line"
+link   src 20-20 col 2-46  shown 21-21 col 4-19  "link with `code` -> https://example.com/code" on "link with  code"
+inline src 20-20 col 13-19  shown 21-21 col 15-19  "code" on "code"
+link   src 20-20 col 51-87  shown 21-21 col 53-57  "**bold** -> https://example.com/bold" on "bold"
+link   src 22-22 col 3-26  shown 24-24 col 5-11  "anchor -> #inline-links" on "anchor"
+link   src 36-36 col 12-38  shown 34-34 col 14-38  "https://example.com/auto -> https://example.com/auto" on "https://example.com/auto"
+link   src 36-36 col 47-71  shown 34-34 col 47-71  "https://example.com/bare -> https://example.com/bare" on "https://example.com/bare"
+link   src 37-37 col 19-42  shown 35-35 col 21-44  "https://example.com/end -> https://example.com/end" on "https://example.com/end"
+link   src 37-37 col 48-73  shown 35-35 col 50-75  "https://example.com/paren -> https://example.com/paren" on "https://example.com/paren"
+link   src 38-38 col 5-26  shown 36-36 col 7-26  "someone@example.com -> someone@example.com" on "someone@example.com"
+link   src 42-42 col 3-29  shown 40-40 col 5-31  "inline image 📷 /img/a.png -> img/a.png" on "inline image 📷 /img/a.png"
+link   src 43-43 col 0-65  shown 40-41 col 50-55  "![badge](https://example.com/b.svg) -> https://example.com/target" on "badge"
+link   src 47-47 col 7-57  shown 45-45 col 9-19  "anchor tag -> https://example.com/a-tag" on "anchor tag"
+link   src 48-48 col 0-39  shown 45-45 col 53-78  "image tag 📷 /img/tag.png -> img/tag.png" on "image tag 📷 /img/tag.png"
+link   src 51-51 col 2-79  shown 47-47 col 3-24  "<img src=\"img/logo.png\" alt=\"Logo\"> -> https://example.com/block-a" on "![Logo](img/logo.png)"
+link   src 52-52 col 23-57  shown 48-48 col 26-34  "markdown -> https://example.com/md" on "markdown"
+inline src 57-57 col 2-8  shown 51-51 col 5-9  "span" on "span"
+inline src 57-57 col 12-36  shown 51-51 col 15-33  "span with ` inside" on "span with ` inside"
+inline src 57-57 col 42-49  shown 51-51 col 41-42  "`" on "`"
+inline src 59-60 col 12-35  shown 53-53 col 15-36  "goes on the next line" on "goes on the next line"
+inline src 64-64 col 2-10  shown 57-57 col 4-9  "a | b" on "a | b"
+inline src 65-65 col 2-10  shown 58-58 col 4-10  "[x](y)" on "[x](y)"
+link   src 65-65 col 3-9  shown 58-58 col 5-6  "x -> y" on "x"
+inline src 67-67 col 24-53  shown 60-60 col 27-54  "https://example.com/in-code" on "https://example.com/in-code"
+link   src 67-67 col 25-53  shown 60-60 col 27-54  "https://example.com/in-code` -> https://example.com/in-code`" on "https://example.com/in-code"
+inline src 67-67 col 58-66  shown 60-60 col 61-67  "[t](u)" on "[t](u)"
+link   src 67-67 col 59-65  shown 60-60 col 62-63  "t -> u" on "t"
+inline src 69-69 col 17-23  shown 62-62 col 20-24  "code" on "code"
+block  src 73-75 col 0-0  shown 66-66 col -1--1  "fmt.Println(\"fenced\")"
+block  src 77-79 col 0-0  shown 68-68 col -1--1  "tilde fence"
+block  src 81-84 col 0-0  shown 70-70 col -1--1  "trailing blank line follows"
+block  src 88-90 col 0-0  shown 74-74 col -1--1  "echo in-list"
+block  src 94-96 col 0-0  shown 79-79 col -1--1  "in quote"
+block  src 98-99 col 0-0  shown 81-82 col -1--1  "indented code\nand its second line"
+block  src 106-108 col 0-0  shown 87-87 col -1--1  "never closed"
+== copy per line
+1: "Nodes" | "# Nodes"
+3: "Every syntax that gives a selectable node, and syntax that looks like one" | "Every syntax that gives a selectable node, and syntax that looks like one"
+4: "but does not." | "but does not."
+6: "## Inline links" | "## Inline links"
+8: "A plain link 🔗 https://example.com/plain and one with a title\nhttps://example.com/title" | "A [plain link](https://example.com/plain) and one with a\n[title](https://example.com/title \"The title\")"
+9: "title\nhttps://example.com/title and an angle destination 🔗 https://example.com/with\nspace" | "[title](https://example.com/title \"The title\") and an\n[angle destination](<https://example.com/with space>)"
+10: "angle destination 🔗 https://example.com/with\nspace." | "[angle destination](<https://example.com/with space>)."
+12: "A URL with parentheses\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed" | "A URL with [parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)"
+13: "parentheses\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space\nbefore it 🔗 https://example.com/space" | "[parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)\nand a [space before it]( https://example.com/space)"
+14: "space\nbefore it 🔗 https://example.com/space." | "[space before it]( https://example.com/space)."
+16: "A link whose text goes on 🔗 https://example.com/two-lines and one whose" | "A [link whose text\ngoes on](https://example.com/two-lines) and one whose"
+17: "destination does: here 🔗 https://example.com/next-line." | "destination does: [here](\nhttps://example.com/next-line)."
+19: "Nested brackets: [Become a backer 🔗 https://example.com/backer]." | "Nested brackets: [[Become a backer](https://example.com/backer)]."
+21: "A link with  code  🔗 https://example.com/code and bold\nhttps://example.com/bold" | "A [link with `code`](https://example.com/code) and [**bold**](https://example.com/bold)"
+22: "bold\nhttps://example.com/bold." | "[**bold**](https://example.com/bold)."
+24: "An anchor to a heading." | "An [anchor](#inline-links) to a heading."
+26: "## Reference links" | "## Reference links"
+28: "The full 🔗 https://example.com/ref, the collapsed\nhttps://example.com/collapsed" | "The [full][ref], the [collapsed][]"
+29: "collapsed\nhttps://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut" | "[collapsed][] and the [shortcut]"
+30: "forms, and an image ![badge](https://example.com/badge.svg)." | "forms, and an image\n![badge][img]."
+32: "## Autolinks and bare URLs" | "## Autolinks and bare URLs"
+34: "An autolink https://example.com/auto, a bare https://example.com/bare." | "An autolink <https://example.com/auto>, a bare https://example.com/bare."
+35: "Ending a sentence: https://example.com/end, or (https://example.com/paren)." | "Ending a sentence: https://example.com/end, or (https://example.com/paren)."
+36: "Mail someone@example.com and bare someone@example.com." | "Mail <someone@example.com> and bare someone@example.com."
+38: "## Images" | "## Images"
+40: "An ![inline image](img/a.png) and a linked one: badge 📷\nhttps://example.com/b.svg 🔗 https://example.com/target" | "An ![inline image](img/a.png) and a linked one:\n[![badge](https://example.com/b.svg)](https://example.com/target)"
+41: "badge 📷\nhttps://example.com/b.svg 🔗 https://example.com/target." | "[![badge](https://example.com/b.svg)](https://example.com/target)."
+43: "## HTML" | "## HTML"
+45: "Inline anchor tag 🔗 https://example.com/a-tag and ![image tag](img/tag.png) in" | "Inline <a href=\"https://example.com/a-tag\">anchor tag</a> and\n<img src=\"img/tag.png\" alt=\"image tag\"> in"
+46: "a paragraph." | "a paragraph."
+47: "[![Logo](img/logo.png)](https://example.com/block-a)\n  Text with `code` and [markdown](https://example.com/md) in an HTML block." | "<p align=\"center\">\n  <a href=\"https://example.com/block-a\"><img src=\"img/logo.png\" alt=\"Logo\"></a>\n  Text with `code` and [markdown](https://example.com/md) in an HTML block.\n</p>"
+48: "[![Logo](img/logo.png)](https://example.com/block-a)\nText with `code` and [markdown](https://example.com/md) in an HTML block." | "<p align=\"center\">\n  <a href=\"https://example.com/block-a\"><img src=\"img/logo.png\" alt=\"Logo\"></a>\n  Text with `code` and [markdown](https://example.com/md) in an HTML block.\n</p>"
+49: "## Code spans" | "## Code spans"
+51: "A  span , a  span with ` inside , and  `  a backtick alone." | "A `span`, a `` span with ` inside ``, and `` ` `` a backtick alone."
+53: "A span that  goes on the next line  here." | "A span that `goes on\nthe next line` here."
+55: " Operator                             │ Meaning\n──────────────────────────────────────┼─────────────────────────────────────\n  a | b                               │ either\n  [x](y)                              │ no link" | "| Operator | Meaning |\n| -------- | ------- |\n| `a \\| b` | either  |\n| `[x](y)` | no link |"
+56: "──────────────────────────────────────┼─────────────────────────────────────" | ""
+57: "Operator                             │ Meaning\n──────────────────────────────────────┼─────────────────────────────────────\n  a | b                               │ either\n  [x](y)                              │ no link" | "| Operator | Meaning |\n| -------- | ------- |\n| `a \\| b` | either  |\n| `[x](y)` | no link |"
+58: "Operator                             │ Meaning\n──────────────────────────────────────┼─────────────────────────────────────\n  a | b                               │ either\n  [x](y)                              │ no link" | "| Operator | Meaning |\n| -------- | ------- |\n| `a \\| b` | either  |\n| `[x](y)` | no link |"
+60: "Not a link inside code:  https://example.com/in-code  and  [t](u) ." | "Not a link inside code: `https://example.com/in-code` and `[t](u)`."
+62: "### Heading with  code" | "### Heading with `code`"
+64: "## Code blocks" | "## Code blocks"
+66: "fmt.Println(\"fenced\")" | "```go\nfmt.Println(\"fenced\")\n```"
+68: "tilde fence" | "~~~\ntilde fence\n~~~"
+70: "trailing blank line follows" | "```sh\ntrailing blank line follows\n\n```"
+73: "• A list item:" | "- A list item:"
+74: "echo in-list" | "  ```sh\n  echo in-list\n  ```"
+77: "│ Quoted:" | "> Quoted:"
+78: "│" | ""
+79: "│   in quote" | "> ```\n> in quote"
+81: "indented code" | "    indented code"
+82: "and its second line" | "    and its second line"
+85: "Unclosed at the end:" | "Unclosed at the end:"
+87: "never closed" | "```text\nnever closed"
+######## section 0
+== rendered
+
+   Nodes
+
+  Every syntax that gives a selectable node, and syntax that looks like one
+  but does not.
+
+  ## Inline links
+
+  A plain link 🔗 https://example.com/plain and one with a title
+  https://example.com/title and an angle destination 🔗 https://example.com/with
+  space.
+
+  A URL with parentheses
+  https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space
+  before it 🔗 https://example.com/space.
+
+  A link whose text goes on 🔗 https://example.com/two-lines and one whose
+  destination does: here 🔗 https://example.com/next-line.
+
+  Nested brackets: [Become a backer 🔗 https://example.com/backer].
+
+  A link with  code  🔗 https://example.com/code and bold
+  https://example.com/bold.
+
+  An anchor to a heading.
+
+  ## Reference links
+
+  The full 🔗 https://example.com/ref, the collapsed
+  https://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut
+  forms, and an image badge 📷 https://example.com/badge.svg.
+
+  ## Autolinks and bare URLs
+
+  An autolink https://example.com/auto, a bare https://example.com/bare.
+  Ending a sentence: https://example.com/end, or (https://example.com/paren).
+  Mail someone@example.com and bare someone@example.com.
+
+  ## Images
+
+  An inline image 📷 /img/a.png and a linked one: badge 📷
+  https://example.com/b.svg 🔗 https://example.com/target.
+
+  ## HTML
+
+  Inline anchor tag 🔗 https://example.com/a-tag and image tag 📷 /img/tag.png in
+  a paragraph.
+  [![Logo](img/logo.png)](https://example.com/block-a)
+    Text with `code` and [markdown](https://example.com/md) in an HTML block.
+  ## Code spans
+
+  A  span , a  span with ` inside , and  `  a backtick alone.
+
+  A span that  goes on the next line  here.
+
+   Operator                             │ Meaning
+  ──────────────────────────────────────┼─────────────────────────────────────
+    a | b                               │ either
+    [x](y)                              │ no link
+
+  Not a link inside code:  https://example.com/in-code  and  [t](u) .
+
+  ### Heading with  code
+
+  ## Code blocks
+
+    fmt.Println("fenced")
+
+    tilde fence
+
+    trailing blank line follows
+
+
+  • A list item:
+    echo in-list
+
+
+  │ Quoted:
+  │
+  │   in quote
+
+    indented code
+    and its second line
+
+
+  Unclosed at the end:
+
+    never closed
+== nodes
+link   src 7-7 col 2-41  shown 8-8 col 4-14  "plain link -> https://example.com/plain" on "plain link"
+link   src 8-8 col 0-46  shown 8-8 col 59-64  "title -> https://example.com/title" on "title"
+link   src 9-9 col 0-53  shown 9-9 col 35-52  "angle destination -> <https://example.com/with" on "angle destination"
+link   src 11-11 col 11-81  shown 12-12 col 13-24  "parentheses -> https://en.wikipedia.org/wiki/Magic_number_(programming" on "parentheses"
+link   src 12-12 col 6-51  shown 13-14 col 73-78  "space before it -> " on "space"
+link   src 15-15 col 9-38  shown 16-16 col 31-60  "https://example.com/two-lines -> https://example.com/two-lines" on "https://example.com/two-lines"
+link   src 16-16 col 0-29  shown 17-17 col 28-57  "https://example.com/next-line -> https://example.com/next-line" on "https://example.com/next-line"
+link   src 20-20 col 2-46  shown 21-21 col 4-19  "link with `code` -> https://example.com/code" on "link with  code"
+inline src 20-20 col 13-19  shown 21-21 col 15-19  "code" on "code"
+link   src 20-20 col 51-87  shown 21-21 col 53-57  "**bold** -> https://example.com/bold" on "bold"
+link   src 22-22 col 3-26  shown 24-24 col 5-11  "anchor -> #inline-links" on "anchor"
+link   src 36-36 col 12-38  shown 34-34 col 14-38  "https://example.com/auto -> https://example.com/auto" on "https://example.com/auto"
+link   src 36-36 col 47-71  shown 34-34 col 47-71  "https://example.com/bare -> https://example.com/bare" on "https://example.com/bare"
+link   src 37-37 col 19-42  shown 35-35 col 21-44  "https://example.com/end -> https://example.com/end" on "https://example.com/end"
+link   src 37-37 col 48-73  shown 35-35 col 50-75  "https://example.com/paren -> https://example.com/paren" on "https://example.com/paren"
+link   src 38-38 col 5-26  shown 36-36 col 7-26  "someone@example.com -> someone@example.com" on "someone@example.com"
+link   src 42-42 col 3-29  shown 40-40 col 5-31  "inline image 📷 /img/a.png -> img/a.png" on "inline image 📷 /img/a.png"
+link   src 43-43 col 0-65  shown 40-41 col 50-55  "![badge](https://example.com/b.svg) -> https://example.com/target" on "badge"
+link   src 47-47 col 7-57  shown 45-45 col 9-19  "anchor tag -> https://example.com/a-tag" on "anchor tag"
+link   src 48-48 col 0-39  shown 45-45 col 53-78  "image tag 📷 /img/tag.png -> img/tag.png" on "image tag 📷 /img/tag.png"
+link   src 51-51 col 2-79  shown 47-47 col 3-24  "<img src=\"img/logo.png\" alt=\"Logo\"> -> https://example.com/block-a" on "![Logo](img/logo.png)"
+link   src 52-52 col 23-57  shown 48-48 col 26-34  "markdown -> https://example.com/md" on "markdown"
+inline src 57-57 col 2-8  shown 51-51 col 5-9  "span" on "span"
+inline src 57-57 col 12-36  shown 51-51 col 15-33  "span with ` inside" on "span with ` inside"
+inline src 57-57 col 42-49  shown 51-51 col 41-42  "`" on "`"
+inline src 59-60 col 12-35  shown 53-53 col 15-36  "goes on the next line" on "goes on the next line"
+inline src 64-64 col 2-10  shown 57-57 col 4-9  "a | b" on "a | b"
+inline src 65-65 col 2-10  shown 58-58 col 4-10  "[x](y)" on "[x](y)"
+link   src 65-65 col 3-9  shown 58-58 col 5-6  "x -> y" on "x"
+inline src 67-67 col 24-53  shown 60-60 col 27-54  "https://example.com/in-code" on "https://example.com/in-code"
+link   src 67-67 col 25-53  shown 60-60 col 27-54  "https://example.com/in-code` -> https://example.com/in-code`" on "https://example.com/in-code"
+inline src 67-67 col 58-66  shown 60-60 col 61-67  "[t](u)" on "[t](u)"
+link   src 67-67 col 59-65  shown 60-60 col 62-63  "t -> u" on "t"
+inline src 69-69 col 17-23  shown 62-62 col 20-24  "code" on "code"
+block  src 73-75 col 0-0  shown 66-66 col -1--1  "fmt.Println(\"fenced\")"
+block  src 77-79 col 0-0  shown 68-68 col -1--1  "tilde fence"
+block  src 81-84 col 0-0  shown 70-70 col -1--1  "trailing blank line follows"
+block  src 88-90 col 0-0  shown 74-74 col -1--1  "echo in-list"
+block  src 94-96 col 0-0  shown 79-79 col -1--1  "in quote"
+block  src 98-99 col 0-0  shown 81-82 col -1--1  "indented code\nand its second line"
+block  src 106-108 col 0-0  shown 87-87 col -1--1  "never closed"
+== copy per line
+1: "Nodes" | "# Nodes"
+3: "Every syntax that gives a selectable node, and syntax that looks like one" | "Every syntax that gives a selectable node, and syntax that looks like one"
+4: "but does not." | "but does not."
+6: "## Inline links" | "## Inline links"
+8: "A plain link 🔗 https://example.com/plain and one with a title\nhttps://example.com/title" | "A [plain link](https://example.com/plain) and one with a\n[title](https://example.com/title \"The title\")"
+9: "title\nhttps://example.com/title and an angle destination 🔗 https://example.com/with\nspace" | "[title](https://example.com/title \"The title\") and an\n[angle destination](<https://example.com/with space>)"
+10: "angle destination 🔗 https://example.com/with\nspace." | "[angle destination](<https://example.com/with space>)."
+12: "A URL with parentheses\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed" | "A URL with [parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)"
+13: "parentheses\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space\nbefore it 🔗 https://example.com/space" | "[parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)\nand a [space before it]( https://example.com/space)"
+14: "space\nbefore it 🔗 https://example.com/space." | "[space before it]( https://example.com/space)."
+16: "A link whose text goes on 🔗 https://example.com/two-lines and one whose" | "A [link whose text\ngoes on](https://example.com/two-lines) and one whose"
+17: "destination does: here 🔗 https://example.com/next-line." | "destination does: [here](\nhttps://example.com/next-line)."
+19: "Nested brackets: [Become a backer 🔗 https://example.com/backer]." | "Nested brackets: [[Become a backer](https://example.com/backer)]."
+21: "A link with  code  🔗 https://example.com/code and bold\nhttps://example.com/bold" | "A [link with `code`](https://example.com/code) and [**bold**](https://example.com/bold)"
+22: "bold\nhttps://example.com/bold." | "[**bold**](https://example.com/bold)."
+24: "An anchor to a heading." | "An [anchor](#inline-links) to a heading."
+26: "## Reference links" | "## Reference links"
+28: "The full 🔗 https://example.com/ref, the collapsed\nhttps://example.com/collapsed" | "The [full][ref], the [collapsed][]"
+29: "collapsed\nhttps://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut" | "[collapsed][] and the [shortcut]"
+30: "forms, and an image ![badge](https://example.com/badge.svg)." | "forms, and an image\n![badge][img]."
+32: "## Autolinks and bare URLs" | "## Autolinks and bare URLs"
+34: "An autolink https://example.com/auto, a bare https://example.com/bare." | "An autolink <https://example.com/auto>, a bare https://example.com/bare."
+35: "Ending a sentence: https://example.com/end, or (https://example.com/paren)." | "Ending a sentence: https://example.com/end, or (https://example.com/paren)."
+36: "Mail someone@example.com and bare someone@example.com." | "Mail <someone@example.com> and bare someone@example.com."
+38: "## Images" | "## Images"
+40: "An ![inline image](img/a.png) and a linked one: badge 📷\nhttps://example.com/b.svg 🔗 https://example.com/target" | "An ![inline image](img/a.png) and a linked one:\n[![badge](https://example.com/b.svg)](https://example.com/target)"
+41: "badge 📷\nhttps://example.com/b.svg 🔗 https://example.com/target." | "[![badge](https://example.com/b.svg)](https://example.com/target)."
+43: "## HTML" | "## HTML"
+45: "Inline anchor tag 🔗 https://example.com/a-tag and ![image tag](img/tag.png) in" | "Inline <a href=\"https://example.com/a-tag\">anchor tag</a> and\n<img src=\"img/tag.png\" alt=\"image tag\"> in"
+46: "a paragraph." | "a paragraph."
+47: "[![Logo](img/logo.png)](https://example.com/block-a)\n  Text with `code` and [markdown](https://example.com/md) in an HTML block." | "<p align=\"center\">\n  <a href=\"https://example.com/block-a\"><img src=\"img/logo.png\" alt=\"Logo\"></a>\n  Text with `code` and [markdown](https://example.com/md) in an HTML block.\n</p>"
+48: "[![Logo](img/logo.png)](https://example.com/block-a)\nText with `code` and [markdown](https://example.com/md) in an HTML block." | "<p align=\"center\">\n  <a href=\"https://example.com/block-a\"><img src=\"img/logo.png\" alt=\"Logo\"></a>\n  Text with `code` and [markdown](https://example.com/md) in an HTML block.\n</p>"
+49: "## Code spans" | "## Code spans"
+51: "A  span , a  span with ` inside , and  `  a backtick alone." | "A `span`, a `` span with ` inside ``, and `` ` `` a backtick alone."
+53: "A span that  goes on the next line  here." | "A span that `goes on\nthe next line` here."
+55: " Operator                             │ Meaning\n──────────────────────────────────────┼─────────────────────────────────────\n  a | b                               │ either\n  [x](y)                              │ no link" | "| Operator | Meaning |\n| -------- | ------- |\n| `a \\| b` | either  |\n| `[x](y)` | no link |"
+56: "──────────────────────────────────────┼─────────────────────────────────────" | ""
+57: "Operator                             │ Meaning\n──────────────────────────────────────┼─────────────────────────────────────\n  a | b                               │ either\n  [x](y)                              │ no link" | "| Operator | Meaning |\n| -------- | ------- |\n| `a \\| b` | either  |\n| `[x](y)` | no link |"
+58: "Operator                             │ Meaning\n──────────────────────────────────────┼─────────────────────────────────────\n  a | b                               │ either\n  [x](y)                              │ no link" | "| Operator | Meaning |\n| -------- | ------- |\n| `a \\| b` | either  |\n| `[x](y)` | no link |"
+60: "Not a link inside code:  https://example.com/in-code  and  [t](u) ." | "Not a link inside code: `https://example.com/in-code` and `[t](u)`."
+62: "### Heading with  code" | "### Heading with `code`"
+64: "## Code blocks" | "## Code blocks"
+66: "fmt.Println(\"fenced\")" | "```go\nfmt.Println(\"fenced\")\n```"
+68: "tilde fence" | "~~~\ntilde fence\n~~~"
+70: "trailing blank line follows" | "```sh\ntrailing blank line follows\n\n```"
+73: "• A list item:" | "- A list item:"
+74: "echo in-list" | "  ```sh\n  echo in-list\n  ```"
+77: "│ Quoted:" | "> Quoted:"
+78: "│" | ""
+79: "│   in quote" | "> ```\n> in quote"
+81: "indented code" | "    indented code"
+82: "and its second line" | "    and its second line"
+85: "Unclosed at the end:" | "Unclosed at the end:"
+87: "never closed" | "```text\nnever closed"
+######## section 1
+== rendered
+
+  ## Inline links
+
+  A plain link 🔗 https://example.com/plain and one with a title
+  https://example.com/title and an angle destination 🔗 https://example.com/with
+  space.
+
+  A URL with parentheses
+  https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space
+  before it 🔗 https://example.com/space.
+
+  A link whose text goes on 🔗 https://example.com/two-lines and one whose
+  destination does: here 🔗 https://example.com/next-line.
+
+  Nested brackets: [Become a backer 🔗 https://example.com/backer].
+
+  A link with  code  🔗 https://example.com/code and bold
+  https://example.com/bold.
+
+  An anchor to a heading.
+== nodes
+link   src 2-2 col 2-41  shown 3-3 col 4-14  "plain link -> https://example.com/plain" on "plain link"
+link   src 3-3 col 0-46  shown 3-3 col 59-64  "title -> https://example.com/title" on "title"
+link   src 4-4 col 0-53  shown 4-4 col 35-52  "angle destination -> <https://example.com/with" on "angle destination"
+link   src 6-6 col 11-81  shown 7-7 col 13-24  "parentheses -> https://en.wikipedia.org/wiki/Magic_number_(programming" on "parentheses"
+link   src 7-7 col 6-51  shown 8-9 col 73-78  "space before it -> " on "space"
+link   src 10-10 col 9-38  shown 11-11 col 31-60  "https://example.com/two-lines -> https://example.com/two-lines" on "https://example.com/two-lines"
+link   src 11-11 col 0-29  shown 12-12 col 28-57  "https://example.com/next-line -> https://example.com/next-line" on "https://example.com/next-line"
+link   src 15-15 col 2-46  shown 16-16 col 4-19  "link with `code` -> https://example.com/code" on "link with  code"
+inline src 15-15 col 13-19  shown 16-16 col 15-19  "code" on "code"
+link   src 15-15 col 51-87  shown 16-16 col 53-57  "**bold** -> https://example.com/bold" on "bold"
+link   src 17-17 col 3-26  shown 19-19 col 5-11  "anchor -> #inline-links" on "anchor"
+== copy per line
+1: "## Inline links" | "## Inline links"
+3: "A plain link 🔗 https://example.com/plain and one with a title\nhttps://example.com/title" | "A [plain link](https://example.com/plain) and one with a\n[title](https://example.com/title \"The title\")"
+4: "title\nhttps://example.com/title and an angle destination 🔗 https://example.com/with\nspace" | "[title](https://example.com/title \"The title\") and an\n[angle destination](<https://example.com/with space>)"
+5: "angle destination 🔗 https://example.com/with\nspace." | "[angle destination](<https://example.com/with space>)."
+7: "A URL with parentheses\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed" | "A URL with [parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)"
+8: "parentheses\nhttps://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed and a space\nbefore it 🔗 https://example.com/space" | "[parentheses](https://en.wikipedia.org/wiki/Magic_number_(programming)#Unnamed)\nand a [space before it]( https://example.com/space)"
+9: "space\nbefore it 🔗 https://example.com/space." | "[space before it]( https://example.com/space)."
+11: "A link whose text goes on 🔗 https://example.com/two-lines and one whose" | "A [link whose text\ngoes on](https://example.com/two-lines) and one whose"
+12: "destination does: here 🔗 https://example.com/next-line." | "destination does: [here](\nhttps://example.com/next-line)."
+14: "Nested brackets: [Become a backer 🔗 https://example.com/backer]." | "Nested brackets: [[Become a backer](https://example.com/backer)]."
+16: "A link with  code  🔗 https://example.com/code and bold\nhttps://example.com/bold" | "A [link with `code`](https://example.com/code) and [**bold**](https://example.com/bold)"
+17: "bold\nhttps://example.com/bold." | "[**bold**](https://example.com/bold)."
+19: "An anchor to a heading." | "An [anchor](#inline-links) to a heading."
+######## section 2
+== rendered
+
+  ## Reference links
+
+  The full 🔗 https://example.com/ref, the collapsed
+  https://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut
+  forms, and an image badge 📷 https://example.com/badge.svg.
+== nodes
+== copy per line
+1: "## Reference links" | "## Reference links"
+3: "The full 🔗 https://example.com/ref, the collapsed\nhttps://example.com/collapsed" | "The [full][ref], the [collapsed][]"
+4: "collapsed\nhttps://example.com/collapsed and the shortcut 🔗 https://example.com/shortcut" | "[collapsed][] and the [shortcut]"
+5: "forms, and an image ![badge](https://example.com/badge.svg)." | "forms, and an image\n![badge][img]."
+######## section 3
+== rendered
+
+  ## Autolinks and bare URLs
+
+  An autolink https://example.com/auto, a bare https://example.com/bare.
+  Ending a sentence: https://example.com/end, or (https://example.com/paren).
+  Mail someone@example.com and bare someone@example.com.
+== nodes
+link   src 2-2 col 12-38  shown 3-3 col 14-38  "https://example.com/auto -> https://example.com/auto" on "https://example.com/auto"
+link   src 2-2 col 47-71  shown 3-3 col 47-71  "https://example.com/bare -> https://example.com/bare" on "https://example.com/bare"
+link   src 3-3 col 19-42  shown 4-4 col 21-44  "https://example.com/end -> https://example.com/end" on "https://example.com/end"
+link   src 3-3 col 48-73  shown 4-4 col 50-75  "https://example.com/paren -> https://example.com/paren" on "https://example.com/paren"
+link   src 4-4 col 5-26  shown 5-5 col 7-26  "someone@example.com -> someone@example.com" on "someone@example.com"
+== copy per line
+1: "## Autolinks and bare URLs" | "## Autolinks and bare URLs"
+3: "An autolink https://example.com/auto, a bare https://example.com/bare." | "An autolink <https://example.com/auto>, a bare https://example.com/bare."
+4: "Ending a sentence: https://example.com/end, or (https://example.com/paren)." | "Ending a sentence: https://example.com/end, or (https://example.com/paren)."
+5: "Mail someone@example.com and bare someone@example.com." | "Mail <someone@example.com> and bare someone@example.com."
+######## section 4
+== rendered
+
+  ## Images
+
+  An inline image 📷 /img/a.png and a linked one: badge 📷
+  https://example.com/b.svg 🔗 https://example.com/target.
+== nodes
+link   src 2-2 col 3-29  shown 3-3 col 5-31  "inline image 📷 /img/a.png -> img/a.png" on "inline image 📷 /img/a.png"
+link   src 3-3 col 0-65  shown 3-4 col 50-55  "![badge](https://example.com/b.svg) -> https://example.com/target" on "badge"
+== copy per line
+1: "## Images" | "## Images"
+3: "An ![inline image](img/a.png) and a linked one: badge 📷\nhttps://example.com/b.svg 🔗 https://example.com/target" | "An ![inline image](img/a.png) and a linked one:\n[![badge](https://example.com/b.svg)](https://example.com/target)"
+4: "badge 📷\nhttps://example.com/b.svg 🔗 https://example.com/target." | "[![badge](https://example.com/b.svg)](https://example.com/target)."
+######## section 5
+== rendered
+
+  ## HTML
+
+  Inline anchor tag 🔗 https://example.com/a-tag and image tag 📷 /img/tag.png in
+  a paragraph.
+  [![Logo](img/logo.png)](https://example.com/block-a)
+    Text with `code` and [markdown](https://example.com/md) in an HTML block.
+== nodes
+link   src 2-2 col 7-57  shown 3-3 col 9-19  "anchor tag -> https://example.com/a-tag" on "anchor tag"
+link   src 3-3 col 0-39  shown 3-3 col 53-78  "image tag 📷 /img/tag.png -> img/tag.png" on "image tag 📷 /img/tag.png"
+link   src 6-6 col 2-79  shown 5-5 col 3-24  "<img src=\"img/logo.png\" alt=\"Logo\"> -> https://example.com/block-a" on "![Logo](img/logo.png)"
+link   src 7-7 col 23-57  shown 6-6 col 26-34  "markdown -> https://example.com/md" on "markdown"
+== copy per line
+1: "## HTML" | "## HTML"
+3: "Inline anchor tag 🔗 https://example.com/a-tag and ![image tag](img/tag.png) in" | "Inline <a href=\"https://example.com/a-tag\">anchor tag</a> and\n<img src=\"img/tag.png\" alt=\"image tag\"> in"
+4: "a paragraph." | "a paragraph."
+5: "[![Logo](img/logo.png)](https://example.com/block-a)\n  Text with `code` and [markdown](https://example.com/md) in an HTML block." | "<p align=\"center\">\n  <a href=\"https://example.com/block-a\"><img src=\"img/logo.png\" alt=\"Logo\"></a>\n  Text with `code` and [markdown](https://example.com/md) in an HTML block.\n</p>"
+6: "[![Logo](img/logo.png)](https://example.com/block-a)\nText with `code` and [markdown](https://example.com/md) in an HTML block." | "<p align=\"center\">\n  <a href=\"https://example.com/block-a\"><img src=\"img/logo.png\" alt=\"Logo\"></a>\n  Text with `code` and [markdown](https://example.com/md) in an HTML block.\n</p>"
+######## section 6
+== rendered
+
+  ## Code spans
+
+  A  span , a  span with ` inside , and  `  a backtick alone.
+
+  A span that  goes on the next line  here.
+
+   Operator                             │ Meaning
+  ──────────────────────────────────────┼─────────────────────────────────────
+    a | b                               │ either
+    [x](y)                              │ no link
+
+  Not a link inside code:  https://example.com/in-code  and  [t](u) .
+
+  ### Heading with  code
+
+== nodes
+inline src 2-2 col 2-8  shown 3-3 col 5-9  "span" on "span"
+inline src 2-2 col 12-36  shown 3-3 col 15-33  "span with ` inside" on "span with ` inside"
+inline src 2-2 col 42-49  shown 3-3 col 41-42  "`" on "`"
+inline src 4-5 col 12-35  shown 5-5 col 15-36  "goes on the next line" on "goes on the next line"
+inline src 9-9 col 2-10  shown 9-9 col 4-9  "a | b" on "a | b"
+inline src 10-10 col 2-10  shown 10-10 col 4-10  "[x](y)" on "[x](y)"
+link   src 10-10 col 3-9  shown 10-10 col 5-6  "x -> y" on "x"
+inline src 12-12 col 24-53  shown 12-12 col 27-54  "https://example.com/in-code" on "https://example.com/in-code"
+link   src 12-12 col 25-53  shown 12-12 col 27-54  "https://example.com/in-code` -> https://example.com/in-code`" on "https://example.com/in-code"
+inline src 12-12 col 58-66  shown 12-12 col 61-67  "[t](u)" on "[t](u)"
+link   src 12-12 col 59-65  shown 12-12 col 62-63  "t -> u" on "t"
+inline src 14-14 col 17-23  shown 14-14 col 20-24  "code" on "code"
+== copy per line
+1: "## Code spans" | "## Code spans"
+3: "A  span , a  span with ` inside , and  `  a backtick alone." | "A `span`, a `` span with ` inside ``, and `` ` `` a backtick alone."
+5: "A span that  goes on the next line  here." | "A span that `goes on\nthe next line` here."
+7: " Operator                             │ Meaning\n──────────────────────────────────────┼─────────────────────────────────────\n  a | b                               │ either\n  [x](y)                              │ no link" | "| Operator | Meaning |\n| -------- | ------- |\n| `a \\| b` | either  |\n| `[x](y)` | no link |"
+8: "──────────────────────────────────────┼─────────────────────────────────────" | ""
+9: "Operator                             │ Meaning\n──────────────────────────────────────┼─────────────────────────────────────\n  a | b                               │ either\n  [x](y)                              │ no link" | "| Operator | Meaning |\n| -------- | ------- |\n| `a \\| b` | either  |\n| `[x](y)` | no link |"
+10: "Operator                             │ Meaning\n──────────────────────────────────────┼─────────────────────────────────────\n  a | b                               │ either\n  [x](y)                              │ no link" | "| Operator | Meaning |\n| -------- | ------- |\n| `a \\| b` | either  |\n| `[x](y)` | no link |"
+12: "Not a link inside code:  https://example.com/in-code  and  [t](u) ." | "Not a link inside code: `https://example.com/in-code` and `[t](u)`."
+14: "### Heading with  code" | "### Heading with `code`"
+######## section 7
+== rendered
+
+  ### Heading with  code
+
+== nodes
+inline src 0-0 col 17-23  shown 1-1 col 20-24  "code" on "code"
+== copy per line
+1: "### Heading with  code" | "### Heading with `code`"
+######## section 8
+== rendered
+
+  ## Code blocks
+
+    fmt.Println("fenced")
+
+    tilde fence
+
+    trailing blank line follows
+
+
+  • A list item:
+    echo in-list
+
+
+  │ Quoted:
+  │
+  │   in quote
+
+    indented code
+    and its second line
+
+
+  Unclosed at the end:
+
+    never closed
+== nodes
+block  src 2-4 col 0-0  shown 3-3 col -1--1  "fmt.Println(\"fenced\")"
+block  src 6-8 col 0-0  shown 5-5 col -1--1  "tilde fence"
+block  src 10-13 col 0-0  shown 7-7 col -1--1  "trailing blank line follows"
+block  src 17-19 col 0-0  shown 11-11 col -1--1  "echo in-list"
+block  src 23-25 col 0-0  shown 16-16 col -1--1  "in quote"
+block  src 27-28 col 0-0  shown 18-19 col -1--1  "indented code\nand its second line"
+block  src 35-37 col 0-0  shown 24-24 col -1--1  "never closed"
+== copy per line
+1: "## Code blocks" | "## Code blocks"
+3: "fmt.Println(\"fenced\")" | "```go\nfmt.Println(\"fenced\")\n```"
+5: "tilde fence" | "~~~\ntilde fence\n~~~"
+7: "trailing blank line follows" | "```sh\ntrailing blank line follows\n\n```"
+10: "• A list item:" | "- A list item:"
+11: "echo in-list" | "  ```sh\n  echo in-list\n  ```"
+14: "│ Quoted:" | "> Quoted:"
+15: "│" | ""
+16: "│   in quote" | "> ```\n> in quote"
+18: "indented code" | "    indented code"
+19: "and its second line" | "    and its second line"
+22: "Unclosed at the end:" | "Unclosed at the end:"
+24: "never closed" | "```text\nnever closed"

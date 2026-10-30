@@ -27,7 +27,7 @@ func TestGolden(t *testing.T) {
 		file  string
 		width int // content width: the window is 2 columns wider
 	}{
-		{"readme.md", 80}, {"sample.md", 80}, {"edge.md", 80}, {"cases.md", 80}, {"cases.md", 40},
+		{"readme.md", 80}, {"sample.md", 80}, {"edge.md", 80}, {"cases.md", 80}, {"cases.md", 40}, {"nodes.md", 80},
 	} {
 		name := tc.file
 		if tc.width != 80 {
