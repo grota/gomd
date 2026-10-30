@@ -7,7 +7,7 @@
 [![Go version](https://img.shields.io/github/go-mod/go-version/grota/gomd)](go.mod)
 [![License: MIT](https://img.shields.io/github/license/grota/gomd)](LICENSE)
 
-Think [glow](https://github.com/charmbracelet/glow), plus an outline to navigate, vim keys, and every code block, code span and link one keystroke away from your clipboard or browser.
+Browse a document by its outline, pick any code block, code span or link with a few keys, and copy it or open it. Select text with the mouse and copy what you see or the markdown behind it. Images, 700+ themes and vim keys included.
 
 <img width="1536" height="1022" alt="gomd: outline sidebar and rendered document" src="https://github.com/user-attachments/assets/0f0db041-0dc3-4d35-8ee1-d89701707aff" />
 
