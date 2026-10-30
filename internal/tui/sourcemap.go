@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,6 +31,11 @@ type sourceMap struct {
 	elems  []srcElem  // elements a selection must not cut
 	fences []srcFence // fenced code blocks
 	cells  []srcCell  // rendered characters matched to a unit, in reading order
+	// unitCell is the cell matched to each unit, or -1. Inside a table the
+	// cells follow the units column by column, not in reading order.
+	unitCell []int
+	// tableCols is the number of columns of each table, in source order.
+	tableCols []int
 	// lineFirst and lineLast hold the first and last non-space column of
 	// each rendered line, or -1 for a blank line.
 	lineFirst, lineLast []int
@@ -39,6 +45,7 @@ type srcUnit struct {
 	r          rune
 	start, end int // byte range in src
 	elem       int // index in elems, or -1
+	table, col int // the table (index in tableCols) and column holding it, or -1
 }
 
 type srcElem struct {
@@ -79,17 +86,28 @@ func (m *sourceMap) sourceLineAt(p textPos) int {
 func (m *sourceMap) place(start, end int) (first, last, col0, col1 int, ok bool) {
 	u0 := sort.Search(len(m.units), func(i int) bool { return m.units[i].start >= start })
 	u1 := sort.Search(len(m.units), func(i int) bool { return m.units[i].start >= end })
-	c0 := sort.Search(len(m.cells), func(i int) bool { return m.cells[i].unit >= u0 })
-	c1 := sort.Search(len(m.cells), func(i int) bool { return m.cells[i].unit >= u1 }) - 1
-	if c0 > c1 {
+	var lo, hi textPos // the first and last matched cell
+	for u := u0; u < u1; u++ {
+		if c := m.unitCell[u]; c >= 0 {
+			p := m.cells[c].pos
+			if !ok || before(p, lo) {
+				lo = p
+			}
+			if !ok || before(hi, p) {
+				hi = p
+			}
+			ok = true
+		}
+	}
+	if !ok {
 		return 0, 0, 0, 0, false
 	}
-	first, last = m.cells[c0].pos.line, m.cells[c1].pos.line
-	col0 = m.cells[c0].pos.col
-	for c := c0; c <= c1 && m.cells[c].pos.line == first; c++ {
-		col1 = m.cells[c].pos.col + m.cells[c].w
+	for u := u0; u < u1; u++ {
+		if c := m.unitCell[u]; c >= 0 && m.cells[c].pos.line == lo.line {
+			col1 = max(col1, m.cells[c].pos.col+m.cells[c].w)
+		}
 	}
-	return first, last, col0, col1, true
+	return lo.line, hi.line, lo.col, col1, true
 }
 
 // buildSourceMap maps rendered, the render of the markdown src. It reads
@@ -128,12 +146,13 @@ func (m *sourceMap) collect() {
 	var curNode ast.Node
 	markEnd := 0 // end of the last link's markup, for an element closing after it
 	linkU0 := map[ast.Node]int{}
+	table, col := -1, -1 // the table cell being read
 	add := func(start, end int) {
 		for i, r := range m.src[start:end] {
 			// Zero-width runes (a variation selector, a combining accent) are
 			// part of the rendered cell of the character before them.
 			if !unicode.IsSpace(r) && ansi.StringWidth(string(r)) > 0 {
-				m.units = append(m.units, srcUnit{r, start + i, start + i + utf8.RuneLen(r), cur})
+				m.units = append(m.units, srcUnit{r, start + i, start + i + utf8.RuneLen(r), cur, table, col})
 			}
 		}
 	}
@@ -142,7 +161,7 @@ func (m *sourceMap) collect() {
 	addAt := func(text string, at int) {
 		for _, r := range text {
 			if !unicode.IsSpace(r) && ansi.StringWidth(string(r)) > 0 {
-				m.units = append(m.units, srcUnit{r, at, at, cur})
+				m.units = append(m.units, srcUnit{r, at, at, cur, table, col})
 			}
 		}
 	}
@@ -153,6 +172,10 @@ func (m *sourceMap) collect() {
 				m.addDestination(linkU0[n], &markEnd, add, addAt, n.Destination)
 			case *ast.Image:
 				m.addDestination(linkU0[n], &markEnd, add, addAt, n.Destination)
+			case *east.TableCell:
+				col = -1
+			case *east.Table:
+				table = -1
 			}
 			if n == curNode {
 				m.closeElem(cur, curU0, n, markEnd)
@@ -174,6 +197,14 @@ func (m *sourceMap) collect() {
 			}
 		case *ast.Link, *ast.Image:
 			linkU0[n] = len(m.units)
+		case *east.Table:
+			table = len(m.tableCols)
+			m.tableCols = append(m.tableCols, len(n.Alignments))
+		case *east.TableCell:
+			col = 0
+			for p := n.PreviousSibling(); p != nil; p = p.PreviousSibling() {
+				col++
+			}
 		case *ast.ListItem:
 			// Glamour numbers an ordered list itself (its start plus the
 			// item's position), whatever numbers the source has. That number
@@ -353,12 +384,14 @@ func (m *sourceMap) align(rendered []string) {
 		pos textPos
 		w   int
 	}
-	var cells []rc
+	lines := make([][]rc, len(rendered)) // the characters of each line
+	stripped := make([]string, len(rendered))
 	m.lineFirst = make([]int, len(rendered))
 	m.lineLast = make([]int, len(rendered))
 	for i, l := range rendered {
 		m.lineFirst[i], m.lineLast[i] = -1, -1
 		s := ansi.Strip(l)
+		stripped[i] = s
 		if strings.ContainsRune(s, kitty.Placeholder) {
 			continue
 		}
@@ -370,7 +403,7 @@ func (m *sourceMap) align(rendered []string) {
 			rest = rest[n:]
 			r, _ := utf8.DecodeRuneInString(cluster)
 			if !unicode.IsSpace(r) && w > 0 {
-				cells = append(cells, rc{r, textPos{i, col}, w})
+				lines[i] = append(lines[i], rc{r, textPos{i, col}, w})
 				if m.lineFirst[i] < 0 {
 					m.lineFirst[i] = col
 				}
@@ -380,16 +413,61 @@ func (m *sourceMap) align(rendered []string) {
 		}
 	}
 
+	// A table cell that wraps continues on the next lines, after the other
+	// cells of its row, but its source is in one piece. So inside a table
+	// both sides are read column by column: down a column, the screen shows
+	// that column's cells in source order however they wrap. ord lists the
+	// units in that order; the cells are listed the same way.
+	regions := tableRegions(stripped)
+	// The tables of two or more columns pair with those found on screen in
+	// order; when the counts differ, nothing is read column by column.
+	if len(regions) != m.multiColumnTables() {
+		regions = nil
+	}
+	ord := m.unitOrder(len(regions) > 0)
+	var cells []rc
+	for i := 0; i < len(lines); i++ {
+		if len(regions) == 0 || i != regions[0].top {
+			cells = append(cells, lines[i]...)
+			continue
+		}
+		t := regions[0]
+		regions = regions[1:]
+		for k := 0; k <= len(t.bounds); k++ {
+			lo, hi := 0, math.MaxInt // the columns of table column k
+			if k > 0 {
+				lo = t.bounds[k-1] + 1
+			}
+			if k < len(t.bounds) {
+				hi = t.bounds[k]
+			}
+			for j := t.top; j <= t.bot; j++ {
+				if j == t.rule {
+					continue
+				}
+				for _, c := range lines[j] {
+					if c.pos.col >= lo && c.pos.col < hi {
+						cells = append(cells, c)
+					}
+				}
+			}
+		}
+		i = t.bot
+	}
+
 	// In sync, a character matches the next unit, or one a few units ahead
 	// when the two characters after it match too ("&amp;" and "\*" render
 	// shorter). An unmatched letter or digit is text the source map lacks, so
 	// the alignment is lost until a run of characters matches again; other
 	// unmatched characters are decorations and keep it.
 	const lookahead, confirm, anchor, window = 8, 2, 6, 4000
-	u := m.units
+	u := make([]rune, len(ord))
+	for i, o := range ord {
+		u[i] = m.units[o].r
+	}
 	runMatches := func(q, ci, n int) bool {
 		for j := range n {
-			if ci+j >= len(cells) || q+j >= len(u) || u[q+j].r != cells[ci+j].r {
+			if ci+j >= len(cells) || q+j >= len(u) || u[q+j] != cells[ci+j].r {
 				return ci+j >= len(cells) && j > 0
 			}
 		}
@@ -400,7 +478,7 @@ func (m *sourceMap) align(rendered []string) {
 		q := -1
 		switch {
 		case p >= len(u):
-		case inSync && u[p].r == c.r || !inSync && runMatches(p, ci, confirm+1):
+		case inSync && u[p] == c.r || !inSync && runMatches(p, ci, confirm+1):
 			q = p
 		case inSync:
 			for k := 1; k <= lookahead && p+k < len(u); k++ {
@@ -425,19 +503,110 @@ func (m *sourceMap) align(rendered []string) {
 			}
 			continue
 		}
-		m.cells = append(m.cells, srcCell{c.pos, c.w, q})
+		m.cells = append(m.cells, srcCell{c.pos, c.w, ord[q]})
 		p, inSync = q+1, true
 	}
+	sort.SliceStable(m.cells, func(i, j int) bool { return before(m.cells[i].pos, m.cells[j].pos) })
 
+	m.unitCell = make([]int, len(m.units))
+	for i := range m.unitCell {
+		m.unitCell[i] = -1
+	}
 	for i := range m.elems {
 		m.elems[i].c0, m.elems[i].c1 = len(m.cells), -1
 	}
 	for ci, c := range m.cells {
-		if e := u[c.unit].elem; e >= 0 && m.elems[e].start >= 0 {
+		m.unitCell[c.unit] = ci
+		if e := m.units[c.unit].elem; e >= 0 && m.elems[e].start >= 0 {
 			m.elems[e].c0 = min(m.elems[e].c0, ci)
 			m.elems[e].c1 = max(m.elems[e].c1, ci)
 		}
 	}
+}
+
+// A tableRegion is a table on screen: lines top to bot, the rule under the
+// header at line rule, and the columns of the borders between its columns.
+type tableRegion struct {
+	top, rule, bot int
+	bounds         []int
+}
+
+// tableRegions finds the tables in the rendered lines, without styles: a
+// rule line ("──┼──"), and the lines around it with a border ("│") at each
+// of the rule's crossings.
+func tableRegions(lines []string) []tableRegion {
+	var regions []tableRegion
+	for i, l := range lines {
+		t := strings.TrimSpace(l)
+		if !strings.ContainsRune(t, '┼') || strings.Trim(t, "─┼") != "" {
+			continue
+		}
+		var bounds []int
+		col := 0
+		for _, r := range l {
+			if r == '┼' {
+				bounds = append(bounds, col)
+			}
+			col += ansi.StringWidth(string(r))
+		}
+		inTable := func(j int) bool {
+			for _, b := range bounds {
+				if ansi.Cut(lines[j], b, b+1) != "│" {
+					return false
+				}
+			}
+			return true
+		}
+		top, bot := i, i
+		for top > 0 && inTable(top-1) {
+			top--
+		}
+		for bot+1 < len(lines) && inTable(bot+1) {
+			bot++
+		}
+		if top < i && (len(regions) == 0 || top > regions[len(regions)-1].bot) {
+			regions = append(regions, tableRegion{top, i, bot, bounds})
+		}
+	}
+	return regions
+}
+
+// multiColumnTables counts the tables of two or more columns, the ones with
+// a rule line ("──┼──") on screen.
+func (m *sourceMap) multiColumnTables() int {
+	n := 0
+	for _, c := range m.tableCols {
+		if c >= 2 {
+			n++
+		}
+	}
+	return n
+}
+
+// unitOrder returns the units in the order to align them: source order, and
+// with byColumn, the tables of two or more columns column by column.
+func (m *sourceMap) unitOrder(byColumn bool) []int {
+	ord := make([]int, 0, len(m.units))
+	for i := 0; i < len(m.units); {
+		t := m.units[i].table
+		if !byColumn || t < 0 || m.tableCols[t] < 2 {
+			ord = append(ord, i)
+			i++
+			continue
+		}
+		j := i
+		for j < len(m.units) && m.units[j].table == t {
+			j++
+		}
+		byCol := make([]int, 0, j-i)
+		for k := i; k < j; k++ {
+			byCol = append(byCol, k)
+		}
+		sort.SliceStable(byCol, func(a, b int) bool { return m.units[byCol[a]].col < m.units[byCol[b]].col })
+		ord = append(ord, byCol...)
+		i = j
+	}
+	return ord
 }
 
 func before(a, b textPos) bool { return a.line < b.line || a.line == b.line && a.col < b.col }
@@ -484,6 +653,9 @@ func (m *sourceMap) elemOf(c int) int {
 func (m *sourceMap) markdown(from, to textPos, c0, c1 int) string {
 	s := m.src
 	u0, u1 := m.cells[c0].unit, m.cells[c1].unit
+	for c := c0; c <= c1; c++ { // in a table, cells are not in unit order
+		u0, u1 = min(u0, m.cells[c].unit), max(u1, m.cells[c].unit)
+	}
 	start, end := m.units[u0].start, m.units[u1].end
 	if e := m.elemOf(c0); e >= 0 {
 		start = min(start, m.elems[e].start)

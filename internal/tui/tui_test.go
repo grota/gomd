@@ -820,3 +820,60 @@ func TestExtractCodeNodes_QuoteAndIndentedBlocks(t *testing.T) {
 		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+// spansOn returns, for each code span the source map places in the app's
+// section (without the text search fallback), the text highlighted on
+// screen.
+func spansOn(a *App) map[string]string {
+	locs := make([]nodeRenderLoc, len(a.codeNodes))
+	for i := range locs {
+		locs[i] = nodeRenderLoc{firstLine: -1, lastLine: -1, spanCol: -1, spanColEnd: -1}
+	}
+	placeNodesFromSource(a.srcMap, a.codeNodes, a.sectionLines, a.renderedLines, locs)
+	got := map[string]string{}
+	for i, n := range a.codeNodes {
+		if loc := locs[i]; n.kind == nodeInlineCode && loc.firstLine >= 0 {
+			got[n.content] = ansi.Cut(ansi.Strip(a.renderedLines[loc.firstLine]), loc.spanCol, loc.spanColEnd)
+		}
+	}
+	return got
+}
+
+func TestWrappedTableCellsArePlaced(t *testing.T) {
+	// The description wraps, and its end ("then `after`") is shown after the
+	// row's next cell ("`third`"), which comes later in the source.
+	md := "| Key | Description | Note |\n| --- | ----------- | ---- |\n" +
+		"| `a` | a description long enough to wrap in its narrow column, then `after` | `third` |\n" +
+		"| `b` | short | `fourth` |\n\nAnd `tail` after the table.\n"
+	cfg := config.Default()
+	cfg.Images.Enabled = false
+	a := NewApp(parser.ParseMarkdown(md), "f.md", "", cfg)
+	a.Update(tea.WindowSizeMsg{Width: 52, Height: 30})
+	a.ensureRenderedLines()
+	got := spansOn(a)
+	for _, s := range []string{"a", "after", "third", "b", "fourth", "tail"} {
+		if got[s] != s {
+			t.Errorf("%q highlighted on %q", s, got[s])
+		}
+	}
+	if !strings.Contains(strings.Join(a.renderedLines, "\n"), "after") || len(a.renderedLines) < 8 {
+		t.Fatalf("the cell did not wrap:\n%s", strings.Join(a.renderedLines, "\n"))
+	}
+}
+
+func TestTableArtInCodeIsNotReadByColumn(t *testing.T) {
+	// A code block drawing a table pairs with no markdown table: the
+	// document is aligned in source order.
+	md := "```\n a │ b\n───┼───\n c │ d\n```\n\nThen `span` here.\n"
+	cfg := config.Default()
+	cfg.Images.Enabled = false
+	a := NewApp(parser.ParseMarkdown(md), "f.md", "", cfg)
+	a.Update(tea.WindowSizeMsg{Width: 60, Height: 30})
+	a.ensureRenderedLines()
+	if got := spansOn(a)["span"]; got != "span" {
+		t.Fatalf("span highlighted on %q", got)
+	}
+	if loc := a.nodeRenderInfo[0]; a.codeNodes[0].kind != nodeCodeBlock || loc.lastLine-loc.firstLine != 2 {
+		t.Fatalf("code block placed at %+v", loc)
+	}
+}
