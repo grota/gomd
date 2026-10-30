@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/grota/gomd/internal/config"
 	"github.com/grota/gomd/internal/parser"
@@ -22,7 +23,8 @@ import (
 //
 // It reports how many nodes the source map cannot place, how many of those
 // the text search places instead, and how many nodes the two place on
-// different lines, with the files that miss the most. It checks nothing and
+// different lines, with the files that miss the most, and how many one-line
+// code spans the source map highlights on text other than their code. It checks nothing and
 // skips without GOMD_CORPUS: run it before and after a source map change and
 // compare.
 func TestCorpus(t *testing.T) {
@@ -35,7 +37,7 @@ func TestCorpus(t *testing.T) {
 		misses, rescued int
 	}
 	var results []result
-	var docs, nodes, misses, rescued, disagree int
+	var docs, nodes, misses, rescued, disagree, spans, wrong int
 	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.EqualFold(filepath.Ext(path), ".md") {
 			return nil
@@ -59,7 +61,14 @@ func TestCorpus(t *testing.T) {
 		}
 		placeNodesFromSource(a.srcMap, a.codeNodes, a.sectionLines, a.renderedLines, fromMap)
 		r := result{path: path}
-		for i := range a.codeNodes {
+		for i, n := range a.codeNodes {
+			// A code span on one line must be highlighted on its own code.
+			if loc := fromMap[i]; n.kind == nodeInlineCode && loc.firstLine >= 0 && loc.firstLine == loc.lastLine {
+				spans++
+				if ansi.Cut(ansi.Strip(a.renderedLines[loc.firstLine]), loc.spanCol, loc.spanColEnd) != n.content {
+					wrong++
+				}
+			}
 			switch {
 			case fromMap[i].firstLine < 0:
 				r.misses++
@@ -80,6 +89,7 @@ func TestCorpus(t *testing.T) {
 	sort.Slice(results, func(i, j int) bool { return results[i].misses > results[j].misses })
 	t.Logf("%d documents, %d nodes: the source map misses %d (the text search places %d of them); %d placed on different lines",
 		docs, nodes, misses, rescued, disagree)
+	t.Logf("of %d one-line code spans the source map placed, %d are not highlighted on their own code", spans, wrong)
 	for _, r := range results[:min(10, len(results))] {
 		if r.misses > 0 {
 			t.Log(fmt.Sprintf("%5d misses (%d placed by the text search)  %s", r.misses, r.rescued, r.path))
