@@ -613,10 +613,13 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 		} else {
 			// Fenced block: find the first non-empty body line as a search anchor.
 			needle := ""
-			for _, bodyLine := range strings.Split(n.content, "\n") {
+			bodyLeft := 0 // body lines from the anchor to the end
+			bodyLines := strings.Split(n.content, "\n")
+			for i, bodyLine := range bodyLines {
 				t := strings.TrimSpace(bodyLine)
 				if t != "" {
 					needle = t
+					bodyLeft = len(bodyLines) - i
 					break
 				}
 			}
@@ -652,6 +655,14 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 						continue
 					}
 					break
+				}
+				// The next code block is indented the same way, so the scan
+				// runs into it. A block shows at least one line per body line,
+				// so it ends no later than that count: this only shortens the
+				// range. (A wrapped long line loses the indent and already ends
+				// the scan early; the source map would place blocks exactly.)
+				if bodyLeft > 0 {
+					lastLine = min(lastLine, firstLine+bodyLeft-1)
 				}
 				// Trim trailing blank lines.
 				for lastLine > firstLine && strings.TrimSpace(stripped[lastLine]) == "" {
