@@ -9,7 +9,7 @@
 
 Browse a document by its outline, pick any code block, code span or link with a few keys, and copy it or open it. Select text with the mouse and copy what you see or the markdown behind it. Images, 700+ themes and vim keys included.
 
-<img width="1536" height="1022" alt="gomd: outline sidebar and rendered document" src="https://github.com/user-attachments/assets/0f0db041-0dc3-4d35-8ee1-d89701707aff" />
+<img width="1918" height="1009" alt="gomd: outline sidebar and rendered document" src="https://github.com/user-attachments/assets/3b75ed06-affa-44b7-873d-f5e38fdec3ee" />
 
 ## Highlights
 
@@ -27,10 +27,11 @@ Browse a document by its outline, pick any code block, code span or link with a 
 <summary><b>More screenshots</b>: jump mode and interactive mode</summary>
 
 <p align="center"><b>Jump mode</b></p>
-<img width="1536" height="1020" alt="gomd jump mode: labels on every selectable element" src="https://github.com/user-attachments/assets/ba477053-48d4-4380-b682-8f2bf39b72b2" />
+<img width="1918" height="1009" alt="gomd jump mode: labels on every selectable element" src="https://github.com/user-attachments/assets/d46f4d82-a60f-42cd-afdd-914c0892ed7d" />
 
 <p align="center"><b>Interactive mode</b></p>
-<img width="1536" height="1020" alt="gomd interactive mode: a selected code block" src="https://github.com/user-attachments/assets/d0c03603-662a-4092-ad15-e03c8c1f6aaa" />
+<img width="1918" height="1009" alt="gomd interactive mode: a selected block" src="https://github.com/user-attachments/assets/e103eaa3-f4ca-4d8a-a0e9-285c78f022bc" />
+
 
 </details>
 
