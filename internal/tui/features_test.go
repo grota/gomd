@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"image"
 	"image/png"
 	"os"
@@ -506,5 +507,36 @@ func TestCopyGoesThroughTmux(t *testing.T) {
 	}
 	if copied != "hi" || a.statusMsg != "Copied text via tmux" {
 		t.Errorf("copied %q with status %q", copied, a.statusMsg)
+	}
+}
+
+func TestPlaceImages_NewWidthFreesTheOldSize(t *testing.T) {
+	dir := t.TempDir()
+	f, err := os.Create(filepath.Join(dir, "a.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewRGBA(image.Rect(0, 0, 400, 100))); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	cache := imageCache{}
+	lines := []string{"  pic 📷 /a.png"}
+	place := func(cols int) []string {
+		_, uploads := placeImages(lines, "![pic](a.png)", filepath.Join(dir, "d.md"), cols, true, cache)
+		return uploads
+	}
+	place(40)
+	old := cache[filepath.Join(dir, "a.png")]
+	uploads := place(20)
+	k := cache[filepath.Join(dir, "a.png")]
+	if len(cache) != 1 || len(uploads) != 2 || uploads[0] != old.deleteSeq() || k.id == old.id || k.cols != 20 {
+		t.Fatalf("resize: cache %d entries, %d uploads, cols %d", len(cache), len(uploads), k.cols)
+	}
+	if !strings.Contains(uploads[1], fmt.Sprintf("i=%d,c=20,", k.id)) {
+		t.Errorf("new upload does not carry the new id and size: %.80q", uploads[1])
+	}
+	if again := place(20); len(again) != 0 {
+		t.Errorf("same width uploaded again: %d", len(again))
 	}
 }

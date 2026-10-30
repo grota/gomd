@@ -95,7 +95,10 @@ func wrapTmuxPassthrough(seq string) string {
 type kittyImage struct {
 	id         uint32 // 24-bit, encoded in the placeholders' foreground colour
 	cols, rows int
+	maxCols    int    // the width limit cols was computed for
 	upload     string // escape sequences that transmit the image; send once
+	imgW, imgH int    // pixel size
+	b64        string // the image as base64 PNG, kept to upload other sizes
 }
 
 // loadKittyImage decodes path and prepares its upload, sized to at most
@@ -115,21 +118,27 @@ func loadKittyImage(path string, maxCols int) (kittyImage, error) {
 		return kittyImage{}, fmt.Errorf("image has zero dimensions")
 	}
 
-	// shortcut: assumes ~8x16 px cells; query the cell size (CSI 16 t) if
-	// images look stretched on unusual fonts.
-	const cellW, cellH = 8, 16
-	cols := max(min(int(math.Ceil(float64(imgW)/cellW)), maxCols), 1)
-	rows := max(int(math.Ceil(float64(imgH)/cellH*float64(cols)*cellW/float64(imgW))), 1)
-
 	var buf strings.Builder
 	if err := png.Encode(&buf, img); err != nil {
 		return kittyImage{}, fmt.Errorf("encode png: %w", err)
 	}
 	b64 := base64.StdEncoding.EncodeToString([]byte(buf.String()))
+	return kittyImage{imgW: imgW, imgH: imgH, b64: b64}.sized(maxCols), nil
+}
+
+// sized returns the image as a new upload with a fresh id, at most maxCols
+// cells wide, reusing the encoded data.
+func (k kittyImage) sized(maxCols int) kittyImage {
+	// shortcut: assumes ~8x16 px cells; query the cell size (CSI 16 t) if
+	// images look stretched on unusual fonts.
+	const cellW, cellH = 8, 16
+	cols := max(min(int(math.Ceil(float64(k.imgW)/cellW)), maxCols), 1)
+	rows := max(int(math.Ceil(float64(k.imgH)/cellH*float64(cols)*cellW/float64(k.imgW))), 1)
 
 	// Random ids keep two gomd instances (e.g. tmux panes) from overwriting
 	// each other's images in the shared outer terminal.
 	id := rand.Uint32N(1<<24-1) + 1
+	b64 := k.b64
 	const chunkSize = 4096
 	var sb strings.Builder
 	for i := 0; i < len(b64); i += chunkSize {
@@ -149,7 +158,8 @@ func loadKittyImage(path string, maxCols int) (kittyImage, error) {
 		}
 		sb.WriteString(seq)
 	}
-	return kittyImage{id: id, cols: cols, rows: rows, upload: sb.String()}, nil
+	k.id, k.cols, k.rows, k.maxCols, k.upload = id, cols, rows, maxCols, sb.String()
+	return k
 }
 
 // placeholderRows returns the text rows that display the image.
@@ -191,7 +201,8 @@ func (k kittyImage) deleteSeq() string {
 // ansiStripRe matches ANSI escape sequences for stripping when identifying image lines.
 var ansiStripRe = regexp.MustCompile(`\x1b(?:\[[0-9;]*[a-zA-Z]|\].*?\x07|_.*?\x1b\\)`)
 
-// imageCache maps a resolved path and width to an image already uploaded.
+// imageCache maps a resolved path to its image as last uploaded. Only one
+// size of each image is live in the terminal at a time.
 type imageCache map[string]kittyImage
 
 // placeImages inserts placeholder rows after glamour's image captions
@@ -229,15 +240,23 @@ func placeImages(lines []string, mdContent, mdPath string, maxCols int, keepCapt
 		if resolved == "" {
 			continue
 		}
-		key := fmt.Sprintf("%s@%d", resolved, maxCols)
-		k, ok := cache[key]
-		if !ok {
+		k, ok := cache[resolved]
+		switch {
+		case !ok:
 			var err error
 			if k, err = loadKittyImage(resolved, maxCols); err != nil {
 				continue
 			}
-			cache[key] = k
+		case k.maxCols != maxCols:
+			// The pane width changed: free the old size in the terminal and
+			// upload the kept data at the new one, without decoding again.
+			uploads = append(uploads, k.deleteSeq())
+			k = k.sized(maxCols)
+		}
+		if k.upload != "" {
 			uploads = append(uploads, k.upload)
+			k.upload = "" // sent; the cache keeps only what later sizes need
+			cache[resolved] = k
 		}
 		entries[cp] = &entry{img: k, captions: []string{imageCaption(im.Alt, im.Src)}}
 		order = append(order, cp)
