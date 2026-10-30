@@ -2,6 +2,7 @@ package tui
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -162,6 +163,22 @@ func (m *sourceMap) collect() {
 			}
 		case *ast.Link, *ast.Image:
 			linkU0[n] = len(m.units)
+		case *ast.ListItem:
+			// Glamour numbers an ordered list itself (its start plus the
+			// item's position), whatever numbers the source has. That number
+			// and its "." stand for the item's marker: without them, an
+			// unmatched digit would break the alignment.
+			if l, ok := n.Parent().(*ast.List); ok && l.IsOrdered() {
+				num := l.Start
+				for p := n.PreviousSibling(); p != nil; p = p.PreviousSibling() {
+					num++
+				}
+				if marker, ok := m.itemMarker(n); ok {
+					for _, r := range strconv.Itoa(num) + "." {
+						m.units = append(m.units, srcUnit{r, marker, marker, cur})
+					}
+				}
+			}
 		case *ast.FencedCodeBlock, *ast.CodeBlock, *ast.HTMLBlock:
 			lines := n.Lines()
 			u0 := len(m.units)
@@ -174,6 +191,19 @@ func (m *sourceMap) collect() {
 		}
 		return ast.WalkContinue, nil
 	})
+}
+
+// itemMarker returns where the marker of list item n ("2.") starts: the
+// first non-space byte on the line of its first content. ok is false for an
+// item with no content.
+func (m *sourceMap) itemMarker(n ast.Node) (int, bool) {
+	for c := n.FirstChild(); c != nil; c = c.FirstChild() {
+		if c.Type() == ast.TypeBlock && c.Lines().Len() > 0 {
+			ls := lineStart(m.src, c.Lines().At(0).Start)
+			return ls + len(m.src[ls:]) - len(strings.TrimLeft(m.src[ls:], " \t")), true
+		}
+	}
+	return 0, false
 }
 
 // opensElem reports whether n is an element a selection must not cut.

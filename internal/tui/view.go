@@ -471,8 +471,12 @@ func placeNodesFromSource(m *sourceMap, nodes []codeNode, lines, rendered []stri
 			start = off[n.startLine] + n.colStart + 1
 			end = start + len(n.display)
 		case len(line) > n.colStart+2 && strings.EqualFold(line[n.colStart:n.colStart+2], "<a") &&
-			(line[n.colStart+2] == ' ' || line[n.colStart+2] == '\t'):
-			continue
+			(line[n.colStart+2] == ' ' || line[n.colStart+2] == '\t'): // the text between the tags
+			m := aTagRe.FindStringSubmatchIndex(line[n.colStart:n.colEnd])
+			if m == nil {
+				continue
+			}
+			start, end = off[n.startLine]+n.colStart+m[4], off[n.startLine]+n.colStart+m[5]
 		default: // <img>, autolinks and bare URLs
 			start, end = off[n.startLine]+n.colStart, off[n.startLine]+n.colEnd
 		}

@@ -104,13 +104,29 @@ func preProcess(md string) (string, rewrites, rewrites) {
 
 	// Replace <a href="url">text</a> with [text](url)
 	inCode = codeChecker(md)
+	before := md
 	md, anchors := replaceAll(aTagRe, md, func(m []int) (string, bool) {
 		if inCode(m[0]) {
 			return "", false
 		}
 		return "[" + md[m[4]:m[5]] + "](" + md[m[2]:m[3]] + ")", true
 	})
-	return md, imgs, anchors
+	return md, imgs, splitAnchorText(before, anchors)
+}
+
+// splitAnchorText splits each rewrite of an <a> tag in two around the link
+// text, which "[text](url)" copies unchanged, so the text maps back to its
+// own bytes and only the markup around it maps to the tag.
+func splitAnchorText(src string, rs rewrites) rewrites {
+	var out rewrites
+	for _, r := range rs {
+		m := aTagRe.FindStringSubmatchIndex(src[r.in0:r.in1])
+		t0, t1 := r.in0+m[4], r.in0+m[5]
+		out = append(out,
+			rewrite{r.in0, t0, r.out0, r.out0 + 1},             // the opening tag became "["
+			rewrite{t1, r.in1, r.out0 + 1 + (t1 - t0), r.out1}) // "</a>" became "](url)"
+	}
+	return out
 }
 
 // codeChecker returns a function reporting whether byte offset off of md
