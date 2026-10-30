@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/text"
 )
 
@@ -782,4 +783,267 @@ func (a *App) filteredNodes() []codeNode {
 		result[i] = a.codeNodes[idx]
 	}
 	return result
+}
+
+// extractNodes finds the code blocks, code spans and links of lines as
+// glamour shows them: it parses them as glamour does, after PreProcessMarkdown,
+// and maps every position back to lines. Of an HTML block, which goldmark does
+// not parse, it takes the <a href> and <img src> tags.
+func extractNodes(lines []string) []codeNode {
+	raw := strings.Join(lines, "\n")
+	pre, imgs, anchors := preProcess(raw)
+	b := []byte(pre)
+	back := func(off int, end bool) int { return imgs.back(anchors.back(off, end), end) }
+	off := make([]int, len(lines)) // byte offset of each line in raw
+	for i := 1; i < len(lines); i++ {
+		off[i] = off[i-1] + len(lines[i-1]) + 1
+	}
+	lineOf := func(rawOff int) int { return sort.SearchInts(off, rawOff+1) - 1 }
+	var nodes []codeNode
+	// add adds inline node n over raw bytes [start, end); colEnd is past the
+	// end of its first line when it spans lines.
+	add := func(n codeNode, start, end int) {
+		n.startLine, n.endLine = lineOf(start), lineOf(max(end-1, start))
+		n.colStart, n.colEnd = start-off[n.startLine], end-off[n.startLine]
+		n.inline = true
+		nodes = append(nodes, n)
+	}
+	addPre := func(n codeNode, start, end int) { add(n, back(start, false), back(end, true)) }
+	doc := goldmark.New(goldmark.WithExtensions(extension.GFM, extension.DefinitionList)).Parser().Parse(text.NewReader(b))
+	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		switch x := n.(type) {
+		case *ast.FencedCodeBlock, *ast.CodeBlock:
+			segs := n.Lines()
+			var body strings.Builder
+			for i := 0; i < segs.Len(); i++ {
+				seg := segs.At(i)
+				body.WriteString(strings.Repeat(" ", seg.Padding)) // a tab partly taken by the indentation
+				body.Write(seg.Value(b))
+			}
+			// A block with no text has nothing to show or copy.
+			content := strings.TrimRight(body.String(), "\n")
+			if strings.TrimSpace(content) == "" {
+				return ast.WalkSkipChildren, nil
+			}
+			c := codeNode{kind: nodeCodeBlock, content: content}
+			first := lineOf(back(segs.At(0).Start, false))
+			last := lineOf(back(segs.At(segs.Len()-1).Start, false))
+			if f, ok := x.(*ast.FencedCodeBlock); ok {
+				c.lang = string(f.Language(b))
+				first, last = first-1, min(last+1, len(lines)-1) // the fence lines
+			} else {
+				c.indented = true
+			}
+			c.startLine, c.endLine = first, last
+			nodes = append(nodes, c)
+			return ast.WalkSkipChildren, nil
+		case *ast.HTMLBlock:
+			segs := n.Lines()
+			if segs.Len() > 0 {
+				htmlTagNodes(raw, back(segs.At(0).Start, false), back(segs.At(segs.Len()-1).Stop, true), add)
+			}
+			return ast.WalkSkipChildren, nil
+		case *ast.CodeSpan:
+			if x.Pos() < 0 {
+				return ast.WalkSkipChildren, nil
+			}
+			var content strings.Builder
+			for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+				if t, ok := c.(*ast.Text); ok {
+					content.Write(t.Segment.Value(b))
+				}
+			}
+			addPre(codeNode{kind: nodeInlineCode, content: strings.ReplaceAll(content.String(), "\n", " "), heading: inHeading(n)},
+				x.Pos(), codeSpanEnd(pre, x))
+			return ast.WalkSkipChildren, nil
+		case *ast.Link:
+			if p := x.Pos(); p >= 0 {
+				textEnd, end := linkEnd(pre, lastStop(pre, n, p+1))
+				addPre(codeNode{kind: nodeLink, lang: "link", content: string(x.Destination), display: pre[p+1 : textEnd]}, p, end)
+			}
+		case *ast.Image:
+			if p := x.Pos(); p >= 0 {
+				textEnd, end := linkEnd(pre, lastStop(pre, n, p+2))
+				addPre(codeNode{kind: nodeLink, lang: "link", content: string(x.Destination),
+					display: imageCaption(pre[p+2:textEnd], string(x.Destination))}, p, end)
+			}
+			return ast.WalkSkipChildren, nil
+		case *ast.AutoLink:
+			p, label := x.Pos(), string(x.Label(b))
+			if p < 0 {
+				break
+			}
+			if !strings.HasPrefix(pre[p:], "<") && !strings.HasPrefix(pre[p:], label) {
+				p += max(strings.Index(pre[p:], label), 0) // linkify can point before the URL
+			}
+			end := p + len(label)
+			if pre[p] == '<' {
+				end += 2
+			}
+			addPre(codeNode{kind: nodeLink, lang: "link", content: string(x.URL(b)), display: label}, p, end)
+		}
+		return ast.WalkContinue, nil
+	})
+	sort.SliceStable(nodes, func(i, j int) bool {
+		if nodes[i].startLine != nodes[j].startLine {
+			return nodes[i].startLine < nodes[j].startLine
+		}
+		return nodes[i].colStart < nodes[j].colStart
+	})
+	return nodes
+}
+
+// htmlTagNodes passes to add the link nodes of the <a href> and <img src>
+// tags in raw[start:end].
+func htmlTagNodes(raw string, start, end int, add func(n codeNode, start, end int)) {
+	for _, m := range aTagRe.FindAllStringSubmatchIndex(raw[start:end], -1) {
+		add(codeNode{kind: nodeLink, lang: "link", content: raw[start+m[2] : start+m[3]], display: raw[start+m[4] : start+m[5]]},
+			start+m[0], start+m[1])
+	}
+	for _, m := range imgTagRe.FindAllStringIndex(raw[start:end], -1) {
+		tag := raw[start+m[0] : start+m[1]]
+		if src := extractHTMLAttr(tag, "src"); src != "" {
+			add(codeNode{kind: nodeLink, lang: "link", content: src, display: imageCaption(extractHTMLAttr(tag, "alt"), src)},
+				start+m[0], start+m[1])
+		}
+	}
+}
+
+// inHeading reports whether n is inside a heading.
+func inHeading(n ast.Node) bool {
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		if _, ok := p.(*ast.Heading); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// goldmark records where a link, an image or a code span starts but not
+// where it ends: the functions below find the end in the source s.
+
+// codeSpanEnd returns where the closing backticks of code span n end: after
+// its code, the next run of as many backticks as open it.
+func codeSpanEnd(s string, n *ast.CodeSpan) int {
+	p := n.Pos()
+	ticks := len(s[p:]) - len(strings.TrimLeft(s[p:], "`"))
+	end := p + ticks
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		if t, ok := c.(*ast.Text); ok {
+			end = t.Segment.Stop
+		}
+	}
+	for end < len(s) {
+		k := strings.Index(s[end:], s[p:p+ticks])
+		if k < 0 {
+			break
+		}
+		end += k
+		run := len(s[end:]) - len(strings.TrimLeft(s[end:], "`"))
+		if run == ticks {
+			return end + ticks
+		}
+		end += run
+	}
+	return end
+}
+
+// lastStop returns where the last element inside link or image n ends, or
+// from when it has none: the link's text ends at the next "]".
+func lastStop(s string, n ast.Node, from int) int {
+	stop := from
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		switch c := c.(type) {
+		case *ast.Text:
+			stop = max(stop, c.Segment.Stop)
+		case *ast.RawHTML:
+			if c.Segments.Len() > 0 {
+				stop = max(stop, c.Segments.At(c.Segments.Len()-1).Stop)
+			}
+		case *ast.CodeSpan:
+			if c.Pos() >= 0 {
+				stop = max(stop, codeSpanEnd(s, c))
+			}
+		case *ast.Image:
+			if c.Pos() >= 0 {
+				_, end := linkEnd(s, lastStop(s, c, c.Pos()+2))
+				stop = max(stop, end)
+			}
+		case *ast.AutoLink:
+			if c.Pos() >= 0 {
+				stop = max(stop, c.Pos()+len(c.Label([]byte(s))))
+			}
+		default:
+			stop = max(stop, lastStop(s, c, stop))
+		}
+	}
+	return stop
+}
+
+// linkEnd returns, for the link whose text ends at the first "]" from i in
+// s, where its text ends and where its markup ends: after "(destination
+// "title")", "[label]" or the "]" alone.
+func linkEnd(s string, i int) (textEnd, end int) {
+	for i < len(s) && s[i] != ']' {
+		if s[i] == '\\' {
+			i++
+		}
+		i++
+	}
+	textEnd, end = min(i, len(s)), min(i+1, len(s))
+	if end < len(s) && s[end] == '[' {
+		if k := strings.IndexByte(s[end:], ']'); k >= 0 {
+			return textEnd, end + k + 1
+		}
+		return textEnd, end
+	}
+	if end >= len(s) || s[end] != '(' {
+		return textEnd, end
+	}
+	j := end + 1
+	skipSpace := func() {
+		for j < len(s) && strings.IndexByte(" \t\r\n", s[j]) >= 0 {
+			j++
+		}
+	}
+	skipSpace()
+	if j < len(s) && s[j] == '<' { // <destination>
+		if k := strings.IndexByte(s[j:], '>'); k >= 0 {
+			j += k + 1
+		}
+	} else { // a destination with balanced parentheses
+		for depth := 0; j < len(s) && strings.IndexByte(" \t\r\n", s[j]) < 0; j++ {
+			if s[j] == '\\' {
+				j++
+			} else if s[j] == '(' {
+				depth++
+			} else if s[j] == ')' {
+				if depth == 0 {
+					break
+				}
+				depth--
+			}
+		}
+	}
+	skipSpace()
+	if j < len(s) && strings.IndexByte(`"'(`, s[j]) >= 0 { // a title
+		closer := s[j]
+		if closer == '(' {
+			closer = ')'
+		}
+		for j++; j < len(s) && s[j] != closer; j++ {
+			if s[j] == '\\' {
+				j++
+			}
+		}
+		j++
+		skipSpace()
+	}
+	if j < len(s) && s[j] == ')' {
+		return textEnd, j + 1
+	}
+	return textEnd, end
 }

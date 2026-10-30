@@ -929,3 +929,48 @@ func TestNoNodesOnLinkDefinitions(t *testing.T) {
 		t.Fatalf("nodes %q, want %s", got, want)
 	}
 }
+
+func TestExtractNodes(t *testing.T) {
+	for _, tc := range []struct{ name, md, want string }{
+		{"parentheses in a URL", "[a](https://x.org/A_(b)) end",
+			`link 0:0-0:24 "https://x.org/A_(b)"`},
+		{"reference link and image", "[a][r] ![i][r]\n\n[r]: https://x.org",
+			`link 0:0-0:6 "https://x.org"|link 0:7-0:14 "https://x.org"`},
+		{"link over two lines", "a [b\nc](https://x.org) d",
+			`link 0:2-1:22 "https://x.org"`},
+		{"nested brackets", "[[a](https://x.org)]",
+			`link 0:1-0:19 "https://x.org"`},
+		{"space before the destination", "[a]( https://x.org)",
+			`link 0:0-0:19 "https://x.org"`},
+		{"code span over two lines", "a `b\nc` d",
+			`span 0:2-1:7 "b c"`},
+		{"escaped pipe in a table cell", "| a |\n|---|\n| `x\\|y` |",
+			`span 2:2-2:8 "x|y"`},
+		{"no links in code", "`[a](b)` and `https://x.org`",
+			`span 0:0-0:8 "[a](b)"|span 0:13-0:28 "https://x.org"`},
+		{"code block without trailing blank lines", "```sh\nx\n\n```",
+			`block 0-3 sh "x"`},
+		{"tags only in an HTML block", "<div>\n<a href=\"https://x.org\">a</a> `c` [m](https://y.org)\n</div>",
+			`link 1:0-1:29 "https://x.org"`},
+		{"image in a link", "[![i](a.png)](https://x.org)",
+			`link 0:0-0:28 "https://x.org"|link 0:1-0:12 "a.png"`},
+		{"bare URL and email", "see https://x.org/a. or a@b.org",
+			`link 0:4-0:19 "https://x.org/a"|link 0:24-0:31 "a@b.org"`},
+		{"HTML anchor in a paragraph", "x <a href=\"https://x.org\">t</a> y",
+			`link 0:2-0:31 "https://x.org"`},
+	} {
+		var got []string
+		for _, n := range extractNodes(strings.Split(tc.md, "\n")) {
+			switch n.kind {
+			case nodeCodeBlock:
+				got = append(got, fmt.Sprintf("block %d-%d %s %q", n.startLine, n.endLine, n.lang, n.content))
+			default:
+				kind := map[nodeKind]string{nodeInlineCode: "span", nodeLink: "link"}[n.kind]
+				got = append(got, fmt.Sprintf("%s %d:%d-%d:%d %q", kind, n.startLine, n.colStart, n.endLine, n.colEnd, n.content))
+			}
+		}
+		if g := strings.Join(got, "|"); g != tc.want {
+			t.Errorf("%s:\n got %s\nwant %s", tc.name, g, tc.want)
+		}
+	}
+}
