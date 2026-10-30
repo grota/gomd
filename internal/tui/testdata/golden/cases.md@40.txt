@@ -1,0 +1,346 @@
+######## section -1
+== rendered
+
+   Cases for  gomd -r  and the TUI
+
+  Prose mentions x before the span  x
+  , and the word code before  code .
+
+  A long paragraph that keeps going so
+  that the inline span lands near the
+  wrap point  wrapped span here  and
+  continues after it with more words.
+
+  A link whose text wraps across the
+  edge of the pane this link text is
+  long enough to wrap
+  https://example.com/wrap at narrow
+  widths.
+
+  ## Wrapped code
+
+    short line
+    a very long line in a code block
+  that is much wider than the content
+  pane so glamour has to wrap it onto
+  more lines
+    end
+
+    the block after the wrapped one
+
+  ## Blank lines and empty blocks
+
+    func a() {
+
+        return
+    }
+
+
+  After the empty block.
+
+  ## Nested blocks
+
+  • A list item with code:
+    echo in-list
+
+  • Second item with  inline  code.
+
+  │ A quote with code:
+  │
+  │   echo in-quote
+
+  ## Table spans
+
+   Key              │ Action
+  ──────────────────┼─────────────────
+    j               │ down  1
+    k               │ up  1
+
+  ## Indented code
+
+    indented line one
+    indented line two
+
+  The end.
+== nodes
+inline src 0-0 col 12-21  shown 1-1 col 14-21  "gomd -r"
+inline src 2-2 col 33-36  shown 3-3 col 36-37  "x"
+inline src 2-2 col 63-69  shown 4-4 col 30-34  "code"
+inline src 4-4 col 84-103  shown 8-8 col 14-31  "wrapped span here"
+link   src 6-6 col 52-117  shown -1--1 col -1--1  "this link text is long enough to wrap -> https://example.com/wrap"
+block  src 10-14 col 0-0  shown 19-20 col -1--1  "short line\na very long line in a code block that is much wider than the content pane so glamour has to wrap it onto more lines\nend"
+block  src 16-18 col 0-0  shown 26-26 col -1--1  "the block after the wrapped one"
+block  src 22-27 col 0-0  shown 30-33 col -1--1  "func a() {\n\n\treturn\n}"
+block  src 38-40 col 0-0  shown 41-41 col -1--1  "echo in-list"
+inline src 42-42 col 19-27  shown 43-43 col 22-28  "inline"
+inline src 54-54 col 2-5  shown 53-53 col 4-5  "j"
+inline src 54-54 col 13-16  shown 53-53 col 28-29  "1"
+inline src 55-55 col 2-5  shown 54-54 col 4-5  "k"
+inline src 55-55 col 11-14  shown 54-54 col 26-27  "1"
+== copy per line
+1: "Cases for  gomd -r  and the TUI" | "# Cases for `gomd -r` and the TUI"
+3: "Prose mentions x before the span  x" | "Prose mentions x before the span `x`"
+4: ", and the word code before  code ." | ", and the word code before `code`."
+6: "A long paragraph that keeps going so" | "A long paragraph that keeps going so"
+7: "that the inline span lands near the" | "that the inline span lands near the"
+8: "wrap point  wrapped span here  and" | "wrap point `wrapped span here` and"
+9: "continues after it with more words." | "continues after it with more words."
+11: "A link whose text wraps across the" | "A link whose text wraps across the"
+12: "edge of the pane this link text is\nlong enough to wrap\nhttps://example.com/wrap" | "edge of the pane [this link text is long enough to wrap](https://example.com/wrap)"
+13: "this link text is\nlong enough to wrap\nhttps://example.com/wrap" | "[this link text is long enough to wrap](https://example.com/wrap)"
+14: "this link text is\nlong enough to wrap\nhttps://example.com/wrap at narrow" | "[this link text is long enough to wrap](https://example.com/wrap) at narrow"
+15: "widths." | "widths."
+17: "## Wrapped code" | "## Wrapped code"
+19: "short line" | "short line"
+20: "a very long line in a code block" | "a very long line in a code block"
+21: "that is much wider than the content" | "that is much wider than the content"
+22: "pane so glamour has to wrap it onto" | "pane so glamour has to wrap it onto"
+23: "more lines" | "more lines"
+24: "end" | "end"
+26: "the block after the wrapped one" | "```text\nthe block after the wrapped one\n```"
+28: "## Blank lines and empty blocks" | "## Blank lines and empty blocks"
+30: "func a() {" | "func a() {"
+32: "return" | "\treturn"
+33: "}" | "}"
+36: "After the empty block." | "After the empty block."
+38: "## Nested blocks" | "## Nested blocks"
+40: "• A list item with code:" | "- A list item with code:"
+41: "echo in-list" | "  ```sh\n  echo in-list\n  ```"
+43: "• Second item with  inline  code." | "- Second item with `inline` code."
+45: "│ A quote with code:" | "> A quote with code:"
+46: "│" | ""
+47: "│   echo in-quote" | "> ```sh\n> echo in-quote"
+49: "## Table spans" | "## Table spans"
+51: " Key              │ Action\n──────────────────┼─────────────────\n  j               │ down  1\n  k               │ up  1" | "| Key | Action |\n| --- | ------ |\n| `j` | down `1` |\n| `k` | up `1` |"
+52: "──────────────────┼─────────────────" | ""
+53: "Key              │ Action\n──────────────────┼─────────────────\n  j               │ down  1\n  k               │ up  1" | "| Key | Action |\n| --- | ------ |\n| `j` | down `1` |\n| `k` | up `1` |"
+54: "Key              │ Action\n──────────────────┼─────────────────\n  j               │ down  1\n  k               │ up  1" | "| Key | Action |\n| --- | ------ |\n| `j` | down `1` |\n| `k` | up `1` |"
+56: "## Indented code" | "## Indented code"
+58: "indented line one" | "    indented line one"
+59: "indented line two" | "    indented line two"
+61: "The end." | "The end."
+######## section 0
+== rendered
+
+   Cases for  gomd -r  and the TUI
+
+  Prose mentions x before the span  x
+  , and the word code before  code .
+
+  A long paragraph that keeps going so
+  that the inline span lands near the
+  wrap point  wrapped span here  and
+  continues after it with more words.
+
+  A link whose text wraps across the
+  edge of the pane this link text is
+  long enough to wrap
+  https://example.com/wrap at narrow
+  widths.
+
+  ## Wrapped code
+
+    short line
+    a very long line in a code block
+  that is much wider than the content
+  pane so glamour has to wrap it onto
+  more lines
+    end
+
+    the block after the wrapped one
+
+  ## Blank lines and empty blocks
+
+    func a() {
+
+        return
+    }
+
+
+  After the empty block.
+
+  ## Nested blocks
+
+  • A list item with code:
+    echo in-list
+
+  • Second item with  inline  code.
+
+  │ A quote with code:
+  │
+  │   echo in-quote
+
+  ## Table spans
+
+   Key              │ Action
+  ──────────────────┼─────────────────
+    j               │ down  1
+    k               │ up  1
+
+  ## Indented code
+
+    indented line one
+    indented line two
+
+  The end.
+== nodes
+inline src 0-0 col 12-21  shown 1-1 col 14-21  "gomd -r"
+inline src 2-2 col 33-36  shown 3-3 col 36-37  "x"
+inline src 2-2 col 63-69  shown 4-4 col 30-34  "code"
+inline src 4-4 col 84-103  shown 8-8 col 14-31  "wrapped span here"
+link   src 6-6 col 52-117  shown -1--1 col -1--1  "this link text is long enough to wrap -> https://example.com/wrap"
+block  src 10-14 col 0-0  shown 19-20 col -1--1  "short line\na very long line in a code block that is much wider than the content pane so glamour has to wrap it onto more lines\nend"
+block  src 16-18 col 0-0  shown 26-26 col -1--1  "the block after the wrapped one"
+block  src 22-27 col 0-0  shown 30-33 col -1--1  "func a() {\n\n\treturn\n}"
+block  src 38-40 col 0-0  shown 41-41 col -1--1  "echo in-list"
+inline src 42-42 col 19-27  shown 43-43 col 22-28  "inline"
+inline src 54-54 col 2-5  shown 53-53 col 4-5  "j"
+inline src 54-54 col 13-16  shown 53-53 col 28-29  "1"
+inline src 55-55 col 2-5  shown 54-54 col 4-5  "k"
+inline src 55-55 col 11-14  shown 54-54 col 26-27  "1"
+== copy per line
+1: "Cases for  gomd -r  and the TUI" | "# Cases for `gomd -r` and the TUI"
+3: "Prose mentions x before the span  x" | "Prose mentions x before the span `x`"
+4: ", and the word code before  code ." | ", and the word code before `code`."
+6: "A long paragraph that keeps going so" | "A long paragraph that keeps going so"
+7: "that the inline span lands near the" | "that the inline span lands near the"
+8: "wrap point  wrapped span here  and" | "wrap point `wrapped span here` and"
+9: "continues after it with more words." | "continues after it with more words."
+11: "A link whose text wraps across the" | "A link whose text wraps across the"
+12: "edge of the pane this link text is\nlong enough to wrap\nhttps://example.com/wrap" | "edge of the pane [this link text is long enough to wrap](https://example.com/wrap)"
+13: "this link text is\nlong enough to wrap\nhttps://example.com/wrap" | "[this link text is long enough to wrap](https://example.com/wrap)"
+14: "this link text is\nlong enough to wrap\nhttps://example.com/wrap at narrow" | "[this link text is long enough to wrap](https://example.com/wrap) at narrow"
+15: "widths." | "widths."
+17: "## Wrapped code" | "## Wrapped code"
+19: "short line" | "short line"
+20: "a very long line in a code block" | "a very long line in a code block"
+21: "that is much wider than the content" | "that is much wider than the content"
+22: "pane so glamour has to wrap it onto" | "pane so glamour has to wrap it onto"
+23: "more lines" | "more lines"
+24: "end" | "end"
+26: "the block after the wrapped one" | "```text\nthe block after the wrapped one\n```"
+28: "## Blank lines and empty blocks" | "## Blank lines and empty blocks"
+30: "func a() {" | "func a() {"
+32: "return" | "\treturn"
+33: "}" | "}"
+36: "After the empty block." | "After the empty block."
+38: "## Nested blocks" | "## Nested blocks"
+40: "• A list item with code:" | "- A list item with code:"
+41: "echo in-list" | "  ```sh\n  echo in-list\n  ```"
+43: "• Second item with  inline  code." | "- Second item with `inline` code."
+45: "│ A quote with code:" | "> A quote with code:"
+46: "│" | ""
+47: "│   echo in-quote" | "> ```sh\n> echo in-quote"
+49: "## Table spans" | "## Table spans"
+51: " Key              │ Action\n──────────────────┼─────────────────\n  j               │ down  1\n  k               │ up  1" | "| Key | Action |\n| --- | ------ |\n| `j` | down `1` |\n| `k` | up `1` |"
+52: "──────────────────┼─────────────────" | ""
+53: "Key              │ Action\n──────────────────┼─────────────────\n  j               │ down  1\n  k               │ up  1" | "| Key | Action |\n| --- | ------ |\n| `j` | down `1` |\n| `k` | up `1` |"
+54: "Key              │ Action\n──────────────────┼─────────────────\n  j               │ down  1\n  k               │ up  1" | "| Key | Action |\n| --- | ------ |\n| `j` | down `1` |\n| `k` | up `1` |"
+56: "## Indented code" | "## Indented code"
+58: "indented line one" | "    indented line one"
+59: "indented line two" | "    indented line two"
+61: "The end." | "The end."
+######## section 1
+== rendered
+
+  ## Wrapped code
+
+    short line
+    a very long line in a code block
+  that is much wider than the content
+  pane so glamour has to wrap it onto
+  more lines
+    end
+
+    the block after the wrapped one
+== nodes
+block  src 2-6 col 0-0  shown 3-4 col -1--1  "short line\na very long line in a code block that is much wider than the content pane so glamour has to wrap it onto more lines\nend"
+block  src 8-10 col 0-0  shown 10-10 col -1--1  "the block after the wrapped one"
+== copy per line
+1: "## Wrapped code" | "## Wrapped code"
+3: "short line" | "short line"
+4: "a very long line in a code block" | "a very long line in a code block"
+5: "that is much wider than the content" | "that is much wider than the content"
+6: "pane so glamour has to wrap it onto" | "pane so glamour has to wrap it onto"
+7: "more lines" | "more lines"
+8: "end" | "end"
+10: "the block after the wrapped one" | "```text\nthe block after the wrapped one\n```"
+######## section 2
+== rendered
+
+  ## Blank lines and empty blocks
+
+    func a() {
+
+        return
+    }
+
+
+  After the empty block.
+== nodes
+block  src 2-7 col 0-0  shown 3-6 col -1--1  "func a() {\n\n\treturn\n}"
+== copy per line
+1: "## Blank lines and empty blocks" | "## Blank lines and empty blocks"
+3: "func a() {" | "func a() {"
+5: "return" | "\treturn"
+6: "}" | "}"
+9: "After the empty block." | "After the empty block."
+######## section 3
+== rendered
+
+  ## Nested blocks
+
+  • A list item with code:
+    echo in-list
+
+  • Second item with  inline  code.
+
+  │ A quote with code:
+  │
+  │   echo in-quote
+== nodes
+block  src 4-6 col 0-0  shown 4-4 col -1--1  "echo in-list"
+inline src 8-8 col 19-27  shown 6-6 col 22-28  "inline"
+== copy per line
+1: "## Nested blocks" | "## Nested blocks"
+3: "• A list item with code:" | "- A list item with code:"
+4: "echo in-list" | "  ```sh\n  echo in-list\n  ```"
+6: "• Second item with  inline  code." | "- Second item with `inline` code."
+8: "│ A quote with code:" | "> A quote with code:"
+9: "│" | ""
+10: "│   echo in-quote" | "> ```sh\n> echo in-quote"
+######## section 4
+== rendered
+
+  ## Table spans
+
+   Key              │ Action
+  ──────────────────┼─────────────────
+    j               │ down  1
+    k               │ up  1
+== nodes
+inline src 4-4 col 2-5  shown 5-5 col 4-5  "j"
+inline src 4-4 col 13-16  shown 5-5 col 28-29  "1"
+inline src 5-5 col 2-5  shown 6-6 col 4-5  "k"
+inline src 5-5 col 11-14  shown 6-6 col 26-27  "1"
+== copy per line
+1: "## Table spans" | "## Table spans"
+3: " Key              │ Action\n──────────────────┼─────────────────\n  j               │ down  1\n  k               │ up  1" | "| Key | Action |\n| --- | ------ |\n| `j` | down `1` |\n| `k` | up `1` |"
+4: "──────────────────┼─────────────────" | ""
+5: "Key              │ Action\n──────────────────┼─────────────────\n  j               │ down  1\n  k               │ up  1" | "| Key | Action |\n| --- | ------ |\n| `j` | down `1` |\n| `k` | up `1` |"
+6: "Key              │ Action\n──────────────────┼─────────────────\n  j               │ down  1\n  k               │ up  1" | "| Key | Action |\n| --- | ------ |\n| `j` | down `1` |\n| `k` | up `1` |"
+######## section 5
+== rendered
+
+  ## Indented code
+
+    indented line one
+    indented line two
+
+  The end.
+== nodes
+== copy per line
+1: "## Indented code" | "## Indented code"
+3: "indented line one" | "    indented line one"
+4: "indented line two" | "    indented line two"
+6: "The end." | "The end."

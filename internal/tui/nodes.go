@@ -294,7 +294,7 @@ func extractCodeNodes(lines []string) []codeNode {
 	inBlock := false
 	var fence, lang string
 	var bodyLines []string
-	var startLine int
+	var startLine, indent int
 
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -305,28 +305,41 @@ func extractCodeNodes(lines []string) []codeNode {
 				lang = strings.TrimSpace(trimmed[len(f):])
 				bodyLines = nil
 				startLine = i
+				indent = len(line) - len(strings.TrimLeft(line, " "))
 			} else {
 				// Scan for inline backtick spans and links (including on heading lines)
-				nodes = append(nodes, extractInlineNodes(line, i)...)
+				inline := extractInlineNodes(line, i)
+				if strings.HasPrefix(trimmed, "#") {
+					for j := range inline {
+						inline[j].heading = true
+					}
+				}
+				nodes = append(nodes, inline...)
 				nodes = append(nodes, extractLinkNodes(line, i)...)
 			}
 		} else {
 			// A closing fence is the opening character repeated at least as
 			// often, with nothing else on the line.
 			if strings.HasPrefix(trimmed, fence) && strings.Trim(trimmed, fence[:1]) == "" {
-				nodes = append(nodes, codeNode{
-					kind:      nodeCodeBlock,
-					lang:      lang,
-					content:   strings.Join(bodyLines, "\n"),
-					startLine: startLine,
-					endLine:   i,
-				})
+				// A block with no text has nothing to show or copy.
+				if content := strings.Join(bodyLines, "\n"); strings.TrimSpace(content) != "" {
+					nodes = append(nodes, codeNode{
+						kind:      nodeCodeBlock,
+						lang:      lang,
+						content:   content,
+						startLine: startLine,
+						endLine:   i,
+					})
+				}
 				inBlock = false
 				fence = ""
 				lang = ""
 				bodyLines = nil
 			} else {
-				bodyLines = append(bodyLines, line)
+				// As in CommonMark, the body loses up to the fence's
+				// indentation (a block inside a list item).
+				n := min(indent, len(line)-len(strings.TrimLeft(line, " ")))
+				bodyLines = append(bodyLines, line[n:])
 			}
 		}
 	}

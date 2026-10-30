@@ -23,16 +23,25 @@ var update = flag.Bool("update", false, "rewrite the golden files in testdata/go
 // node mapping must keep these unchanged; after an intended change, rerun
 // with -update and review the diff.
 func TestGolden(t *testing.T) {
-	for _, name := range []string{"readme.md", "sample.md", "edge.md"} {
+	for _, tc := range []struct {
+		file  string
+		width int // content width: the window is 2 columns wider
+	}{
+		{"readme.md", 80}, {"sample.md", 80}, {"edge.md", 80}, {"cases.md", 80}, {"cases.md", 40},
+	} {
+		name := tc.file
+		if tc.width != 80 {
+			name = fmt.Sprintf("%s@%d", tc.file, tc.width)
+		}
 		t.Run(name, func(t *testing.T) {
-			src, err := os.ReadFile(filepath.Join("testdata", name))
+			src, err := os.ReadFile(filepath.Join("testdata", tc.file))
 			if err != nil {
 				t.Fatal(err)
 			}
 			cfg := config.Default()
 			cfg.Images.Enabled = false
-			a := NewApp(parser.ParseMarkdown(string(src)), name, "", cfg)
-			a.Update(tea.WindowSizeMsg{Width: 82, Height: 40})
+			a := NewApp(parser.ParseMarkdown(string(src)), tc.file, "", cfg)
+			a.Update(tea.WindowSizeMsg{Width: tc.width + 2, Height: 40})
 			var text, styled strings.Builder
 			for _, idx := range append([]int{-1}, headingIndexes(a)...) {
 				a.selectedIdx = idx

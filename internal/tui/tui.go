@@ -80,6 +80,7 @@ type codeNode struct {
 	startLine int    // 0-based line index in sectionLines
 	endLine   int    // inclusive (== startLine for inline)
 	inline    bool   // true for backtick inline code spans and links
+	heading   bool   // an inline code span on a heading line
 	colStart  int    // byte offset of opening backtick/bracket in the line (inline only)
 	colEnd    int    // byte offset just past closing backtick/paren (inline only)
 }

@@ -558,43 +558,56 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 					// full double-space padding (e.g., adjacent spans: `j`/`k` renders
 					// as "j / k" with single spaces). Require at least 1 space before
 					// AND 1 space after (or end of trimmed line) to confirm it's a span.
-					if bestCol < 0 && !strings.Contains(stripped[ri], "##") {
-						for pos := 0; pos < len(s); pos++ {
-							idx := strings.Index(s[pos:], needle)
-							if idx == -1 {
-								break
-							}
-							absIdx := colOffset + pos + idx
-							endIdx := absIdx + len(needle)
-							fullLine := stripped[ri]
-							// For longer needles (>=3 chars), require 2 spaces before to
-							// distinguish code spans from prose. For short needles (1-2 chars),
-							// 1 space suffices since they can't be confused with prose words.
-							// Exception: also accept 1 space before when preceded by punctuation
-							// (glamour places single space after opening parens/commas/pipes).
-							var hasPre bool
-							if len(needle) >= 3 {
-								hasPre = absIdx > 1 && fullLine[absIdx-1] == ' ' && fullLine[absIdx-2] == ' '
-								if !hasPre && absIdx > 0 && fullLine[absIdx-1] == ' ' {
-									// Accept single space when preceded by punctuation or at position 1
-									if absIdx == 1 {
-										hasPre = true
-									} else if absIdx > 1 {
-										pre := fullLine[absIdx-2]
-										hasPre = pre == '(' || pre == ',' || pre == '|' || pre == '/' || pre == ';'
-									}
+					// Rendered headings keep their "##", and their words must not
+					// match spans of later lines; a span on the heading itself may.
+					if bestCol < 0 && (n.heading || !strings.Contains(stripped[ri], "##")) {
+						// Short needles (1-2 chars) may also follow a single space,
+						// but so do prose words ("x" before `x`): on each line, a
+						// match with the full padding wins over a single space.
+						strictPasses := []bool{true}
+						if len(needle) < 3 {
+							strictPasses = append(strictPasses, false)
+						}
+						for _, strict := range strictPasses {
+							for pos := 0; pos < len(s); pos++ {
+								idx := strings.Index(s[pos:], needle)
+								if idx == -1 {
+									break
 								}
-							} else {
-								hasPre = absIdx > 0 && fullLine[absIdx-1] == ' '
+								absIdx := colOffset + pos + idx
+								endIdx := absIdx + len(needle)
+								fullLine := stripped[ri]
+								// Require 2 spaces before to distinguish code spans from
+								// prose. Exception: also accept 1 space before when preceded
+								// by punctuation (glamour places single space after opening
+								// parens/commas/pipes).
+								var hasPre bool
+								if strict {
+									hasPre = absIdx > 1 && fullLine[absIdx-1] == ' ' && fullLine[absIdx-2] == ' '
+									if !hasPre && absIdx > 0 && fullLine[absIdx-1] == ' ' {
+										// Accept single space when preceded by punctuation or at position 1
+										if absIdx == 1 {
+											hasPre = true
+										} else if absIdx > 1 {
+											pre := fullLine[absIdx-2]
+											hasPre = pre == '(' || pre == ',' || pre == '|' || pre == '/' || pre == ';'
+										}
+									}
+								} else {
+									hasPre = absIdx > 0 && fullLine[absIdx-1] == ' '
+								}
+								// Must have space after (or be at end of trimmed content)
+								hasPost := endIdx >= len(strings.TrimRight(fullLine, " ")) || (endIdx < len(fullLine) && fullLine[endIdx] == ' ')
+								if hasPre && hasPost {
+									bestCol = absIdx
+									bestColEnd = endIdx
+									break
+								}
+								pos += idx + len(needle)
 							}
-							// Must have space after (or be at end of trimmed content)
-							hasPost := endIdx >= len(strings.TrimRight(fullLine, " ")) || (endIdx < len(fullLine) && fullLine[endIdx] == ' ')
-							if hasPre && hasPost {
-								bestCol = absIdx
-								bestColEnd = endIdx
+							if bestCol >= 0 {
 								break
 							}
-							pos += idx + len(needle)
 						}
 					}
 					if bestCol >= 0 {
@@ -623,22 +636,13 @@ func mapNodesToRenderedLines(nodes []codeNode, rendered []string) []nodeRenderLo
 					break
 				}
 			}
+			// Every block has text (empty ones are not nodes), so needle is
+			// set. Glamour hides the fences, so there is nothing else to find.
 			firstLine := -1
-			if needle != "" {
-				for ri := blockSearchFromLine; ri < len(stripped); ri++ {
-					if strings.Contains(stripped[ri], needle) {
-						firstLine = ri
-						break
-					}
-				}
-			}
-			if firstLine == -1 {
-				// Try fence marker as fallback
-				for ri := blockSearchFromLine; ri < len(stripped); ri++ {
-					if strings.Contains(stripped[ri], "```") || strings.Contains(stripped[ri], "~~~") {
-						firstLine = ri
-						break
-					}
+			for ri := blockSearchFromLine; ri < len(stripped); ri++ {
+				if strings.Contains(stripped[ri], needle) {
+					firstLine = ri
+					break
 				}
 			}
 			if firstLine >= 0 {

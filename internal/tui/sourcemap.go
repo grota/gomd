@@ -263,8 +263,11 @@ func (m *sourceMap) closeElem(e, u0 int, n ast.Node, markEnd int) {
 func (m *sourceMap) fence(u0, codeStart, codeEnd int) srcFence {
 	s := m.src
 	f := srcFence{u0: u0, u1: len(m.units) - 1, start: codeStart, end: codeEnd}
-	if codeStart > 0 {
-		f.start = lineStart(s, codeStart-1)
+	// The opening fence is the line before the code's line. Inside a list
+	// item the code starts after the item's indentation, not at its line's
+	// start, so step back from the line's start.
+	if ls := lineStart(s, codeStart); ls > 0 {
+		f.start = lineStart(s, ls-1)
 	}
 	if close := strings.TrimSpace(s[codeEnd:lineEnd(s, codeEnd)]); strings.HasPrefix(close, "```") || strings.HasPrefix(close, "~~~") {
 		f.end = lineEnd(s, codeEnd)

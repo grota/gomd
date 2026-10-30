@@ -615,9 +615,9 @@ func TestPreProcessLeavesCodeAlone(t *testing.T) {
 }
 
 func TestExtractCodeNodes_NestedFence(t *testing.T) {
-	lines := strings.Split("````md\n```go\nx := 1\n```\n````\n~~~\n~~~~\n", "\n")
+	lines := strings.Split("````md\n```go\nx := 1\n```\n````\n~~~\ny\n~~~~\n", "\n")
 	nodes := extractCodeNodes(lines)
-	if len(nodes) != 2 || nodes[0].content != "```go\nx := 1\n```" || nodes[0].lang != "md" || nodes[1].endLine != 6 {
+	if len(nodes) != 2 || nodes[0].content != "```go\nx := 1\n```" || nodes[0].lang != "md" || nodes[1].content != "y" || nodes[1].endLine != 7 {
 		t.Fatalf("got %+v", nodes)
 	}
 }
@@ -796,5 +796,13 @@ func TestEditorLine(t *testing.T) {
 	a.View()
 	if got := a.editorLine(); got != 127 {
 		t.Errorf("section: line %d, want 127", got)
+	}
+}
+
+func TestExtractCodeNodes_EmptyAndListBlocks(t *testing.T) {
+	lines := strings.Split("```\n```\n\n- item:\n\n  ```sh\n  echo a\n    indented\n  ```\n", "\n")
+	nodes := extractCodeNodes(lines)
+	if len(nodes) != 1 || nodes[0].content != "echo a\n  indented" {
+		t.Fatalf("want only the list block, dedented by its fence: %+v", nodes)
 	}
 }

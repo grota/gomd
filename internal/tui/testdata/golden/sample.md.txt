@@ -65,7 +65,7 @@
 == nodes
 block  src 2-6 col 0-0  shown 3-5 col -1--1  "some block\nsome block\nsome block"
 block  src 8-13 col 0-0  shown 7-10 col -1--1  "echo \"some code\"\nif [ -f \"test-images/gradient.png\" ]; then\n  echo \"image exists\"\nfi"
-inline src 15-15 col 19-28  shown -1--1 col -1--1  "gomd -r"
+inline src 15-15 col 19-28  shown 12-12 col 22-29  "gomd -r"
 link   src 23-23 col 0-39  shown 20-20 col 2-39  "gradient 📷 /test-images/gradient.png -> ./test-images/gradient.png"
 link   src 27-27 col 28-62  shown 24-24 col 30-64  "red square 📷 /test-images/red.png -> test-images/red.png"
 link   src 31-31 col 0-49  shown 29-29 col 2-37  "checker 📷 /test-images/checker.png -> test-images/checker.png"
@@ -180,7 +180,7 @@ link   src 63-63 col 0-51  shown 61-61 col 2-36  "titled 📷 /test-images/check
 == nodes
 block  src 2-6 col 0-0  shown 3-5 col -1--1  "some block\nsome block\nsome block"
 block  src 8-13 col 0-0  shown 7-10 col -1--1  "echo \"some code\"\nif [ -f \"test-images/gradient.png\" ]; then\n  echo \"image exists\"\nfi"
-inline src 15-15 col 19-28  shown -1--1 col -1--1  "gomd -r"
+inline src 15-15 col 19-28  shown 12-12 col 22-29  "gomd -r"
 link   src 23-23 col 0-39  shown 20-20 col 2-39  "gradient 📷 /test-images/gradient.png -> ./test-images/gradient.png"
 link   src 27-27 col 28-62  shown 24-24 col 30-64  "red square 📷 /test-images/red.png -> test-images/red.png"
 link   src 31-31 col 0-49  shown 29-29 col 2-37  "checker 📷 /test-images/checker.png -> test-images/checker.png"
@@ -282,7 +282,7 @@ link   src 63-63 col 0-51  shown 61-61 col 2-36  "titled 📷 /test-images/check
 
   titled 📷 /test-images/checker.png
 == nodes
-inline src 0-0 col 19-28  shown -1--1 col -1--1  "gomd -r"
+inline src 0-0 col 19-28  shown 1-1 col 22-29  "gomd -r"
 link   src 8-8 col 0-39  shown 9-9 col 2-39  "gradient 📷 /test-images/gradient.png -> ./test-images/gradient.png"
 link   src 12-12 col 28-62  shown 13-13 col 30-64  "red square 📷 /test-images/red.png -> test-images/red.png"
 link   src 16-16 col 0-49  shown 18-18 col 2-37  "checker 📷 /test-images/checker.png -> test-images/checker.png"
