@@ -4,16 +4,19 @@ package tui
 import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/grota/gomd/internal/config"
+	"github.com/grota/gomd/internal/input"
 	"github.com/grota/gomd/internal/parser"
 )
 
@@ -160,8 +163,8 @@ type App struct {
 	watcher *fsnotify.Watcher
 
 	// Navigation history
-	navHistory []int // stack of previous selectedIdx values
-	navFuture  []int // forward stack
+	navHistory []navEntry // stack of previous places
+	navFuture  []navEntry // forward stack
 
 	// Jump (EasyMotion) state
 	jumpLabels map[string]int // label -> node index in codeNodes
@@ -205,7 +208,112 @@ func NewApp(doc *parser.Document, filename, filePath string, cfg config.Config) 
 // Bubbletea lifecycle
 // ─────────────────────────────────────────────
 
-type fileReloadMsg struct{ doc *parser.Document }
+// fileReloadMsg carries the new content of the watched file at path.
+type fileReloadMsg struct {
+	path string
+	doc  *parser.Document
+}
+
+// navEntry is a place in the navigation history: a file, its document as
+// last shown (the only copy for stdin) and the selected heading.
+type navEntry struct {
+	path string
+	doc  *parser.Document
+	idx  int
+}
+
+func (a *App) here() navEntry { return navEntry{a.filepath, a.doc, a.selectedIdx} }
+
+// goTo shows a place from the history, reading its file again when it is
+// another file.
+func (a *App) goTo(e navEntry) tea.Cmd {
+	var cmd tea.Cmd
+	if e.path != a.filepath || e.doc != a.doc {
+		doc := e.doc
+		if e.path != "" {
+			if inp, err := input.ReadFile(e.path); err == nil {
+				doc = parser.ParseMarkdown(inp.Content)
+			}
+		}
+		cmd = a.showFile(e.path, doc)
+	}
+	a.selectedIdx = e.idx
+	if a.selectedIdx >= len(a.doc.Headings) {
+		a.selectedIdx = -1 // the file lost headings meanwhile
+	}
+	a.scrollOutlineToSelected()
+	a.rebuildSection()
+	return cmd
+}
+
+// showFile shows doc, read from path, in place of the current document and
+// watches path instead of the previous file.
+func (a *App) showFile(path string, doc *parser.Document) tea.Cmd {
+	if a.watcher != nil {
+		a.watcher.Close()
+		a.watcher = nil
+	}
+	a.doc, a.filepath, a.filename = doc, path, path
+	if path == "" {
+		a.filename = "stdin"
+	}
+	a.selectedIdx, a.outlineOffset = -1, 0
+	a.searchMatches, a.searchIdx = nil, 0
+	a.contentSearchQuery, a.contentSearchMatches = "", nil
+	a.mode = ModeNormal
+	a.rebuildSection()
+	return a.startWatcher()
+}
+
+// localMarkdownLink resolves a link to a local markdown file, relative to
+// the current file, and returns it with its #anchor. ok is false for URLs
+// and other files.
+func (a *App) localMarkdownLink(link string) (path, anchor string, ok bool) {
+	if strings.Contains(link, ":") { // a URL scheme, mailto: and the like
+		return "", "", false
+	}
+	link, anchor, _ = strings.Cut(link, "#")
+	if s, err := url.PathUnescape(link); err == nil {
+		link = s
+	}
+	if ext := strings.ToLower(filepath.Ext(link)); ext != ".md" && ext != ".markdown" {
+		return "", "", false
+	}
+	if !filepath.IsAbs(link) {
+		link = filepath.Join(filepath.Dir(a.filepath), link) // Dir("") is "."
+	}
+	return link, anchor, true
+}
+
+// openMarkdownLink shows the markdown file at path, at the heading named by
+// anchor when there is one, recording the current place in the history.
+func (a *App) openMarkdownLink(path, anchor string) tea.Cmd {
+	from := a.here()
+	var cmd tea.Cmd
+	if filepath.Clean(path) != filepath.Clean(a.filepath) {
+		inp, err := input.ReadFile(path)
+		if err != nil {
+			a.statusMsg = "Open failed: " + err.Error()
+			return nil
+		}
+		cmd = a.showFile(path, parser.ParseMarkdown(inp.Content))
+	}
+	a.mode = ModeNormal
+	a.navHistory = append(a.navHistory, from)
+	a.navFuture = nil
+	a.statusMsg = "Opened " + path
+	if anchor != "" {
+		if idx := a.findHeadingByAnchor(anchor); idx >= 0 {
+			a.selectedIdx = idx
+			a.scrollOutlineToSelected()
+			a.rebuildSection()
+		} else {
+			a.statusMsg = "Heading not found: " + anchor
+		}
+	}
+	return cmd
+}
+
 type editorDoneMsg struct{ err error }
 
 // openURL launches the configured opener on url and returns a status message.
@@ -260,7 +368,7 @@ func waitForFileChange(watcher *fsnotify.Watcher, filePath string) tea.Cmd {
 				if err != nil {
 					continue
 				}
-				return fileReloadMsg{parser.ParseMarkdown(string(data))}
+				return fileReloadMsg{filePath, parser.ParseMarkdown(string(data))}
 			case _, ok := <-watcher.Errors:
 				if !ok {
 					return nil
@@ -303,7 +411,10 @@ func (a *App) reload(doc *parser.Document, status string) {
 			break
 		}
 	}
-	a.navHistory, a.navFuture = nil, nil
+	// History entries of this file name heading indexes of the old document.
+	stale := func(e navEntry) bool { return e.path == a.filepath }
+	a.navHistory = slices.DeleteFunc(a.navHistory, stale)
+	a.navFuture = slices.DeleteFunc(a.navFuture, stale)
 	a.searchMatches, a.searchIdx = nil, 0
 	a.rebuildSection()
 	if wasRoot == (a.selectedIdx < 0) {
@@ -384,6 +495,9 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.height = msg.Height
 
 	case fileReloadMsg:
+		if msg.path != a.filepath {
+			return a, nil // from the watcher of a file no longer shown
+		}
 		a.reload(msg.doc, "Reloaded")
 		return a, waitForFileChange(a.watcher, a.filepath)
 

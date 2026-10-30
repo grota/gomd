@@ -2,6 +2,7 @@ package tui
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -416,7 +417,7 @@ func TestReloadDroppingAllHeadings(t *testing.T) {
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	a.navigateTo(1)
 	a.reload(parser.ParseMarkdown("no headings any more\n"), "Reloaded")
-	if a.selectedIdx != -1 || a.navHistory != nil {
+	if a.selectedIdx != -1 || len(a.navHistory) != 0 {
 		t.Fatalf("stale state after reload: selectedIdx=%d navHistory=%v", a.selectedIdx, a.navHistory)
 	}
 	a.View()
@@ -639,5 +640,62 @@ func TestFuzzyMatch(t *testing.T) {
 		if got := fuzzyMatch(tt.text, tt.pattern); got != tt.want {
 			t.Errorf("fuzzyMatch(%q, %q) = %v", tt.text, tt.pattern, got)
 		}
+	}
+}
+
+func TestDuplicateHeadingAnchors(t *testing.T) {
+	a := NewApp(parser.ParseMarkdown("# Usage\n\n# Usage\n\n# Usage\n"), "f.md", "", config.Default())
+	for anchor, want := range map[string]int{"usage": 0, "usage-1": 1, "usage-2": 2, "usage-3": -1} {
+		if got := a.findHeadingByAnchor(anchor); got != want {
+			t.Errorf("%s: got %d, want %d", anchor, got, want)
+		}
+	}
+}
+
+func TestFollowMarkdownLinkAndBack(t *testing.T) {
+	dir := t.TempDir()
+	main := filepath.Join(dir, "main.md")
+	other := filepath.Join(dir, "docs", "other file.md")
+	os.MkdirAll(filepath.Dir(other), 0o755)
+	os.WriteFile(main, []byte("# Main\n\n## Links\n\nSee [setup](docs/other%20file.md#setup).\n"), 0o644)
+	os.WriteFile(other, []byte("# Other\n\n## Intro\n\n## Setup\n\ntext\n"), 0o644)
+	data, _ := os.ReadFile(main)
+	cfg := config.Default()
+	cfg.Images.Enabled = false
+	a := NewApp(parser.ParseMarkdown(string(data)), main, main, cfg)
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	a.navigateTo(1)
+
+	path, anchor, ok := a.localMarkdownLink("docs/other%20file.md#setup")
+	if !ok || path != other || anchor != "setup" {
+		t.Fatalf("localMarkdownLink = %q, %q, %v", path, anchor, ok)
+	}
+	for _, l := range []string{"https://x.org/a.md", "mailto:a@b.md", "image.png", "#setup"} {
+		if _, _, ok := a.localMarkdownLink(l); ok {
+			t.Errorf("%q treated as a local markdown file", l)
+		}
+	}
+	a.openMarkdownLink(path, anchor)
+	if a.filepath != other || a.selectedIdx != 2 {
+		t.Fatalf("after following: file %q, heading %d", a.filepath, a.selectedIdx)
+	}
+	// A late reload from the old file's watcher must not replace the document.
+	a.Update(fileReloadMsg{main, parser.ParseMarkdown("# Stale\n")})
+	if a.doc.Headings[0].Text != "Other" {
+		t.Fatal("a reload of the previous file replaced the document")
+	}
+	a.navGoBack()
+	if a.filepath != main || a.selectedIdx != 1 {
+		t.Fatalf("after back: file %q, heading %d", a.filepath, a.selectedIdx)
+	}
+	a.navGoForward()
+	if a.filepath != other || a.selectedIdx != 2 {
+		t.Fatalf("after forward: file %q, heading %d", a.filepath, a.selectedIdx)
+	}
+	if a.openMarkdownLink(filepath.Join(dir, "missing.md"), ""); !strings.Contains(a.statusMsg, "Open failed") || a.filepath != other {
+		t.Fatalf("missing file: status %q, file %q", a.statusMsg, a.filepath)
+	}
+	if a.watcher != nil {
+		a.watcher.Close()
 	}
 }

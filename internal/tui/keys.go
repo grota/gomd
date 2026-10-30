@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -90,11 +91,9 @@ func (a *App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		a.statusMsg = "No file to edit"
 		return a, nil
 	case config.KeyMatches(k, km.NavBack):
-		a.navGoBack()
-		return a, nil
+		return a, a.navGoBack()
 	case config.KeyMatches(k, km.NavForward):
-		a.navGoForward()
-		return a, nil
+		return a, a.navGoForward()
 	}
 
 	// Focus-specific keys
@@ -310,45 +309,52 @@ func (a *App) navigateTo(idx int) {
 	if idx == a.selectedIdx {
 		return
 	}
-	a.navHistory = append(a.navHistory, a.selectedIdx)
+	a.navHistory = append(a.navHistory, a.here())
 	a.navFuture = nil
 	a.selectedIdx = idx
 	a.scrollOutlineToSelected()
 	a.rebuildSection()
 }
 
-// navGoBack navigates to the previous heading in history.
-func (a *App) navGoBack() {
+// navGoBack navigates to the previous place in history, which may be in
+// another file.
+func (a *App) navGoBack() tea.Cmd {
 	if len(a.navHistory) == 0 {
-		return
+		return nil
 	}
-	a.navFuture = append(a.navFuture, a.selectedIdx)
-	a.selectedIdx = a.navHistory[len(a.navHistory)-1]
+	e := a.navHistory[len(a.navHistory)-1]
 	a.navHistory = a.navHistory[:len(a.navHistory)-1]
-	a.scrollOutlineToSelected()
-	a.rebuildSection()
+	a.navFuture = append(a.navFuture, a.here())
+	return a.goTo(e)
 }
 
 // navGoForward navigates forward in history.
-func (a *App) navGoForward() {
+func (a *App) navGoForward() tea.Cmd {
 	if len(a.navFuture) == 0 {
-		return
+		return nil
 	}
-	a.navHistory = append(a.navHistory, a.selectedIdx)
-	a.selectedIdx = a.navFuture[len(a.navFuture)-1]
+	e := a.navFuture[len(a.navFuture)-1]
 	a.navFuture = a.navFuture[:len(a.navFuture)-1]
-	a.scrollOutlineToSelected()
-	a.rebuildSection()
+	a.navHistory = append(a.navHistory, a.here())
+	return a.goTo(e)
 }
 
 // findHeadingByAnchor finds a heading index by GitHub-style anchor slug.
+// Repeated headings get GitHub's suffixes: "usage", "usage-1", "usage-2".
 func (a *App) findHeadingByAnchor(anchor string) int {
 	if s, err := url.PathUnescape(anchor); err == nil {
 		anchor = s // "#configura%C3%A7%C3%A3o"
 	}
 	anchor = strings.ToLower(anchor)
+	seen := map[string]int{}
 	for i, h := range a.doc.Headings {
-		if headingToAnchor(h.Text) == anchor {
+		slug := headingToAnchor(h.Text)
+		n := seen[slug]
+		seen[slug] = n + 1
+		if n > 0 {
+			slug += "-" + strconv.Itoa(n)
+		}
+		if slug == anchor {
 			return i
 		}
 	}
@@ -710,6 +716,8 @@ func (a *App) handleNodeSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				} else {
 					a.statusMsg = fmt.Sprintf("Heading not found: %s", anchor)
 				}
+			} else if path, anchor, ok := a.localMarkdownLink(url); ok {
+				return a, a.openMarkdownLink(path, anchor)
 			} else {
 				// External link — open with configured opener
 				a.statusMsg = a.openURL(url)

@@ -41,8 +41,8 @@ interactive mode:
 - **Breadcrumb bar** — title shows current heading path (e.g., `gomd — file.md > Section > Subsection`)
 - **Interactive mode** (`i`) — cycle through code blocks, inline code spans, and links; copy with `y`, open links with `Enter` (works in any sub-mode)
 - **Jump mode** (`f`) — EasyMotion-style labels to quickly jump to any selectable element
-- **Navigation history** — `Ctrl+O` / `Ctrl+I` for back/forward heading navigation
-- **Internal link following** — `Enter` on `#anchor` links jumps to the referenced heading
+- **Navigation history** — `Ctrl+O` / `Ctrl+I` for back/forward navigation, across headings and files
+- **Link following** — `Enter` on `#anchor` links jumps to the referenced heading (GitHub slugs, including `-1` suffixes for repeated headings); on a link to a local `.md` file (`docs/setup.md#install`) it opens that file in gomd
 - **Mouse support** — click sidebar headings, scroll content with mouse wheel, drag over content to select and copy it
 - **Responsive sidebar** — width auto-adjusts based on heading text length
 - **Themes** — 700+ Ghostty themes with a live-preview picker (`T`), and separate light and dark themes that follow the system appearance
@@ -147,15 +147,15 @@ On a terminal with the Kitty clipboard protocol (OSC 5522: kitty, Ghostty 1.4+),
 
 Cycles through selectable nodes in the current section: fenced code blocks, inline code spans, and links. Press `m` to cycle sub-modes.
 
-| Key                | Action                                                                  |
-| ------------------ | ----------------------------------------------------------------------- |
-| `j` / `k`          | Next / previous node                                                    |
-| `m`                | Cycle sub-mode (ALL → CODE → INLINE → LINKS)                            |
-| `H` / `M` / `L`    | Jump to top / mid / bottom visible node                                 |
-| `zz` / `zt` / `zb` | Center / top / bottom node in viewport                                  |
-| `y`                | Copy node content (exits in CODE and INLINE sub-modes)                  |
-| `Enter`            | Open link (any sub-mode; external: browser; `#anchor`: jump to heading) |
-| `Esc`              | Exit interactive mode                                                   |
+| Key                | Action                                                                                             |
+| ------------------ | -------------------------------------------------------------------------------------------------- |
+| `j` / `k`          | Next / previous node                                                                               |
+| `m`                | Cycle sub-mode (ALL → CODE → INLINE → LINKS)                                                       |
+| `H` / `M` / `L`    | Jump to top / mid / bottom visible node                                                            |
+| `zz` / `zt` / `zb` | Center / top / bottom node in viewport                                                             |
+| `y`                | Copy node content (exits in CODE and INLINE sub-modes)                                             |
+| `Enter`            | Open link (any sub-mode; external: browser; `#anchor`: jump to heading; local `.md`: open in gomd) |
+| `Esc`              | Exit interactive mode                                                                              |
 
 #### Jump mode (`f`)
 
