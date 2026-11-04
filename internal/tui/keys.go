@@ -114,26 +114,30 @@ func (a *App) toggleFocus() {
 	}
 }
 
-// handleMouseWheel handles mouse wheel events for content scrolling.
+// handleMouseWheel scrolls the pane under the pointer: the sidebar outline
+// (without changing the selection) or the content.
 func (a *App) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	if a.mode != ModeNormal {
 		return a, nil
 	}
 
+	var delta int
 	switch msg.Button {
 	case tea.MouseWheelUp:
-		if a.focus == FocusContent || a.sidebarHidden {
-			a.contentOffset -= 3
-			if a.contentOffset < 0 {
-				a.contentOffset = 0
-			}
-		}
+		delta = -3
 	case tea.MouseWheelDown:
-		if a.focus == FocusContent || a.sidebarHidden {
-			a.contentOffset += 3
-			a.clampContentOffset()
-		}
+		delta = 3
+	default:
+		return a, nil
 	}
+
+	if !a.sidebarHidden && msg.Mouse().X < a.sidebarWidth() {
+		a.outlineOffset += delta
+		a.clampOutlineOffset()
+		return a, nil
+	}
+	a.contentOffset = max(a.contentOffset+delta, 0)
+	a.clampContentOffset()
 	return a, nil
 }
 

@@ -613,3 +613,36 @@ func TestPlaceImages_TableImagesAfterTheTable(t *testing.T) {
 		t.Fatalf("got  %s\nwant %s", got, want)
 	}
 }
+
+func TestMouseWheelScrollsPaneUnderPointer(t *testing.T) {
+	var sb strings.Builder
+	for i := range 80 {
+		fmt.Fprintf(&sb, "## Heading %d\n\nbody\n\n", i)
+	}
+	app := newTestApp(sb.String())
+	app.sidebarHidden = false
+	app.focus = FocusContent
+
+	sw := app.sidebarWidth()
+	app.Update(tea.MouseWheelMsg{X: 1, Y: 5, Button: tea.MouseWheelDown})
+	if app.outlineOffset != 3 {
+		t.Fatalf("outlineOffset = %d after wheel down over sidebar, want 3", app.outlineOffset)
+	}
+	if app.selectedIdx != -1 {
+		t.Errorf("selectedIdx = %d, wheel must not change the selection", app.selectedIdx)
+	}
+	app.Update(tea.MouseWheelMsg{X: 1, Y: 5, Button: tea.MouseWheelUp})
+	app.Update(tea.MouseWheelMsg{X: 1, Y: 5, Button: tea.MouseWheelUp})
+	if app.outlineOffset != 0 {
+		t.Errorf("outlineOffset = %d after scrolling back up, want 0", app.outlineOffset)
+	}
+
+	app.focus = FocusSidebar
+	app.Update(tea.MouseWheelMsg{X: sw + 5, Y: 5, Button: tea.MouseWheelDown})
+	if app.contentOffset != 3 {
+		t.Errorf("contentOffset = %d after wheel down over content, want 3", app.contentOffset)
+	}
+	if app.outlineOffset != 0 {
+		t.Errorf("outlineOffset = %d, wheel over content must not scroll the sidebar", app.outlineOffset)
+	}
+}
