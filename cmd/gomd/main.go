@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"slices"
 	"sort"
 	"strings"
@@ -35,6 +36,16 @@ var (
 	flagNoImages  bool
 )
 
+// version is the module version the Go toolchain records at build time: the
+// tag for a release or `go install ...@vX`, a pseudo-version for an untagged
+// commit, and "(devel)" when no VCS information is available.
+func version() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		return info.Main.Version
+	}
+	return "unknown"
+}
+
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "gomd [OPTIONS] [FILE|DIR|-]",
@@ -54,6 +65,7 @@ Examples:
 		RunE:         runRoot,
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
+		Version:      version(),
 	}
 
 	// Flags
